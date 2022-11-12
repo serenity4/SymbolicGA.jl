@@ -1,0 +1,4 @@
+Manifest.toml
+/docs/build
+/experiments
+/JuliaSysimage.so
