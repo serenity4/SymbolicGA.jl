@@ -77,7 +77,7 @@ function extract_grade(head::Symbol, args)
   grades = map(args) do arg
     isa(arg, Expression) || error("Expected argument of type $Expression, got $arg")
     g = grade(arg)
-    isa(g, Int) || (Main.@infiltrate; error("Expected grade to be known for expression $arg"))
+    isa(g, Int) || error("Expected grade to be known for expression $arg")
     g
   end
   if head === :kvector
