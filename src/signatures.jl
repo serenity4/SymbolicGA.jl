@@ -18,7 +18,10 @@ is_degenerate(sig::Signature) = degenerate(sig) ≠ 0
 triplet(sig::Signature) = (positive(sig), negative(sig), degenerate(sig))
 
 metric(::Signature{P,N,D}, ::Val{I}) where {P,N,D,I} = I <= P ? 1 : I <= P + N ? -1 : 0
+metric(::Signature{P,N,D}, i::Integer) where {P,N,D} = i <= P ? 1 : i <= P + N ? -1 : 0
 metric(sig::Signature{P,N,D}, i::Val{I}, j::Val{I}) where {P,N,D,I} = metric(sig, i)
 metric(::Signature, ::Val{I}, ::Val{J}) where {I,J} = 0
 
 show(io::IO, sig::Signature) = print(io, sig == Signature(0, 0, 0) ? "Ø" : "<" * join(["+", "-", "𝟎"] .^ triplet(sig)) * ">")
+
+nelements(::Type{S}, K::Int) where {S<:Signature} = binomial(dimension(S), K)

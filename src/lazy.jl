@@ -17,7 +17,6 @@ struct KVector{K,S<:Signature,D} <: Operation{S}
   end
 end
 
-nelements(::Type{S}, K::Int) where {S<:Signature} = binomial(dimension(S), K)
 container_type(op::KVector{K,S,D}) where {S,K,D} = D
 
 struct GeometricProduct{S<:Signature,X<:Operation,Y<:Operation} <: Operation{S}

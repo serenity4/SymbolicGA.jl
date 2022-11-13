@@ -3,9 +3,17 @@ mutable struct Expression
   grade::Optional{Int}
   args::Vector{Any}
   Expression(head::Symbol, args...) = Expression(head, collect(args))
-  function Expression(head::Symbol, args::Vector)
+  function Expression(head::Symbol, args::AbstractVector)
     grade = extract_grade(head, args)
-    head !== :multivector && grade::Int
+    in(head, (:scalar, :basis, :blade, :kvector, :project)) && grade::Int
+    @assert !isempty(args)
+    if head === :scalar
+      @assert length(args) == 1
+    elseif head === :basis
+      @assert length(args) == 1 && isa(args[1], Int)
+    elseif head === :blade
+      @assert all(isexpr(ex, :basis) for ex in args)
+    end
     new(head, grade, args)
   end
 end
@@ -17,6 +25,8 @@ function extract_grade(head::Symbol, args)
   head === :basis && return 1
   head === :blade && return count(isodd, map(x -> count(==(x), args), args))
   head === :multivector && return nothing
+  head === :project && return args[1]::Int
+  head === :* && length(args) == 2 && isexpr(args[1], :scalar) && return (args[2]::Expression).grade
   grades = [(arg::Expression).grade::Int for arg in args]
   if head === :kvector
     unique!(grades)
@@ -25,11 +35,23 @@ function extract_grade(head::Symbol, args)
   end
 end
 
-isexpr(ex::Expression, head::Symbol) = ex.head === head
-isexpr(ex::Expression, heads) = in(ex.head, heads)
-isexpr(ex::Expression, head::Symbol, n::Integer) = isexpr(ex, head) && length(ex.args) == n
-isgrade(ex::Expression, grade::Integer) = ex.grade === grade
+isexpr(ex, head::Symbol) = isa(ex, Expression) && ex.head === head
+isexpr(ex, heads) = isa(ex, Expression) && in(ex.head, heads)
+isexpr(ex, head::Symbol, n::Int) = isa(ex, Expression) && isexpr(ex, head) && length(ex.args) == n
+isgrade(ex::Expression, grade::Int) = ex.grade === grade
+grade(ex::Expression) = ex.grade
+
+weighted(ex::Expression, weight) = Expression(:*, Expression(:scalar, weight), ex)
 
 walk(ex::Expression, inner, outer) = outer(Expression(ex.head, filter!(!isnothing, inner.(ex.args))))
-postwalk(f, ex::Expression) = walk(ex, x -> postwalk(f, x), f)
-prewalk(f, ex::Expression) = walk(f(ex), x -> prewalk(f, x), identity)
+walk(ex, inner, outer) = outer(ex)
+postwalk(f, ex) = walk(ex, x -> postwalk(f, x), f)
+prewalk(f, ex) = walk(f(ex), x -> prewalk(f, x), identity)
+
+function traverse(f, ex)
+  f(ex) === false && return nothing
+  !isa(ex, Expression) && return nothing
+  for arg in ex.args
+    traverse(f, arg)
+  end
+end

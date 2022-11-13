@@ -5,12 +5,13 @@ using Combinatorics
 const Optional{T} = Union{T,Nothing}
 
 import Base: sum, +, -, *, /, ^, inv, reverse, ==, ≈, eltype, promote_rule, length, zero, iszero, fill, getindex, setindex!, convert, show
-import .Meta: isexpr
 
 include("utils.jl")
 include("signatures.jl")
 include("lazy.jl")
 include("expressions.jl")
+include("passes.jl")
+include("macro.jl")
 
 export @ga,
   # algebra
