@@ -2,36 +2,41 @@ module LazyGeometricAlgebra
 
 using Combinatorics
 
-import Base: sum, +, -, *, /, ^, inv, reverse, ==, ≈, eltype, promote_rule, length, zero, iszero, fill, getindex, setindex!, convert, show
+const Optional{T} = Union{T,Nothing}
 
+import Base: sum, +, -, *, /, ^, inv, reverse, ==, ≈, eltype, promote_rule, length, zero, iszero, fill, getindex, setindex!, convert, show
+import .Meta: isexpr
+
+include("utils.jl")
 include("signatures.jl")
 include("lazy.jl")
+include("expressions.jl")
 
 export @ga,
-    # algebra
-    Signature,
-    dimension,
-    triplet,
-    is_degenerate,
-    metric,
+  # algebra
+  Signature,
+  dimension,
+  triplet,
+  is_degenerate,
+  metric,
 
-    # algebra elements
-    scalar,
-    kvector,
-    vector,
-    bivector,
-    trivector,
-    quadvector,
-    pseudoscalar,
-    multivector,
+  # algebra elements
+  scalar,
+  kvector,
+  vector,
+  bivector,
+  trivector,
+  quadvector,
+  pseudoscalar,
+  multivector,
 
-    # operators
-    ∧, ⋅, ⦿, ∨, ×,
-    lcontract, rcontract,
-    dual,
-    grade_projection,
-    reverse_sign,
-    magnitude,
-    magnitude2
+  # operators
+  ∧, ⋅, ⦿, ∨, ×,
+  lcontract, rcontract,
+  dual,
+  grade_projection,
+  reverse_sign,
+  magnitude,
+  magnitude2
 
 end
