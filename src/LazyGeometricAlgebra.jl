@@ -8,7 +8,7 @@ import Base: sum, +, -, *, /, ^, inv, reverse, ==, ≈, eltype, promote_rule, le
 
 include("utils.jl")
 include("signatures.jl")
-include("lazy.jl")
+# include("lazy.jl")
 include("expressions.jl")
 include("passes.jl")
 include("macro.jl")

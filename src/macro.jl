@@ -12,7 +12,7 @@ end
 
 const TRANSPOSE_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (:∧, :∨, ⋅, ⦿, :*, :+, TRANSPOSE_SYMBOL))
+isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, TRANSPOSE_SYMBOL))
 
 function extract_grade(t::Symbol)
   t === :Scalar && return 0
@@ -32,14 +32,14 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
       op = ex.args[1]::Symbol
       !isreserved(op) && return ex
       op == TRANSPOSE_SYMBOL && (op = :transpose)
-      Expression(op, ex.args)
+      Expression(op, ex.args[2:end])
     elseif Meta.isexpr(ex, :(::))
-      x, T = ex.args
+      ex, T = ex.args
       g = extract_grade(T)
-      if isa(x, Expression)
-        isnothing(g) && return x
+      if isa(ex, Expression)
+        isnothing(g) && return ex
         !isa(g, Int) && isa(g, AbstractVector) && error("Multiple projections are not yet supported.")
-        Expression(:project, g, x)
+        Expression(:project, g, ex)
       else
         g = extract_grade(T)
         if isa(g, Int)
@@ -53,6 +53,8 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
           Expression(:multivector, kvector_expression(s, ex, g′, n′) for (g′, n′) in zip(g, cumsum(nelements(S, g′) for g′ in g)))
         end
       end
+    else
+      ex
     end
   end
 end
@@ -78,4 +80,27 @@ function kvector_expression(s::S, ex, g::Int, offset::Int = 0) where {S<:Signatu
   Expression(:kvector, [weighted(blade, w) for (blade, w) in zip(blade_expressions(s, g), extract_weights(s, ex, g, offset))])
 end
 
-walk(ex::Expr, inner, outer) = outer(Expr(ex.head, filter!(!isnothing, inner.(ex.args))))
+function walk(ex::Expr, inner, outer)
+  new_ex = Expr(ex.head)
+  for arg in ex.args
+    new = inner(arg)
+    !isnothing(new) && push!(new_ex.args, new)
+  end
+  outer(new_ex)
+end
+
+function simplify(ex::Expression, s::Signature)
+  # Flatten everything.
+  ex = distribute(ex)
+
+  # Restructure the result into multivectors and k-vectors.
+  ex = restructure_sums(ex)
+
+  # Apply algebraic rules.
+  ex = apply_projections(ex)
+  ex = canonicalize_blades(ex)
+  ex = apply_metric(ex, s)
+
+  ex = disassociate_kvectors(ex)
+  ex = group_kvector_blades(ex)
+end

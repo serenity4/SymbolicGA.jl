@@ -1,4 +1,49 @@
-function substitute_sums(ex::Expression)
+function distribute(ex::Expression)
+  postwalk(ex) do ex
+    isexpr(ex, (:kvector, :multivector)) && (ex = Expression(:+, ex.args))
+    isexpr(ex, :+) && return disassociate1(ex, :+)
+    isexpr(ex, :*) && any(isexpr(arg, :+) for arg in ex.args) && return distribute1(ex)
+    ex
+  end
+end
+
+function disassociate1(args, op::Symbol)
+  new_args = []
+  for arg in args
+    if isexpr(arg, op)
+      append!(new_args, arg.args)
+    else
+      push!(new_args, arg)
+    end
+  end
+  new_args
+end
+
+disassociate1(ex::Expression, op::Symbol) = Expression(op, disassociate1(ex.args, op))
+
+function distribute1(ex::Expression)
+  new_args = []
+  for (i, arg) in enumerate(ex.args)
+    if isexpr(arg, :+)
+      for x in arg.args
+        for arg2 in @view ex.args[(i + 1):end]
+          if isexpr(arg2, :+)
+            for y in arg2.args
+              push!(new_args, Expression(:*, x, y))
+            end
+          else
+            push!(new_args, Expression(:*, x, arg2))
+          end
+        end
+      end
+    else
+      push!(new_args, arg)
+    end
+  end
+  Expression(:+, new_args)
+end
+
+function restructure_sums(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, :+) || return ex
 
@@ -26,34 +71,15 @@ function substitute_sums(ex::Expression)
   end
 end
 
-function disassociate_kvectors(ex::Expression)
+function apply_projections(ex::Expression)
   postwalk(ex) do ex
-    isexpr(ex, :kvector) || return ex
-    new_args = []
-    for arg in ex.args
-      if isexpr(arg, :kvector)
-        append!(new_args, arg.args)
-      else
-        push!(new_args, arg)
-      end
+    isexpr(ex, :project) || return ex
+    g, ex = ex.args
+    if isexpr(ex, :multivector)
+      Expression(:kvector, filter(x -> grade(x)::Int == g, ex.args))
+    else
+      Expression(ex.head, filter(x -> grade(x)::Int == g, ex.args))
     end
-    Expression(:kvector, new_args)
-  end
-end
-
-function simplify_blade_products(ex::Expression)
-  postwalk(ex) do ex
-    isexpr(ex, :*) || return ex
-    all(isexpr(arg, (:blade, :basis)) for arg in ex.args) || return ex
-    new_args = []
-    for arg in ex.args
-      if isexpr(arg, :blade)
-        append!(new_args, arg.args)
-      else
-        push!(new_args, arg)
-      end
-    end
-    Expression(:blade, new_args)
   end
 end
 
@@ -100,8 +126,33 @@ function apply_metric(ex::Expression, s::Signature)
     if isempty(new_args)
       Expression(:scalar, fac)
     else
-      new_ex = length(new_args) == 1 ? new_args[1] : Expression(:blade, new_args)
+      new_ex = Expression(:blade, new_args)
       isone(fac) ? new_ex : Expression(:*, Expression(:scalar, fac), new_ex)
     end
   end
+end
+
+function disassociate_kvectors(ex::Expression)
+  postwalk(ex) do ex
+    isexpr(ex, :kvector) && any(isexpr(:kvector), ex.args) && return disassociate1(ex, :kvector)
+    ex
+  end
+end
+
+function group_kvector_blades(ex::Expression)
+  blade_weights = Dict{Vector{Any},Expression}()
+  for arg in ex.args
+    if isweighted(arg)
+      weight, blade = arg[1]::Expression, arg[2]::Expression
+    else
+      weight, blade = Expression(:scalar, 1), arg
+    end
+    indices = getindex.(blade.args, 1)
+    if haskey(blade_weights, indices)
+      blade_weights[indices] = Expression(:+, blade_weights[indices], weight)
+    else
+      blade_weights[indices] = weight
+    end
+  end
+  Expression(:kvector, [weighted(Expression(:blade, Any[Expression(:basis, i) for i in indices]), weight) for (indices, weight) in pairs(blade_weights)])
 end

@@ -9,4 +9,10 @@
   kvec = kvector_expression(s, :x, 2)
   @test isexpr(kvec, :kvector, 3)
   @test kvec.args[1] == weighted(first(blades), first(ws))
+
+  ex = extract_base_expression(:((x::Vector * y::Bivector)::Trivector), s)
+  ex2 = simplify(ex, s)
+  @test isexpr(ex2, :kvector, 1)
+  @test isweighted(ex2[1]) && isexpr(ex2[1][2], :blade)
+  @test string(ex2) == "kvector₃((x[1] * y[3] + x[2] * y[2] * -1 + x[3] * y[1]) * e₁₂₃)"
 end;
