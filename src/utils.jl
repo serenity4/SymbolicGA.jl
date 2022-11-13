@@ -69,12 +69,3 @@ function handle_ix_iy(ix, iy, fargs)
 
     ix, iy
 end
-
-"""
-Return `val` as a subscript, used for printing `UnitBlade` and `Blade` instances.
-"""
-function subscript(val)
-    r = div(val, 10)
-    subscript_char(x) = Char(8320 + x)
-    r > 0 ? string(subscript_char(r), subscript_char(mod(val, 10))) : string(subscript_char(val))
-end
