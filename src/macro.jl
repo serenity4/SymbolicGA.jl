@@ -1,7 +1,8 @@
 macro ga(sig, ex)
   s = extract_signature(sig)
   ex = extract_base_expression(ex, s)
-  simplify(ex, s)
+  ex = simplify(ex, s)
+  to_expr(ex)
 end
 
 function extract_signature(ex::Expr)
@@ -14,12 +15,13 @@ const TRANSPOSE_SYMBOL = Symbol("'")
 
 isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, TRANSPOSE_SYMBOL))
 
-function extract_grade(t::Symbol)
+function extract_grade(t::Symbol, ::S) where {S<:Signature}
   t === :Scalar && return 0
   t === :Vector && return 1
   t === :Bivector && return 2
   t === :Trivector && return 3
   t === :Quadvector && return 4
+  t === :Pseudoscalar && return dimension(S)
   t === :Multivector && return nothing
   Meta.isexpr(t, :curly, 2) && t.args[1] === :KVector && return t.args[2]::Int
   Meta.isexpr(t, :curly) && t.args[1] === :Multivector && return @view t.args[2:end]
@@ -35,13 +37,12 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
       Expression(op, ex.args[2:end])
     elseif Meta.isexpr(ex, :(::))
       ex, T = ex.args
-      g = extract_grade(T)
+      g = extract_grade(T, s)
       if isa(ex, Expression)
         isnothing(g) && return ex
         !isa(g, Int) && isa(g, AbstractVector) && error("Multiple projections are not yet supported.")
         Expression(:project, g, ex)
       else
-        g = extract_grade(T)
         if isa(g, Int)
           if iszero(g)
             Expression(:scalar, ex)
@@ -60,19 +61,6 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
 end
 
 extract_weights(::S, ex, g::Int, offset::Int) where {S<:Signature} = [:(getcomponent($ex, $(i + offset))) for i in 1:nelements(S, g)]
-
-"""
-    getcomponent(collection, i::Int)
-
-Retrieve the `i`th component of a geometric element backed by `collection`, using a linear index in the range `1:cumsum(nelements(signature, g) for g in grades)`
-where `signature` is the signature used for the algebra and `grades` the grades of the geometric element.
-For example, a bivector in the geometric algebra over ℝ³ has three components, and therefore will use component indices from 1 to 3.
-
-This falls back to `getindex(collection, i)`, so for most collections you won't need to extend this method.
-"""
-function getcomponent end
-
-getcomponent(x, i) = getindex(x, i)
 
 blade_expressions(::S, g::Int) where {S<:Signature} = [Expression(:blade, [Expression(:basis, i) for i in is]) for is in combinations(1:dimension(S), g)]
 
@@ -93,7 +81,7 @@ function simplify(ex::Expression, s::Signature)
   # Flatten everything.
   ex = distribute(ex)
 
-  # Restructure the result into multivectors and k-vectors.
+  # Structure the different parts into multivectors and k-vectors.
   ex = restructure_sums(ex)
 
   # Apply algebraic rules.
@@ -101,6 +89,12 @@ function simplify(ex::Expression, s::Signature)
   ex = canonicalize_blades(ex)
   ex = apply_metric(ex, s)
 
+  # Restructure the result.
   ex = disassociate_kvectors(ex)
   ex = group_kvector_blades(ex)
+end
+
+function to_expr(ex::Expression)
+  # TODO: Convert to `Expr`.
+  ex
 end

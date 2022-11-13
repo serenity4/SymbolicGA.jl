@@ -11,6 +11,7 @@ include("signatures.jl")
 # include("lazy.jl")
 include("expressions.jl")
 include("passes.jl")
+include("interface.jl")
 include("macro.jl")
 
 export @ga,
