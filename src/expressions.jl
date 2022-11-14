@@ -11,7 +11,7 @@ mutable struct Expression
       # Collapse all scalars into one at the front, or return a scalar expression if all arguments are scalars.
       if ns ≥ 2
         scalars = ns == length(args) ? args : filter(isexpr(:scalar), args)
-        scalar = Expression(:scalar, Expr(:call, head, [arg.args[1] for arg in scalars]...))
+        scalar = Expression(:scalar, Expr(:call, head, [arg[1] for arg in scalars]...))
         ns == length(args) && return scalar
         return Expression(head, scalar, filter!(!isexpr(:scalar), args)...)
       elseif ns == 1 && !isexpr(args[1]::Expression, :scalar)
@@ -55,6 +55,8 @@ Base.getindex(x::Expression, args...) = x.args[args...]
 Base.firstindex(x::Expression) = firstindex(x.args)
 Base.lastindex(x::Expression) = lastindex(x.args)
 Base.length(x::Expression) = length(x.args)
+Base.iterate(x::Expression, args...) = iterate(x.args, args...)
+Base.view(x::Expression, args...) = view(x.args, args...)
 
 function extract_grade(head::Symbol, args)
   head === :scalar && return 0
@@ -95,7 +97,7 @@ isgrade(ex::Expression, grade::Int) = ex.grade === grade
 grade(ex::Expression) = ex.grade
 
 weighted(ex::Expression, weight) = Expression(:*, Expression(:scalar, weight), ex)
-isweighted(ex) = isexpr(ex, :*, 2) && isexpr(ex.args[1]::Expression, :scalar)
+isweighted(ex) = isexpr(ex, :*, 2) && isexpr(ex[1]::Expression, :scalar)
 
 walk(ex::Expression, inner, outer) = outer(Expression(ex.head, filter!(!isnothing, inner.(ex.args))))
 walk(ex, inner, outer) = outer(ex)
@@ -111,14 +113,14 @@ function traverse(f, ex)
 end
 
 function Base.show(io::IO, ex::Expression)
-  isexpr(ex, :basis) && return print(io, 'b', subscript(ex.args[1]::Int))
-  isexpr(ex, :blade) && return print(io, 'e', join(subscript(ex.args[1]::Int) for ex in ex.args))
-  isexpr(ex, :scalar) && return print_scalar(io, ex.args[1])
+  isexpr(ex, :basis) && return print(io, 'b', subscript(ex[1]::Int))
+  isexpr(ex, :blade) && return print(io, 'e', join(subscript(ex[1]::Int) for ex in ex.args))
+  isexpr(ex, :scalar) && return print_scalar(io, ex[1])
   if isexpr(ex, :*) && isexpr(ex[end], :blade)
     return print(io, '(', join(ex[1:(end - 1)], " * "), ") * ", ex[end])
   end
   isexpr(ex, (:*, :+, :multivector)) && return print(io, '(', Expr(:call, ex.head, ex.args...), ')')
-  isexpr(ex, :project) && return print(io, '⟨', ex.args[2], '⟩', subscript(ex.args[1]::Int))
+  isexpr(ex, :project) && return print(io, '⟨', ex[2], '⟩', subscript(ex[1]::Int))
   isexpr(ex, :kvector) && return print(io, Expr(:call, Symbol("kvector", subscript(ex.grade)), ex.args...))
   print(io, Expression, "(:", ex.head, ", ", join(ex.args, ", "), ')')
 end

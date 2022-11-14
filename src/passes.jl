@@ -26,7 +26,7 @@ function distribute1(ex::Expression)
   for (i, arg) in enumerate(ex.args)
     if isexpr(arg, :+)
       for x in arg.args
-        for arg2 in @view ex.args[(i + 1):end]
+        for arg2 in @view ex[(i + 1):end]
           if isexpr(arg2, :+)
             for y in arg2.args
               push!(new_args, Expression(:*, x, y))
@@ -47,7 +47,7 @@ function restructure_sums(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, :+) || return ex
 
-    if count(==(ex.args[1].grade), arg.grade for arg in ex.args) == length(ex.args)
+    if count(==(ex[1].grade), arg.grade for arg in ex) == length(ex)
       return Expression(:kvector, ex.args)
     end
 
@@ -86,8 +86,8 @@ end
 function canonicalize_blades(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, :blade) || return ex
-    perm = sortperm(ex.args, by = x -> x.args[1]::Int)
-    new_ex = Expression(:blade, ex.args[perm])
+    perm = sortperm(ex.args, by = x -> x[1]::Int)
+    new_ex = Expression(:blade, ex[perm])
     iseven(parity(perm)) && return new_ex
     Expression(:*, Expression(:scalar, -1), new_ex)
   end
@@ -104,7 +104,7 @@ function apply_metric(ex::Expression, s::Signature)
     while length(new_args) ≥ 2
       i > lastindex(new_args) && break
       arg = new_args[i]
-      new = arg.args[1]::Int
+      new = arg[1]::Int
       if !isnothing(last)
         if new == last
           m = metric(s, last)
@@ -113,7 +113,7 @@ function apply_metric(ex::Expression, s::Signature)
           deleteat!(new_args, i)
           deleteat!(new_args, i - 1)
           i = max(i - 2, 1)
-          last = i < firstindex(new_args) ? nothing : new_args[i].args[1]::Int
+          last = i < firstindex(new_args) ? nothing : new_args[i][1]::Int
         else
           last = new
           i += 1

@@ -8,7 +8,7 @@
   @test ws == [:(getcomponent(x, $i)) for i in 1:3]
   kvec = kvector_expression(s, :x, 2)
   @test isexpr(kvec, :kvector, 3)
-  @test kvec.args[1] == weighted(first(blades), first(ws))
+  @test kvec[1] == weighted(first(blades), first(ws))
 
   ex = extract_base_expression(:((x::Vector * y::Bivector)::Trivector), s)
   ex2 = simplify(ex, s)

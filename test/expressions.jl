@@ -19,6 +19,6 @@
   ex = Expression(:blade, Expression(:basis, 1), Expression(:basis, 2), Expression(:basis, 3), Expression(:basis, 1))
   @test ex.grade == 2
 
-  ex2 = postwalk(x -> isexpr(x, :basis) ? Expression(:basis, x.args[1] + 1) : x, ex)
+  ex2 = postwalk(x -> isexpr(x, :basis) ? Expression(:basis, x[1] + 1) : x, ex)
   @test ex2 == Expression(:blade, Expression(:basis, 2), Expression(:basis, 3), Expression(:basis, 4), Expression(:basis, 2))
 end;
