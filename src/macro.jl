@@ -1,11 +1,17 @@
-macro ga(sig, ex)
+macro ga(T, sig, ex)
   s = extract_signature(sig)
   ex = extract_base_expression(ex, s)
   ex = simplify(ex, s)
-  to_expr(ex)
+  ex = to_expr(ex)
+  esc(:($construct($T, $ex)))
 end
 
-function extract_signature(ex::Expr)
+macro ga(sig, ex)
+  esc(:(@ga Tuple $sig $ex))
+end
+
+function extract_signature(ex)
+  isa(ex, Integer) && return Signature(ex)
   Meta.isexpr(ex, :tuple) || error("Expected tuple as signature, got $ex")
   all(isa(x, Int) for x in ex.args) || error("Expected literals in signature, got $ex")
   s = Signature(ex.args...)
@@ -45,7 +51,7 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
       else
         if isa(g, Int)
           if iszero(g)
-            Expression(:scalar, ex)
+            Expression(:scalar, :($getcomponent($ex)))
           else
             kvector_expression(s, ex, g)
           end
@@ -60,7 +66,11 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
   end
 end
 
-extract_weights(::S, ex, g::Int, offset::Int) where {S<:Signature} = [:(getcomponent($ex, $(i + offset))) for i in 1:nelements(S, g)]
+function extract_weights(::S, ex, g::Int, offset::Int) where {S<:Signature}
+  n = nelements(S, g)
+  n == 1 && return [:($getcomponent($ex))]
+  [:($getcomponent($ex, $(i + offset))) for i in 1:n]
+end
 
 blade_expressions(::S, g::Int) where {S<:Signature} = [Expression(:blade, [Expression(:basis, i) for i in is]) for is in combinations(1:dimension(S), g)]
 
@@ -78,6 +88,8 @@ function walk(ex::Expr, inner, outer)
 end
 
 function simplify(ex::Expression, s::Signature)
+  ex = expand_operators(ex)
+
   # Flatten everything.
   ex = distribute(ex)
 
@@ -94,7 +106,34 @@ function simplify(ex::Expression, s::Signature)
   ex = group_kvector_blades(ex)
 end
 
-function to_expr(ex::Expression)
-  # TODO: Convert to `Expr`.
+function promote_to_expr(ex::Expression)
+  isexpr(ex, :kvector) && return Some(Expr(:tuple, ex.args...))
+  isexpr(ex, :blade) && return Some(nothing)
+  isexpr(ex, :scalar) && return Some(ex[1])
+  nothing
+end
+
+function to_expr(ex)
+  if isexpr(ex, :multivector)
+    expr = Expr(:tuple)
+    for arg in ex.args
+      arg = to_expr(arg)
+      if Meta.isexpr(arg, :tuple)
+        append!(expr.args, arg.args)
+      else
+        push!(expr.args, arg)
+      end
+    end
+    return expr
+  end
+  isexpr(ex, :kvector) && return Expr(:tuple, to_expr.(ex.args)...)
+  isexpr(ex, :blade) && return nothing
+  isexpr(ex, :scalar) && return to_expr(ex[1])
+  if isexpr(ex, :*)
+    @assert length(ex) == 2
+    @assert isexpr(ex[2], :blade)
+    return to_expr(ex[1])
+  end
+  @assert !isa(ex, Expression) "Expected non-Expression element, got $ex"
   ex
 end

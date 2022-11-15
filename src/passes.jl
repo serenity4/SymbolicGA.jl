@@ -1,3 +1,21 @@
+function expand_operators(ex::Expression)
+  prewalk(ex) do ex
+    if isexpr(ex, :∧)
+      # The outer product is associative, no issues there.
+      Expression(:project, sum(grade, ex), Expression(:*, ex.args...))
+    elseif isexpr(ex, :⋅)
+      length(ex) == 2 || error("The inner product must have only two operands, as no associativity law is available to derive a canonical binarization.")
+      # Homogeneous vectors are expected, so the grade should be known.
+      r, s = grade(ex[1])::Int, grade(ex[2])::Int
+      Expression(:project, iszero(r) || iszero(s) ? nothing : abs(r - s), Expression(:*, ex.args...))
+    elseif isexpr(ex, :⦿)
+      Expression(:project, 0, Expression(:*, ex.args...))
+    else
+      ex
+    end
+  end
+end
+
 function distribute(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, (:kvector, :multivector)) && (ex = Expression(:+, ex.args))
@@ -116,12 +134,11 @@ function apply_metric(ex::Expression, s::Signature)
           last = i < firstindex(new_args) ? nothing : new_args[i][1]::Int
         else
           last = new
-          i += 1
         end
       else
         last = new
-        i += 1
       end
+      i += 1
     end
     if isempty(new_args)
       Expression(:scalar, fac)
@@ -140,6 +157,10 @@ function disassociate_kvectors(ex::Expression)
 end
 
 function group_kvector_blades(ex::Expression)
+  isexpr(ex, :multivector) && return Expression(:multivector, group_kvector_blades.(ex.args))
+  isexpr(ex, :scalar) && return ex
+  @assert isexpr(ex, :kvector) "Expected k-vector expression, got $ex"
+
   blade_weights = Dict{Vector{Any},Expression}()
   for arg in ex.args
     if isweighted(arg)

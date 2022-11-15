@@ -127,7 +127,8 @@ end
 
 function print_scalar(io, ex)
   Meta.isexpr(ex, :call) && in(ex.args[1], (:*, :+)) && return print(io, join((sprint(print_scalar, arg) for arg in @view ex.args[2:end]), " $(ex.args[1]) "))
-  Meta.isexpr(ex, :call, 3) && ex.args[1] === :getcomponent && return print(io, Expr(:ref, ex.args[2:3]...))
+  Meta.isexpr(ex, :call, 3) && ex.args[1] === getcomponent && return print(io, Expr(:ref, ex.args[2:3]...))
+  Meta.isexpr(ex, :call, 2) && ex.args[1] === getcomponent && return print(io, ex.args[2])
   print(io, ex)
 end
 
