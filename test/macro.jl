@@ -22,13 +22,17 @@
   y = (4, 5, 6)
   z = 3
 
+  # Yields 1 bivector.
   res = @ga (2, 1) x::Vector ∧ y::Vector + x::Vector * z::Pseudoscalar
   @test isa(res, NTuple{3,Int})
 
   x = (1, 2)
   y = (0, 50)
   res = @ga 2 x::Vector ∧ y::Vector + x[1]::Scalar * z::Pseudoscalar
-  @test_broken isa(res, NTuple{3, Int})
+  @test res == 1 * 50 + 1 * 3
+  # Yields 1 pseudoscalar and 1 vector.
   res = @ga 2 x::Vector ∧ y::Vector + x::Vector * z::Pseudoscalar
-  @test_broken isa(res, NTuple{4, Int})
+  @test isa(res, NTuple{3, Int})
+  res2 = @ga Vector 2 x::Vector ∧ y::Vector + x::Vector * z::Pseudoscalar
+  @test collect(res) == res2
 end;

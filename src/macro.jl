@@ -88,13 +88,17 @@ function walk(ex::Expr, inner, outer)
 end
 
 function simplify(ex::Expression, s::Signature)
+  @debug "Base expression: $ex"
   ex = expand_operators(ex)
+  @debug "After operator expansion: $ex"
 
   # Flatten everything.
   ex = distribute(ex)
+  @debug "After distribution: $ex"
 
   # Structure the different parts into multivectors and k-vectors.
   ex = restructure_sums(ex)
+  @debug "After sum restructuring: $ex"
 
   # Apply algebraic rules.
   ex = apply_projections(ex)
@@ -104,6 +108,9 @@ function simplify(ex::Expression, s::Signature)
   # Restructure the result.
   ex = disassociate_kvectors(ex)
   ex = group_kvector_blades(ex)
+  ex = fill_kvector_components(ex, s)
+  @debug "After all transforms: $ex"
+  ex
 end
 
 function promote_to_expr(ex::Expression)
@@ -126,9 +133,9 @@ function to_expr(ex)
     end
     return expr
   end
-  isexpr(ex, :kvector) && return Expr(:tuple, to_expr.(ex.args)...)
-  isexpr(ex, :blade) && return nothing
   isexpr(ex, :scalar) && return to_expr(ex[1])
+  isexpr(ex, :kvector) && return length(ex) == 1 ? to_expr(only(ex)) : Expr(:tuple, to_expr.(ex.args)...)
+  isexpr(ex, :blade) && return nothing
   if isexpr(ex, :*)
     @assert length(ex) == 2
     @assert isexpr(ex[2], :blade)

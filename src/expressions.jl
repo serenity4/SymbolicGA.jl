@@ -6,6 +6,7 @@ mutable struct Expression
   function Expression(head::Symbol, args::AbstractVector)
     head === :scalar && isexpr(args[1], :scalar) && return args[1]
     if in(head, (:*, :+))
+      length(args) == 1 && return only(args)
       any(isexpr(head), args) && (args = disassociate1(args, head))
       ns = count(isexpr(:scalar), args)
       # Collapse all scalars into one at the front, or return a scalar expression if all arguments are scalars.
@@ -38,7 +39,7 @@ mutable struct Expression
 
     grade = extract_grade(head, args)
     in(head, (:scalar, :basis, :blade, :kvector, :project)) && grade::Int
-    @assert !isempty(args)
+    @assert head === :blade || !isempty(args)
     if head === :scalar
       @assert length(args) == 1
     elseif head === :basis
@@ -99,6 +100,16 @@ grade(ex::Expression) = ex.grade
 weighted(ex::Expression, weight) = Expression(:*, Expression(:scalar, weight), ex)
 isweighted(ex) = isexpr(ex, :*, 2) && isexpr(ex[1]::Expression, :scalar)
 
+basis(i::Integer) = Expr(:basis, i)
+blade(indices::Integer...) = blade(indices)
+blade(indices) = Expression(:blade, Any[Expression(:basis, i) for i in indices])
+scalar(x) = Expression(:scalar, x)
+kvector(xs...) = Expression(:kvector, collect(xs))
+multivector(xs...) = Expression(:multivector, collect(xs))
+
+Base.:(*)(x::Expression, y::Expression) = Expression(:*, x, y)
+Base.:(+)(x::Expression, y::Expression) = Expression(:+, x, y)
+
 walk(ex::Expression, inner, outer) = outer(Expression(ex.head, filter!(!isnothing, inner.(ex.args))))
 walk(ex, inner, outer) = outer(ex)
 postwalk(f, ex) = walk(ex, x -> postwalk(f, x), f)
@@ -117,7 +128,11 @@ function Base.show(io::IO, ex::Expression)
   isexpr(ex, :blade) && return print(io, 'e', join(subscript(ex[1]::Int) for ex in ex.args))
   isexpr(ex, :scalar) && return print_scalar(io, ex[1])
   if isexpr(ex, :*) && isexpr(ex[end], :blade)
-    return print(io, '(', join(ex[1:(end - 1)], " * "), ") * ", ex[end])
+    if length(ex) == 2 && isexpr(ex[1], :scalar) && (!Meta.isexpr(ex[1][1], :call) || ex[1][1].args[1] == getcomponent)
+      return print(io, ex[1], " * ", ex[end])
+    else
+      return print(io, '(', join(ex[1:(end - 1)], " * "), ") * ", ex[end])
+    end
   end
   isexpr(ex, (:*, :+, :multivector)) && return print(io, '(', Expr(:call, ex.head, ex.args...), ')')
   isexpr(ex, :project) && return print(io, '⟨', ex[2], '⟩', subscript(ex[1]::Int))

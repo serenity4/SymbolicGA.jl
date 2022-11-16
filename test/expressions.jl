@@ -21,4 +21,6 @@
 
   ex2 = postwalk(x -> isexpr(x, :basis) ? Expression(:basis, x[1] + 1) : x, ex)
   @test ex2 == Expression(:blade, Expression(:basis, 2), Expression(:basis, 3), Expression(:basis, 4), Expression(:basis, 2))
+
+  @test blade(1, 2) * basis(3) == blade(1, 2, 3)
 end;

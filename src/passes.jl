@@ -18,7 +18,7 @@ end
 
 function distribute(ex::Expression)
   postwalk(ex) do ex
-    isexpr(ex, (:kvector, :multivector)) && (ex = Expression(:+, ex.args))
+    isexpr(ex, (:kvector, :multivector)) && return Expression(:+, ex.args)
     isexpr(ex, :+) && return disassociate1(ex, :+)
     isexpr(ex, :*) && any(isexpr(arg, :+) for arg in ex.args) && return distribute1(ex)
     ex
@@ -40,41 +40,42 @@ end
 disassociate1(ex::Expression, op::Symbol) = Expression(op, disassociate1(ex.args, op))
 
 function distribute1(ex::Expression)
-  new_args = []
-  for (i, arg) in enumerate(ex.args)
-    if isexpr(arg, :+)
-      for x in arg.args
-        for arg2 in @view ex[(i + 1):end]
-          if isexpr(arg2, :+)
-            for y in arg2.args
-              push!(new_args, Expression(:*, x, y))
-            end
-          else
-            push!(new_args, Expression(:*, x, arg2))
-          end
-        end
+  x, ys = ex[1], @view ex[2:end]
+  base = isexpr(x, :+) ? x.args : [x]
+  for y in ys
+    new_base = []
+    yterms = isexpr(y, :+) ? y.args : (y,)
+    for xterm in base
+      for yterm in yterms
+        push!(new_base, xterm * yterm)
       end
-    else
-      push!(new_args, arg)
     end
+    base = new_base
   end
-  Expression(:+, new_args)
+  Expression(:+, base)
 end
 
+"""
+Convert sums between elements of arbitrary grades into either a k-vector or a multivector.
+
+If all elements in the sum had the same grade, a k-vector is returned.
+Otherwise, all elements of the same grade are grouped, wrapped in k-vectors
+and added to a multivector expression.
+"""
 function restructure_sums(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, :+) || return ex
 
-    if count(==(ex[1].grade), arg.grade for arg in ex) == length(ex)
+    if count(==(ex[1].grade::Int), arg.grade::Int for arg in ex) == length(ex)
       return Expression(:kvector, ex.args)
     end
 
-    args = sort(ex.args, by = x -> x.grade)
+    args = sort(ex.args, by = x -> x.grade::Int)
     grades = getproperty.(args, :grade)
     i = 1
     new_args = []
     while i ≤ lastindex(grades)
-      g = grades[i]
+      g = grades[i]::Int
       j = findfirst(≠(g), @view grades[(i + 1):end])
       j = something(j, lastindex(grades) - (i - 1))
       j += i
@@ -107,7 +108,7 @@ function canonicalize_blades(ex::Expression)
     perm = sortperm(ex.args, by = x -> x[1]::Int)
     new_ex = Expression(:blade, ex[perm])
     iseven(parity(perm)) && return new_ex
-    Expression(:*, Expression(:scalar, -1), new_ex)
+    weighted(new_ex, -1)
   end
 end
 
@@ -144,7 +145,7 @@ function apply_metric(ex::Expression, s::Signature)
       Expression(:scalar, fac)
     else
       new_ex = Expression(:blade, new_args)
-      isone(fac) ? new_ex : Expression(:*, Expression(:scalar, fac), new_ex)
+      isone(fac) ? new_ex : weighted(new_ex, fac)
     end
   end
 end
@@ -159,21 +160,55 @@ end
 function group_kvector_blades(ex::Expression)
   isexpr(ex, :multivector) && return Expression(:multivector, group_kvector_blades.(ex.args))
   isexpr(ex, :scalar) && return ex
+  isexpr(ex, :blade) && return ex
   @assert isexpr(ex, :kvector) "Expected k-vector expression, got $ex"
 
-  blade_weights = Dict{Vector{Any},Expression}()
+  blade_weights = Dict{Vector{Int},Expression}()
   for arg in ex.args
     if isweighted(arg)
       weight, blade = arg[1]::Expression, arg[2]::Expression
     else
       weight, blade = Expression(:scalar, 1), arg
     end
-    indices = getindex.(blade.args, 1)
+    indices = basis_vectors(arg)
     if haskey(blade_weights, indices)
       blade_weights[indices] = Expression(:+, blade_weights[indices], weight)
     else
       blade_weights[indices] = weight
     end
   end
-  Expression(:kvector, [weighted(Expression(:blade, Any[Expression(:basis, i) for i in indices]), weight) for (indices, weight) in pairs(blade_weights)])
+  Expression(:kvector, [weighted(blade(indices), weight) for (indices, weight) in pairs(blade_weights)])
+end
+
+function basis_vectors(ex::Expression)
+  isexpr(ex, :*, 2) && isexpr(ex[1], :scalar) && isexpr(ex[2], :blade) && return basis_vectors(ex[2]::Expression)
+  isexpr(ex, :blade) && return Int[arg[1] for arg in ex]
+  isexpr(ex, :scalar) && return Int[]
+  error("Expected blade or weighted blade expression, got $ex")
+end
+
+function lt_basis_order(xinds, yinds)
+  nx, ny = length(xinds), length(yinds)
+  nx ≠ ny && return nx < ny
+  for (xi, yi) in zip(xinds, yinds)
+    xi ≠ yi && return xi < yi
+  end
+  false
+end
+
+function fill_kvector_components(ex::Expression, s::S) where {S<:Signature}
+  postwalk(ex) do ex
+    isexpr(ex, :kvector) || return ex
+    g = grade(ex)::Int
+    i = 1
+    ex = Expression(:kvector, sort(ex.args, by = basis_vectors, lt = lt_basis_order))
+    for indices in combinations(1:dimension(S), g)
+      next = i ≤ lastindex(ex) ? ex[i]::Expression : nothing
+      if isnothing(next) || indices ≠ basis_vectors(next)
+        insert!(ex.args, i, weighted(blade(indices), 0))
+      end
+      i += 1
+    end
+    ex
+  end
 end
