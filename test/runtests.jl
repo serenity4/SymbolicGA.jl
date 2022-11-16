@@ -9,4 +9,5 @@ ENV["JULIA_DEBUG"] = ""
     include("expressions.jl")
     include("passes.jl")
     include("macro.jl")
+    include("operators.jl")
 end;

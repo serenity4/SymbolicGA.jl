@@ -162,6 +162,7 @@ function group_kvector_blades(ex::Expression)
   isexpr(ex, :multivector) && return Expression(:multivector, group_kvector_blades.(ex.args))
   isexpr(ex, :scalar) && return ex
   isexpr(ex, :blade) && return ex
+  isweighted(ex) && isexpr(ex[2], :blade) && return ex
   @assert isexpr(ex, :kvector) "Expected k-vector expression, got $ex"
   grade(ex) == 0 && return kvector(Expression(:+, ex.args))
 

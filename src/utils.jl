@@ -69,3 +69,5 @@ function handle_ix_iy(ix, iy, fargs)
 
     ix, iy
 end
+
+stringc(x) = sprint(show, x; context = :color => true)

@@ -21,6 +21,16 @@ const TRANSPOSE_SYMBOL = Symbol("'")
 
 isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, TRANSPOSE_SYMBOL))
 
+function extract_blade(t::Symbol, ::S) where {S<:Signature}
+  t === :e && return :scalar
+  m = match(r"^e(\d+)$", string(t))
+  dimension(S) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
+  isnothing(m) && return nothing
+  indices = parse.(Int, collect(m[1]))
+  allunique(indices) || error("Index duplicates found in blade annotation $t.")
+  blade(indices)
+end
+
 function extract_grade(t::Symbol, ::S) where {S<:Signature}
   t === :Scalar && return 0
   t === :Vector && return 1
@@ -43,6 +53,9 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
       Expression(op, ex.args[2:end])
     elseif Meta.isexpr(ex, :(::))
       ex, T = ex.args
+      b = extract_blade(T, s)
+      b === :scalar && return scalar(ex)
+      !isnothing(b) && return scalar(ex) * b
       g = extract_grade(T, s)
       if isa(ex, Expression)
         isnothing(g) && return ex
@@ -86,34 +99,34 @@ function walk(ex::Expr, inner, outer)
 end
 
 function simplify(ex::Expression, s::Signature)
-  @debug "Base expression: $ex"
+  @debug "Base expression: $(stringc(ex))"
   ex = expand_operators(ex)
-  @debug "After operator expansion: $ex"
+  @debug "After operator expansion: $(stringc(ex))"
 
   # Flatten everything.
   ex = distribute(ex)
-  @debug "After distribution: $ex"
+  @debug "After distribution: $(stringc(ex))"
 
   # Structure the different parts into multivectors and k-vectors.
   ex = restructure_sums(ex)
-  @debug "After sum restructuring: $ex"
+  @debug "After sum restructuring: $(stringc(ex))"
 
   # Apply algebraic rules.
   ex = apply_projections(ex)
-  @debug "After projection filtering: $ex"
+  @debug "After projection filtering: $(stringc(ex))"
   ex = canonicalize_blades(ex)
-  @debug "After blade canonicalization: $ex"
+  @debug "After blade canonicalization: $(stringc(ex))"
   ex = apply_metric(ex, s)
-  @debug "After metric simplifications: $ex"
+  @debug "After metric simplifications: $(stringc(ex))"
 
   # Restructure the result.
   ex = disassociate_kvectors(ex)
-  @debug "After k-vector disassocation: $ex"
+  @debug "After k-vector disassocation: $(stringc(ex))"
   ex = group_kvector_blades(ex)
-  @debug "After blade grouping: $ex"
+  @debug "After blade grouping: $(stringc(ex))"
   ex = fill_kvector_components(ex, s)
-  @debug "After k-vector component filling: $ex"
-  @debug "After all transforms: $ex"
+  @debug "After k-vector component filling: $(stringc(ex))"
+  @debug "After all transforms: $(stringc(ex))"
   ex
 end
 

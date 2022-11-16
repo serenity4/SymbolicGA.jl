@@ -155,7 +155,12 @@ function Base.show(io::IO, ex::Expression)
     end
   end
   isexpr(ex, (:*, :+, :multivector)) && return print(io, '(', Expr(:call, ex.head, ex.args...), ')')
-  isexpr(ex, :project) && return print(io, '⟨', ex[2], '⟩', subscript(ex[1]::Int))
+  if isexpr(ex, :project)
+    printstyled(io, '⟨'; color = :yellow)
+    print(io, ex[2])
+    printstyled(io, '⟩', subscript(ex[1]::Int); color = :yellow)
+    return
+  end
   isexpr(ex, :kvector) && return print(io, Expr(:call, Symbol("kvector", subscript(ex.grade)), ex.args...))
   print(io, Expression, "(:", ex.head, ", ", join(ex.args, ", "), ')')
 end
