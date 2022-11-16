@@ -22,12 +22,13 @@ const TRANSPOSE_SYMBOL = Symbol("'")
 isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, TRANSPOSE_SYMBOL))
 
 function extract_blade(t::Symbol, ::S) where {S<:Signature}
-  t === :e && return :scalar
+  (t === :e || t === :e0) && return :scalar
   m = match(r"^e(\d+)$", string(t))
   dimension(S) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
   isnothing(m) && return nothing
   indices = parse.(Int, collect(m[1]))
   allunique(indices) || error("Index duplicates found in blade annotation $t.")
+  maximum(indices) ≤ dimension(S) || error("One or more indices exceeds the dimension of the specified space for blade $t")
   blade(indices)
 end
 
