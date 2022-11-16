@@ -5,7 +5,11 @@ mutable struct Expression
   Expression(head::Symbol, args...) = Expression(head, collect(Any, args))
   function Expression(head::Symbol, args::AbstractVector)
     head === :scalar && isexpr(args[1], :scalar) && return args[1]
-    head === :- && return weighted(only(args), -1)
+    if head === :-
+      length(args) == 1 && return weighted(only(args), -1)
+      @assert length(args) == 2
+      return args[1] - args[2]
+    end
     if in(head, (:*, :+))
       if head === :*
         # Simplify scalar products that involve units.

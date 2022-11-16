@@ -40,4 +40,16 @@ using LazyGeometricAlgebra: extract_weights, kvector_expression, extract_base_ex
   res = @ga 3 x::Vector * y::Vector
   @test isa(res, NTuple{4,Float64})
   @test res[1] == sum(x .* y)
+
+  res = @ga 3 begin
+    x::Vector
+    x * x
+  end
+  @test isa(res, NTuple{4, Float64})
+
+  res2 = @ga 3 begin
+    x = (1.0, 2.0, 3.0)::Vector
+    x * x
+  end
+  @test res === res2
 end;

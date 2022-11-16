@@ -90,6 +90,13 @@ function expand_variables(ex::Expr)
   rhs = nothing
   for subex in ex.args
     isa(subex, LineNumberNode) && continue
+
+    if Meta.isexpr(subex, :(::)) && isa(subex.args[1], Symbol)
+      # Type declaration.
+      var, T = subex.args
+      subex = :($var = $var::$T)
+    end
+
     lhs, rhs = Meta.isexpr(subex, :(=), 2) ? subex.args : (nothing, subex)
     # Expand known variables.
     rhs = postwalk(rhs) do x
