@@ -47,7 +47,7 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
       if isa(ex, Expression)
         isnothing(g) && return ex
         !isa(g, Int) && isa(g, AbstractVector) && error("Multiple projections are not yet supported.")
-        Expression(:project, g, ex)
+        project(g, ex)
       else
         if isa(g, Int)
           if iszero(g)
@@ -72,10 +72,8 @@ function extract_weights(::S, ex, g::Int, offset::Int) where {S<:Signature}
   [:($getcomponent($ex, $(i + offset))) for i in 1:n]
 end
 
-blade_expressions(::S, g::Int) where {S<:Signature} = [Expression(:blade, [Expression(:basis, i) for i in is]) for is in combinations(1:dimension(S), g)]
-
 function kvector_expression(s::S, ex, g::Int, offset::Int = 0) where {S<:Signature}
-  Expression(:kvector, [weighted(blade, w) for (blade, w) in zip(blade_expressions(s, g), extract_weights(s, ex, g, offset))])
+  kvector(Any[weighted(blade, w) for (blade, w) in zip(map(blade, combinations(1:dimension(S), g)), extract_weights(s, ex, g, offset))])
 end
 
 function walk(ex::Expr, inner, outer)

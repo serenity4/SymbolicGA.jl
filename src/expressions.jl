@@ -30,9 +30,9 @@ mutable struct Expression
           for x in xs
             isexpr(x, :basis) ? push!(blade_args, x) : append!(blade_args, x.args)
           end
-          blade = Expression(:blade, blade_args)
-          nb == length(args) && return blade
-          return Expression(:*, blade, filter!(!isexpr((:basis, :blade)), args)...)
+          ex = blade(blade_args)
+          nb == length(args) && return ex
+          return *(ex, filter!(!isexpr((:basis, :blade)), args)...)
         end
       end
     end
@@ -50,14 +50,6 @@ mutable struct Expression
     new(head, grade, args)
   end
 end
-
-(==)(x::Expression, y::Expression) = x.head == y.head && x.grade === y.grade && x.args == y.args
-Base.getindex(x::Expression, args...) = x.args[args...]
-Base.firstindex(x::Expression) = firstindex(x.args)
-Base.lastindex(x::Expression) = lastindex(x.args)
-Base.length(x::Expression) = length(x.args)
-Base.iterate(x::Expression, args...) = iterate(x.args, args...)
-Base.view(x::Expression, args...) = view(x.args, args...)
 
 function extract_grade(head::Symbol, args)
   head === :scalar && return 0
@@ -90,25 +82,46 @@ function extract_grade(head::Symbol, args)
   end
 end
 
+# Basic interfaces.
+
+(==)(x::Expression, y::Expression) = x.head == y.head && x.grade === y.grade && x.args == y.args
+Base.getindex(x::Expression, args...) = x.args[args...]
+Base.firstindex(x::Expression) = firstindex(x.args)
+Base.lastindex(x::Expression) = lastindex(x.args)
+Base.length(x::Expression) = length(x.args)
+Base.iterate(x::Expression, args...) = iterate(x.args, args...)
+Base.view(x::Expression, args...) = view(x.args, args...)
+
+# Introspection utilities.
+
 isexpr(ex, head::Symbol) = isa(ex, Expression) && ex.head === head
 isexpr(ex, heads) = isa(ex, Expression) && in(ex.head, heads)
 isexpr(ex, head::Symbol, n::Int) = isa(ex, Expression) && isexpr(ex, head) && length(ex.args) == n
 isexpr(heads) = ex -> isexpr(ex, heads)
 isgrade(ex::Expression, grade::Int) = ex.grade === grade
 grade(ex::Expression) = ex.grade
-
-weighted(ex::Expression, weight) = Expression(:*, Expression(:scalar, weight), ex)
 isweighted(ex) = isexpr(ex, :*, 2) && isexpr(ex[1]::Expression, :scalar)
 
-basis(i::Integer) = Expr(:basis, i)
-blade(indices::Integer...) = blade(indices)
-blade(indices) = Expression(:blade, Any[Expression(:basis, i) for i in indices])
+# Helper functions.
+
 scalar(x) = Expression(:scalar, x)
-kvector(xs...) = Expression(:kvector, collect(xs))
-multivector(xs...) = Expression(:multivector, collect(xs))
+basis(i::Integer) = Expression(:basis, i)
+blade(indices::Integer...) = blade(indices)
+blade(args::AbstractVector) = Expression(:blade, args)
+blade(args::AbstractVector{<:Integer}) = blade(Any[basis(i) for i in args])
+blade(xs) = blade(Any[isa(x, Int) ? basis(x) : x for x in xs])
+kvector(args::AbstractVector) = Expression(:kvector, args)
+kvector(xs...) = kvector(collect(Any, xs))
+multivector(args::AbstractVector) = Expression(:multivector, args)
+multivector(xs...) = multivector(collect(Any, xs))
+project(g::Integer, args) = Expression(:project, g, args)
+
+weighted(ex::Expression, weight) = scalar(weight) * ex
 
 Base.:(*)(x::Expression, y::Expression) = Expression(:*, x, y)
 Base.:(+)(x::Expression, y::Expression) = Expression(:+, x, y)
+
+# Traversal/transformation utilities.
 
 walk(ex::Expression, inner, outer) = outer(Expression(ex.head, filter!(!isnothing, inner.(ex.args))))
 walk(ex, inner, outer) = outer(ex)
@@ -122,6 +135,8 @@ function traverse(f, ex)
     traverse(f, arg)
   end
 end
+
+# Display.
 
 function Base.show(io::IO, ex::Expression)
   isexpr(ex, :basis) && return print(io, 'b', subscript(ex[1]::Int))
