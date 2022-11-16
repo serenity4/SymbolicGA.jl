@@ -129,6 +129,7 @@ function apply_metric(ex::Expression, s::Signature)
           m = metric(s, last)
           iszero(m) && return nothing
           fac *= m
+          length(new_args) == 2 && return scalar(fac)
           deleteat!(new_args, i)
           deleteat!(new_args, i - 1)
           i = max(i - 2, 1)

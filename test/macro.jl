@@ -31,4 +31,10 @@
   @test isa(res, NTuple{3, Int})
   res2 = @ga Vector 2 x::Vector ∧ y::Vector + x::Vector * z::Pseudoscalar
   @test collect(res) == res2
+
+  x = (1.0, 2.0, 3.0)
+  y = (50.0, 70.0, 70.0)
+  # Yields 1 scalar and 1 bivector.
+  res = @ga 3 x::Vector * y::Vector
+  @test_broken isa(res, NTuple{4,Float64})
 end;
