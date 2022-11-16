@@ -1,3 +1,5 @@
+using LazyGeometricAlgebra: extract_weights, kvector_expression, extract_base_expression
+
 @testset "Macro frontend" begin
   s = Signature(1, 1, 1)
   ws = extract_weights(s, :x, 1, 0)
@@ -36,5 +38,6 @@
   y = (50.0, 70.0, 70.0)
   # Yields 1 scalar and 1 bivector.
   res = @ga 3 x::Vector * y::Vector
-  @test_broken isa(res, NTuple{4,Float64})
+  @test isa(res, NTuple{4,Float64})
+  @test res[1] == sum(x .* y)
 end;

@@ -1,3 +1,5 @@
+using LazyGeometricAlgebra: distribute, restructure_sums, canonicalize_blades, apply_metric, disassociate_kvectors, fill_kvector_components
+
 @testset "Passes" begin
   e12 = blade(1, 2)
   e13 = blade(1, 3)

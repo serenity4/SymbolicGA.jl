@@ -100,13 +100,19 @@ function simplify(ex::Expression, s::Signature)
 
   # Apply algebraic rules.
   ex = apply_projections(ex)
+  @debug "After projection filtering: $ex"
   ex = canonicalize_blades(ex)
+  @debug "After blade canonicalization: $ex"
   ex = apply_metric(ex, s)
+  @debug "After metric simplifications: $ex"
 
   # Restructure the result.
   ex = disassociate_kvectors(ex)
+  @debug "After k-vector disassocation: $ex"
   ex = group_kvector_blades(ex)
+  @debug "After blade grouping: $ex"
   ex = fill_kvector_components(ex, s)
+  @debug "After k-vector component filling: $ex"
   @debug "After all transforms: $ex"
   ex
 end

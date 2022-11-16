@@ -6,15 +6,20 @@ mutable struct Expression
   function Expression(head::Symbol, args::AbstractVector)
     head === :scalar && isexpr(args[1], :scalar) && return args[1]
     if in(head, (:*, :+))
+      if head === :*
+        # Simplify scalar products that involve units.
+        args = filter(x -> !isexpr(x, :scalar) || x[1] ≠ 1,  args)
+        isempty(args) && return scalar(1)
+      end
       length(args) == 1 && return only(args)
       any(isexpr(head), args) && (args = disassociate1(args, head))
       ns = count(isexpr(:scalar), args)
       # Collapse all scalars into one at the front, or return a scalar expression if all arguments are scalars.
       if ns ≥ 2
         scalars = ns == length(args) ? args : filter(isexpr(:scalar), args)
-        scalar = Expression(:scalar, Expr(:call, head, [arg[1] for arg in scalars]...))
-        ns == length(args) && return scalar
-        return Expression(head, scalar, filter!(!isexpr(:scalar), args)...)
+        sc = scalar(Expr(:call, head, [arg[1] for arg in scalars]...))
+        ns == length(args) && return sc
+        return Expression(head, sc, filter(!isexpr(:scalar), args)...)
       elseif ns == 1 && !isexpr(args[1]::Expression, :scalar)
         i = findfirst(isexpr(:scalar), args)
         sc = args[i]::Expression
