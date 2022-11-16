@@ -6,13 +6,13 @@ function expand_operators(ex::Expression)
     elseif isexpr(ex, :⋅)
       length(ex) == 2 || error("The inner product must have only two operands, as no associativity law is available to derive a canonical binarization.")
       # Homogeneous vectors are expected, so the grade should be known.
-      r, s = grade(ex[1])::Int, grade(ex[2])::Int
+      r, s = grade(ex[1]::Expression), grade(ex[2]::Expression)
       project(iszero(r) || iszero(s) ? nothing : abs(r - s), Expression(:*, ex.args))
     elseif isexpr(ex, :⦿)
       project(0, Expression(:*, ex.args))
     elseif isexpr(ex, :×)
       length(ex) == 2 || error("The commutator product must have only two operands, as no associativity law is available to derive a canonical binarization.")
-      a, b = ex
+      a, b = ex[1]::Expression, ex[2]::Expression
       weighted(a * b - b * a, 0.5)
     else
       ex
@@ -70,16 +70,16 @@ function restructure_sums(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, :+) || return ex
 
-    if count(==(ex[1].grade::Int), arg.grade::Int for arg in ex) == length(ex)
+    if count(==(grade(ex[1]::Expression)), grade(arg::Expression) for arg in ex) == length(ex)
       return kvector(ex.args)
     end
 
-    args = sort(ex.args, by = x -> x.grade::Int)
-    grades = getproperty.(args, :grade)
+    args = sort(ex.args, by = grade)
+    grades = grade.(args)
     i = 1
     new_args = []
     while i ≤ lastindex(grades)
-      g = grades[i]::Int
+      g = grades[i]
       j = findfirst(≠(g), @view grades[(i + 1):end])
       j = something(j, lastindex(grades) - (i - 1))
       j += i
@@ -99,9 +99,9 @@ function apply_projections(ex::Expression)
     isexpr(ex, :project) || return ex
     g, ex = ex.args
     if isexpr(ex, :multivector)
-      kvector(filter(x -> grade(x)::Int == g, ex.args))
+      kvector(filter(x -> grade(x) == g, ex.args))
     else
-      Expression(ex.head, filter(x -> grade(x)::Int == g, ex.args))
+      Expression(ex.head, filter(x -> grade(x) == g, ex.args))
     end
   end
 end
@@ -109,7 +109,7 @@ end
 function canonicalize_blades(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, :blade) || return ex
-    perm = sortperm(ex.args, by = x -> x[1]::Int)
+    perm = sortperm(ex.args, by = basis_index)
     new_ex = blade(ex[perm])
     iseven(parity(perm)) && return new_ex
     weighted(new_ex, -1)
@@ -127,7 +127,7 @@ function apply_metric(ex::Expression, s::Signature)
     while length(new_args) ≥ 2
       i > lastindex(new_args) && break
       arg = new_args[i]
-      new = arg[1]::Int
+      new = basis_index(arg)
       if !isnothing(last)
         if new == last
           m = metric(s, last)
@@ -137,7 +137,7 @@ function apply_metric(ex::Expression, s::Signature)
           deleteat!(new_args, i)
           deleteat!(new_args, i - 1)
           i = max(i - 2, 1)
-          last = i < firstindex(new_args) ? nothing : new_args[i][1]::Int
+          last = i < firstindex(new_args) ? nothing : basis_index(new_args[i])
         else
           last = new
         end
@@ -183,26 +183,10 @@ function group_kvector_blades(ex::Expression)
   kvector(Any[weighted(blade(indices), weight) for (indices, weight) in pairs(blade_weights)])
 end
 
-function basis_vectors(ex::Expression)
-  isexpr(ex, :*, 2) && isexpr(ex[1], :scalar) && isexpr(ex[2], :blade) && return basis_vectors(ex[2]::Expression)
-  isexpr(ex, :blade) && return Int[arg[1] for arg in ex]
-  isexpr(ex, :scalar) && return Int[]
-  error("Expected blade or weighted blade expression, got $ex")
-end
-
-function lt_basis_order(xinds, yinds)
-  nx, ny = length(xinds), length(yinds)
-  nx ≠ ny && return nx < ny
-  for (xi, yi) in zip(xinds, yinds)
-    xi ≠ yi && return xi < yi
-  end
-  false
-end
-
 function fill_kvector_components(ex::Expression, s::S) where {S<:Signature}
   postwalk(ex) do ex
     isexpr(ex, :kvector) || return ex
-    g = grade(ex)::Int
+    g = grade(ex)
     i = 1
     ex = kvector(sort(ex.args, by = basis_vectors, lt = lt_basis_order))
     for indices in combinations(1:dimension(S), g)

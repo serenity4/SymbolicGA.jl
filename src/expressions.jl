@@ -43,8 +43,6 @@ mutable struct Expression
       end
     end
 
-    grade = extract_grade(head, args)
-    in(head, (:scalar, :basis, :blade, :kvector, :project)) && grade::Int
     @assert head === :blade || !isempty(args)
     if head === :scalar
       @assert length(args) == 1
@@ -52,7 +50,11 @@ mutable struct Expression
       @assert length(args) == 1 && isa(args[1], Int)
     elseif head === :blade
       @assert all(isexpr(ex, :basis) for ex in args)
+    elseif head === :project
+      @assert length(args) == 2 && isa(args[1], Int) && isa(args[2], Expression)
     end
+    grade = extract_grade(head, args)
+    in(head, (:scalar, :basis, :blade, :kvector, :project)) && grade::Int
     new(head, grade, args)
   end
 end
@@ -60,13 +62,13 @@ end
 function extract_grade(head::Symbol, args)
   head === :scalar && return 0
   head === :basis && return 1
-  head === :blade && return count(isodd, map(x -> count(==(x) ∘ basis_index, args), unique!(getindex.(args, 1))))
+  head === :blade && return count(isodd, map(x -> count(==(x) ∘ basis_index, args), unique!(basis_index.(args))))
   head === :project && return args[1]::Int
   head === :* && length(args) == 2 && isexpr(args[1], :scalar) && return (args[2]::Expression).grade
   if head === :+ || head === :multivector
     g = nothing
     for arg in args
-      g′ = grade(arg)
+      g′ = arg.grade
       isnothing(g′) && return nothing
       isnothing(g) && (g = g′)
       g ≠ g′ && return nothing
@@ -76,7 +78,7 @@ function extract_grade(head::Symbol, args)
   head === :kvector || return nothing
   grades = map(args) do arg
     isa(arg, Expression) || error("Expected argument of type $Expression, got $arg")
-    g = grade(arg)
+    g = arg.grade
     isa(g, Int) || error("Expected grade to be known for $head expression with arguments $arg")
     g
   end
@@ -104,11 +106,28 @@ isexpr(ex, heads) = isa(ex, Expression) && in(ex.head, heads)
 isexpr(ex, head::Symbol, n::Int) = isa(ex, Expression) && isexpr(ex, head) && length(ex.args) == n
 isexpr(heads) = ex -> isexpr(ex, heads)
 isgrade(ex::Expression, grade::Int) = ex.grade === grade
-grade(ex::Expression) = ex.grade
+grade(ex::Expression) = ex.grade::Int
 isweighted(ex) = isexpr(ex, :*, 2) && isexpr(ex[1]::Expression, :scalar)
+
 function basis_index(ex::Expression)
   @assert isexpr(ex, :basis, 1)
   ex.args[1]::Int
+end
+
+function basis_vectors(ex::Expression)
+  isexpr(ex, :*, 2) && isexpr(ex[1], :scalar) && isexpr(ex[2], :blade) && return basis_vectors(ex[2]::Expression)
+  isexpr(ex, :blade) && return [basis_index(arg) for arg::Expression in ex]
+  isexpr(ex, :scalar) && return Int[]
+  error("Expected blade or weighted blade expression, got $ex")
+end
+
+function lt_basis_order(xinds, yinds)
+  nx, ny = length(xinds), length(yinds)
+  nx ≠ ny && return nx < ny
+  for (xi, yi) in zip(xinds, yinds)
+    xi ≠ yi && return xi < yi
+  end
+  false
 end
 
 # Helper functions.
@@ -150,8 +169,8 @@ end
 # Display.
 
 function Base.show(io::IO, ex::Expression)
-  isexpr(ex, :basis) && return print(io, 'b', subscript(ex[1]::Int))
-  isexpr(ex, :blade) && return print(io, 'e', join(subscript(ex[1]::Int) for ex in ex.args))
+  isexpr(ex, :basis) && return print(io, 'b', subscript(basis_index(ex)))
+  isexpr(ex, :blade) && return print(io, 'e', join(subscript.(basis_vectors(ex))))
   isexpr(ex, :scalar) && return print_scalar(io, ex[1])
   if isexpr(ex, :*) && isexpr(ex[end], :blade)
     if length(ex) == 2 && isexpr(ex[1], :scalar) && (!Meta.isexpr(ex[1][1], :call) || ex[1][1].args[1] == getcomponent)
@@ -164,7 +183,7 @@ function Base.show(io::IO, ex::Expression)
   if isexpr(ex, :project)
     printstyled(io, '⟨'; color = :yellow)
     print(io, ex[2])
-    printstyled(io, '⟩', subscript(ex[1]::Int); color = :yellow)
+    printstyled(io, '⟩', subscript(grade(ex)); color = :yellow)
     return
   end
   isexpr(ex, :kvector) && return print(io, Expr(:call, Symbol("kvector", subscript(ex.grade)), ex.args...))

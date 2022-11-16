@@ -33,8 +33,13 @@ using LazyGeometricAlgebra: extract_grade
   ex = blade(1, 2, 3, 1)
   @test ex.grade == 2
 
-  ex2 = postwalk(x -> isexpr(x, :basis) ? basis(x[1] + 1) : x, ex)
+  ex2 = postwalk(x -> isexpr(x, :basis) ? basis(basis_index(x) + 1) : x, ex)
   @test ex2 == blade(2, 3, 4, 2)
 
   @test blade(1, 2) * basis(3) == blade(1, 2, 3)
+
+  @test -basis(1) == weighted(basis(1), -1)
+  @test basis(1) * scalar(1) == basis(1)
+  @test scalar(1) * scalar(2) == scalar(2)
+  @test basis(1) - basis(2) == basis(1) + -basis(2)
 end;
