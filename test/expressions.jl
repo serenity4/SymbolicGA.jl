@@ -1,4 +1,18 @@
+using LazyGeometricAlgebra: extract_grade
+
 @testset "Expressions" begin
+  @test extract_grade(:scalar, 0) == 0
+  @test extract_grade(:basis, basis.([1])) == 1
+  @test extract_grade(:basis, basis.([3])) == 1
+  @test extract_grade(:blade, basis.([1, 2, 3])) == 3
+  @test extract_grade(:blade, basis.([1, 2, 3, 3])) == 2
+  @test extract_grade(:blade, basis.([1, 2, 3, 3, 3])) == 3
+  @test extract_grade(:blade, basis.([1, 1, 2, 2, 3, 3, 3])) == 1
+  @test extract_grade(:blade, basis.([1, 2, 3, 1, 2, 4, 1, 2])) == 4
+  @test extract_grade(:kvector, [blade(1, 2), blade(2, 3)]) == 2
+  @test extract_grade(:multivector, [blade(1, 2), blade(2, 3)]) == 2
+  @test extract_grade(:multivector, [kvector(blade(1, 2), blade(2, 3)), kvector(blade(1))]) === nothing
+
   ex = scalar(0)
   @test ex.grade == 0
   @test isexpr(ex, :scalar)

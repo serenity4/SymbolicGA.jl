@@ -19,7 +19,7 @@ end
 
 const TRANSPOSE_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, TRANSPOSE_SYMBOL))
+isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, :×, :-, TRANSPOSE_SYMBOL))
 
 function extract_blade(t::Symbol, ::S) where {S<:Signature}
   (t === :e || t === :e0) && return :scalar
@@ -46,6 +46,7 @@ function extract_grade(t::Symbol, ::S) where {S<:Signature}
 end
 
 function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
+  Meta.isexpr(ex, :block) && (ex = expand_variables(ex))
   postwalk(ex) do ex
     if Meta.isexpr(ex, :call)
       op = ex.args[1]::Symbol
@@ -78,6 +79,26 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
       ex
     end
   end
+end
+
+"""
+Expand variables from a block expression, yielding a final expression where all variables were substitued with their defining expression.
+"""
+function expand_variables(ex::Expr)
+  @assert Meta.isexpr(ex, :block)
+  refs = Dict{Symbol,Any}()
+  rhs = nothing
+  for subex in ex.args
+    isa(subex, LineNumberNode) && continue
+    lhs, rhs = Meta.isexpr(subex, :(=), 2) ? subex.args : (nothing, subex)
+    # Expand known variables.
+    rhs = postwalk(rhs) do x
+      isa(x, Symbol) || return x
+      get(refs, x, x)
+    end
+    !isnothing(lhs) && (refs[lhs] = rhs)
+  end
+  rhs
 end
 
 function extract_weights(::S, ex, g::Int, offset::Int) where {S<:Signature}

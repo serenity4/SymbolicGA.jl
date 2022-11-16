@@ -10,6 +10,10 @@ function expand_operators(ex::Expression)
       project(iszero(r) || iszero(s) ? nothing : abs(r - s), Expression(:*, ex.args))
     elseif isexpr(ex, :⦿)
       project(0, Expression(:*, ex.args))
+    elseif isexpr(ex, :×)
+      length(ex) == 2 || error("The commutator product must have only two operands, as no associativity law is available to derive a canonical binarization.")
+      a, b = ex
+      weighted(a * b - b * a, 0.5)
     else
       ex
     end
@@ -142,12 +146,8 @@ function apply_metric(ex::Expression, s::Signature)
       end
       i += 1
     end
-    if isempty(new_args)
-      scalar(fac)
-    else
-      new_ex = blade(new_args)
-      isone(fac) ? new_ex : weighted(new_ex, fac)
-    end
+    new_ex = blade(new_args)
+    isone(fac) ? new_ex : weighted(new_ex, fac)
   end
 end
 

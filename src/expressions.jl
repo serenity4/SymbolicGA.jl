@@ -5,10 +5,11 @@ mutable struct Expression
   Expression(head::Symbol, args...) = Expression(head, collect(Any, args))
   function Expression(head::Symbol, args::AbstractVector)
     head === :scalar && isexpr(args[1], :scalar) && return args[1]
+    head === :- && return weighted(only(args), -1)
     if in(head, (:*, :+))
       if head === :*
         # Simplify scalar products that involve units.
-        args = filter(x -> !isexpr(x, :scalar) || x[1] ≠ 1,  args)
+        args = filter(x -> !isexpr(x, :scalar) || x[1] ≠ 1, args)
         isempty(args) && return scalar(1)
       end
       length(args) == 1 && return only(args)
@@ -59,11 +60,10 @@ end
 function extract_grade(head::Symbol, args)
   head === :scalar && return 0
   head === :basis && return 1
-  head === :blade && return count(isodd, map(x -> count(==(x), args), args))
-  head === :multivector && return nothing
+  head === :blade && return count(isodd, map(x -> count(==(x) ∘ basis_index, args), unique!(getindex.(args, 1))))
   head === :project && return args[1]::Int
   head === :* && length(args) == 2 && isexpr(args[1], :scalar) && return (args[2]::Expression).grade
-  if head === :+
+  if head === :+ || head === :multivector
     g = nothing
     for arg in args
       g′ = grade(arg)
@@ -73,11 +73,11 @@ function extract_grade(head::Symbol, args)
     end
     !isnothing(g) && return g
   end
-  head === :* && return nothing
+  head === :kvector || return nothing
   grades = map(args) do arg
     isa(arg, Expression) || error("Expected argument of type $Expression, got $arg")
     g = grade(arg)
-    isa(g, Int) || error("Expected grade to be known for expression $arg")
+    isa(g, Int) || error("Expected grade to be known for $head expression with arguments $arg")
     g
   end
   if head === :kvector
@@ -106,6 +106,10 @@ isexpr(heads) = ex -> isexpr(ex, heads)
 isgrade(ex::Expression, grade::Int) = ex.grade === grade
 grade(ex::Expression) = ex.grade
 isweighted(ex) = isexpr(ex, :*, 2) && isexpr(ex[1]::Expression, :scalar)
+function basis_index(ex::Expression)
+  @assert isexpr(ex, :basis, 1)
+  ex.args[1]::Int
+end
 
 # Helper functions.
 
@@ -125,6 +129,8 @@ weighted(ex::Expression, weight) = scalar(weight) * ex
 
 Base.:(*)(x::Expression, y::Expression) = Expression(:*, x, y)
 Base.:(+)(x::Expression, y::Expression) = Expression(:+, x, y)
+Base.:(-)(x::Expression, y::Expression) = x + -y
+Base.:(-)(x::Expression) = x * scalar(-1)
 
 # Traversal/transformation utilities.
 
