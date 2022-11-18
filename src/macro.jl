@@ -21,7 +21,8 @@ const TRANSPOSE_SYMBOL = Symbol("'")
 
 isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, :×, :-, TRANSPOSE_SYMBOL))
 
-function extract_blade(t::Symbol, ::S) where {S<:Signature}
+function extract_blade_from_annotation(t, ::S) where {S<:Signature}
+  isa(t, Symbol) || return nothing
   (t === :e || t === :e0) && return :scalar
   m = match(r"^e(\d+)$", string(t))
   dimension(S) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
@@ -32,7 +33,12 @@ function extract_blade(t::Symbol, ::S) where {S<:Signature}
   blade(indices)
 end
 
-function extract_grade(t::Symbol, ::S) where {S<:Signature}
+# Examples:
+# - extract grade 4 for expressions x::4, x::KVector{4}, x::Quadvector.
+# - extract grades 1 and 3 for expressions x::(1 + 3), x::(Vector + Trivector), x::(KVector{1} + KVector{3}), x::Multivector{1, 3}, etc.
+# We might want to reduce the number of syntactically valid expressions though.
+function extract_grade_from_annotation(t, s::S) where {S<:Signature}
+  isa(t, Int) && return t
   t === :Scalar && return 0
   t === :Vector && return 1
   t === :Bivector && return 2
@@ -41,6 +47,7 @@ function extract_grade(t::Symbol, ::S) where {S<:Signature}
   t === :Pseudoscalar && return dimension(S)
   t === :Multivector && return nothing
   Meta.isexpr(t, :curly, 2) && t.args[1] === :KVector && return t.args[2]::Int
+  Meta.isexpr(t, :call) && t.args[1] === :+ && return Int[extract_grade_from_annotation(t, s) for t in @view t.args[2:end]]
   Meta.isexpr(t, :curly) && t.args[1] === :Multivector && return @view t.args[2:end]
   error("Unknown grade projection for algebraic element $t")
 end
@@ -56,10 +63,10 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
       Expression(op, ex.args[2:end])
     elseif Meta.isexpr(ex, :(::))
       ex, T = ex.args
-      b = extract_blade(T, s)
+      b = extract_blade_from_annotation(T, s)
       b === :scalar && return scalar(ex)
       !isnothing(b) && return scalar(ex) * b
-      g = extract_grade(T, s)
+      g = extract_grade_from_annotation(T, s)
       if isa(ex, Expression)
         isnothing(g) && return ex
         !isa(g, Int) && isa(g, AbstractVector) && error("Multiple projections are not yet supported.")
