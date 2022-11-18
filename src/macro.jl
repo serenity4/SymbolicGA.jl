@@ -42,7 +42,7 @@ function extract_grade(t::Symbol, ::S) where {S<:Signature}
   t === :Multivector && return nothing
   Meta.isexpr(t, :curly, 2) && t.args[1] === :KVector && return t.args[2]::Int
   Meta.isexpr(t, :curly) && t.args[1] === :Multivector && return @view t.args[2:end]
-  error("Unknown grade projection for grade")
+  error("Unknown grade projection for algebraic element $t")
 end
 
 function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
@@ -87,9 +87,28 @@ Expand variables from a block expression, yielding a final expression where all 
 function expand_variables(ex::Expr)
   @assert Meta.isexpr(ex, :block)
   refs = Dict{Symbol,Any}()
+  funcs = Dict{Symbol,Any}()
   rhs = nothing
   for subex in ex.args
     isa(subex, LineNumberNode) && continue
+
+    if Meta.isexpr(subex, :(=)) && Meta.isexpr(subex.args[1], :call) || Meta.isexpr(subex, :function)
+      # Extract function definition.
+      call, body = Meta.isexpr(subex, :(=)) ? subex.args : subex.args
+      Meta.isexpr(call, :where) && error("`where` clauses are not supported.")
+      Meta.isexpr(body, :block, 2) && isa(body.args[1], LineNumberNode) && (body = body.args[2])
+      name::Symbol, args... = call.args
+      argtypes = extract_type.(args)
+      all(isnothing, argtypes) || error("Function arguments cannot have type annotations.")
+      argnames = extract_name.(args)
+      # Create slots so that we don't need to keep the names around; then we can directly place arguments by index.
+      body = define_argument_slots(body, argnames)
+      if haskey(funcs, name)
+        @warn "Replacing geometric algebra function `$name` (only one method is allowed)"
+      end
+      funcs[name] = body
+      continue
+    end
 
     if Meta.isexpr(subex, :(::)) && isa(subex.args[1], Symbol)
       # Type declaration.
@@ -98,14 +117,67 @@ function expand_variables(ex::Expr)
     end
 
     lhs, rhs = Meta.isexpr(subex, :(=), 2) ? subex.args : (nothing, subex)
-    # Expand known variables.
+
+    # Expand references and function calls.
     rhs = postwalk(rhs) do x
-      isa(x, Symbol) || return x
-      get(refs, x, x)
+      expanded_call = expand_function_call(funcs, x)
+      x = something(expanded_call, x)
+      expanded_ref = expand_reference(refs, x)
+      isnothing(expanded_ref) && return x
+      ref, x = expanded_ref
+      used_refs = Set([ref])
+      prewalk(x) do y
+        expanded_call = expand_function_call(funcs, y)
+        !isnothing(expanded_call) && return expanded_call
+        isa(y, Symbol) || return y
+        in(y, used_refs) && return y
+        expanded_ref = expand_reference(refs, y)
+        isnothing(expanded_ref) && return y
+        ref, y = expanded_ref
+        push!(used_refs, ref)
+        y
+      end
     end
     !isnothing(lhs) && (refs[lhs] = rhs)
   end
   rhs
+end
+
+extract_type(ex) = Meta.isexpr(ex, :(::), 2) ? ex.args[2] : nothing
+extract_name(ex) = Meta.isexpr(ex, :(::), 2) ? ex.args[1] : isa(ex, Symbol) ? ex : error("Expected argument name to be a symbol, got $ex")
+
+function define_argument_slots(ex, argnames)
+  postwalk(ex) do ex
+    if isa(ex, Symbol)
+      i = findfirst(==(ex), argnames)
+      !isnothing(i) && return Expr(:argument, i)
+    end
+    ex
+  end
+end
+
+function expand_function_call(funcs, ex)
+  !Meta.isexpr(ex, :call) && return nothing
+  f::Symbol, args... = ex.args
+  func = get(funcs, f, nothing)
+  isnothing(func) && return nothing
+  fill_argument_slots(funcs[f], ex, args)
+end
+
+function fill_argument_slots(ex, original_ex, args)
+  argtypes = extract_type.(args)
+  # all(!isnothing, argtypes) || error("Arguments must be type-annotated for function call $original_ex")
+  postwalk(ex) do ex
+    Meta.isexpr(ex, :argument) && return args[ex.args[1]::Int]
+    ex
+  end
+end
+
+function expand_reference(refs, ex)
+  isa(ex, Symbol) || return nothing
+  ref = get(refs, ex, nothing)
+  isnothing(ref) && return nothing
+  ex => ref
 end
 
 function extract_weights(::S, ex, g::Int, offset::Int) where {S<:Signature}
@@ -160,17 +232,23 @@ function simplify(ex::Expression, s::Signature)
 end
 
 function promote_to_expr(ex::Expression)
-  isexpr(ex, :kvector) && return Some(Expr(:tuple, ex.args...))
+  isexpr(ex, :kvector) && return Some(Expr(:tuple, to_expr_final.(ex)))
   isexpr(ex, :blade) && return Some(nothing)
-  isexpr(ex, :scalar) && return Some(ex[1])
+  isexpr(ex, :scalar) && return Some(to_expr(ex[1]))
   nothing
+end
+
+function to_expr_final(arg)
+  final = to_expr(arg)
+  @assert !isnothing(final) "`nothing` value detected as output element for argument $arg"
+  final
 end
 
 function to_expr(ex)
   if isexpr(ex, :multivector)
     expr = Expr(:tuple)
     for arg in ex.args
-      arg = to_expr(arg)
+      arg = to_expr_final(arg)
       if Meta.isexpr(arg, :tuple)
         append!(expr.args, arg.args)
       else
@@ -180,8 +258,8 @@ function to_expr(ex)
     return expr
   end
   isexpr(ex, :scalar) && return to_expr(ex[1])
-  isexpr(ex, :kvector) && return length(ex) == 1 ? to_expr(only(ex)) : Expr(:tuple, to_expr.(ex.args)...)
-  isexpr(ex, :blade) && return nothing
+  isexpr(ex, :kvector) && return length(ex) == 1 ? to_expr(only(ex)) : Expr(:tuple, to_expr_final.(ex.args)...)
+  isexpr(ex, :blade) && return 1
   if isexpr(ex, :*)
     @assert length(ex) == 2
     @assert isexpr(ex[2], :blade)

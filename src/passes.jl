@@ -2,6 +2,7 @@ function expand_operators(ex::Expression)
   prewalk(ex) do ex
     if isexpr(ex, :∧)
       # The outer product is associative, no issues there.
+      # FIXME: The grade may be unknown for multivectors.
       project(sum(grade, ex), Expression(:*, ex.args))
     elseif isexpr(ex, :⋅)
       length(ex) == 2 || error("The inner product must have only two operands, as no associativity law is available to derive a canonical binarization.")
@@ -84,7 +85,7 @@ function restructure_sums(ex::Expression)
       j = something(j, lastindex(grades) - (i - 1))
       j += i
       if j > i + 1
-        push!(new_args, kvector(args[i:(j - 1)]))
+        push!(new_args, iszero(g) ? +(args[i:(j - 1)]...) : kvector(args[i:(j - 1)]))
       else
         push!(new_args, args[i])
       end
@@ -98,10 +99,12 @@ function apply_projections(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, :project) || return ex
     g, ex = ex.args
+    isexpr(ex, :scalar) && return iszero(g) ? ex : nothing
+    args = filter(x -> grade(x) == g, ex.args)
     if isexpr(ex, :multivector)
-      kvector(filter(x -> grade(x) == g, ex.args))
+      iszero(g) ? Expression(:+, scalar.(args)) : kvector(args)
     else
-      Expression(ex.head, filter(x -> grade(x) == g, ex.args))
+      Expression(ex.head, args)
     end
   end
 end

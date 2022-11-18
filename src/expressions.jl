@@ -4,7 +4,11 @@ mutable struct Expression
   args::Vector{Any}
   Expression(head::Symbol, args...) = Expression(head, collect(Any, args))
   function Expression(head::Symbol, args::AbstractVector)
+    # Disallow nested scalar expressions.
     head === :scalar && isexpr(args[1], :scalar) && return args[1]
+    # Disallow `Expression` scalar argument.
+    head === :scalar && length(args) == 1 && isa(args[1], Expression) && return args[1]
+
     if head === :-
       length(args) == 1 && return weighted(only(args), -1)
       @assert length(args) == 2
@@ -68,15 +72,16 @@ function extract_grade(head::Symbol, args)
   head === :basis && return 1
   head === :blade && return count(isodd, map(x -> count(==(x) ∘ basis_index, args), unique!(basis_index.(args))))
   head === :project && return args[1]::Int
-  head === :* && length(args) == 2 && isexpr(args[1], :scalar) && return (args[2]::Expression).grade
+  if head === :*
+    # Fast path for frequently encountered expressions.
+    length(args) == 2 && isexpr(args[1], :scalar) && return (args[2]::Expression).grade
+
+    # Infer the grade when there are only scalars except one graded element.
+    computed_grade = compute_grade_for_product(args)
+    !isnothing(computed_grade) && return computed_grade
+  end
   if head === :+ || head === :multivector
-    g = nothing
-    for arg in args
-      g′ = arg.grade
-      isnothing(g′) && return nothing
-      isnothing(g) && (g = g′)
-      g ≠ g′ && return nothing
-    end
+    g = compute_grade_for_sum(args)
     !isnothing(g) && return g
   end
   head === :kvector || return nothing
@@ -91,6 +96,35 @@ function extract_grade(head::Symbol, args)
     length(grades) == 1 || error("Expected unique grade for k-vector expression, got grades $grades")
     return first(grades)
   end
+end
+
+function compute_grade_for_product(args)
+  res = nothing
+  for arg in args
+    g = arg.grade
+    isnothing(g) && break
+    iszero(g) && continue
+    if isnothing(res)
+      res = g
+      continue
+    end
+    if res ≠ g
+      res = nothing
+      break
+    end
+  end
+  res
+end
+
+function compute_grade_for_sum(args)
+  g = nothing
+  for arg in args
+    g′ = arg.grade
+    isnothing(g′) && return nothing
+    isnothing(g) && (g = g′)
+    g ≠ g′ && return nothing
+  end
+  g
 end
 
 # Basic interfaces.

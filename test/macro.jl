@@ -1,6 +1,26 @@
-using LazyGeometricAlgebra: extract_weights, kvector_expression, extract_base_expression
+using LazyGeometricAlgebra: extract_weights, kvector_expression, extract_base_expression, expand_variables
 
 @testset "Macro frontend" begin
+  @testset "Function and variable expansion" begin
+    # Recursive reference.
+    ex = quote
+      x = x::Vector
+      x * x
+    end
+    @test expand_variables(ex) == :(x::Vector * x::Vector)
+
+    # Interleaved references/function calls.
+    ex = quote
+      b1 = 1::e1
+      g(z) = z + b1
+      y = (1, 2, 3)
+      x = g(y::Vector)
+      x
+    end
+    ex2 = expand_variables(ex)
+    @test ex2 == :((1, 2, 3)::Vector + 1::e1)
+  end
+
   s = Signature(1, 1, 1)
   ws = extract_weights(s, :x, 1, 0)
   @test ws == [:($getcomponent(x, $i)) for i in 1:3]
@@ -52,4 +72,26 @@ using LazyGeometricAlgebra: extract_weights, kvector_expression, extract_base_ex
     x * x
   end
   @test res === res2
+
+  # The `1::e12` gets simplified to `e12`.
+  res = @ga 3 begin
+    (1::e1 * 1::e1 + 1::e12)::Multivector
+  end
+  @test res == (1, 1)
+
+  # Preserve element types.
+  res = @ga 3 begin
+    (1::e1 * 1::e1 + 1.0::e12)::Multivector
+  end
+  @test res == (1, 1.0)
+
+  res = @ga 3 begin
+    (1::e1 * 1::e1 + 2::e12)::Multivector
+  end
+  @test res == (1, 2)
+
+  x = (1, 2, 3)
+  @test_broken @macroexpand @ga 3 begin
+    (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector
+  end isa Expr
 end;
