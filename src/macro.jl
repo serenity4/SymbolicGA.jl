@@ -47,6 +47,7 @@ end
 
 function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
   Meta.isexpr(ex, :block) && (ex = expand_variables(ex))
+  @debug "After variable expansion: $(stringc(ex))"
   postwalk(ex) do ex
     if Meta.isexpr(ex, :call)
       op = ex.args[1]::Symbol
@@ -123,9 +124,12 @@ function expand_variables(ex::Expr)
       expanded_call = expand_function_call(funcs, x)
       x = something(expanded_call, x)
       expanded_ref = expand_reference(refs, x)
-      isnothing(expanded_ref) && return x
-      ref, x = expanded_ref
-      used_refs = Set([ref])
+      isnothing(expanded_ref) && isnothing(expanded_call) && return x
+      used_refs = Set(Symbol[])
+      if !isnothing(expanded_ref)
+        ref, x = expanded_ref
+        push!(used_refs, ref)
+      end
       prewalk(x) do y
         expanded_call = expand_function_call(funcs, y)
         !isnothing(expanded_call) && return expanded_call

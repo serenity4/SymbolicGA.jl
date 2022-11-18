@@ -39,6 +39,6 @@ isnullvector(X) = iszero(@cga3 magnitude2(X::Vector))
   S1 = sphere(A, B, C, D)
   @test S1 == (0., 2.0, 0., 0., 0.)
   O = point((0, 0, 0))
-  C1 = center(S1)
+  C1 = @cga3 center(S1::Quadvector)
   @test_broken normalize(C1) == O
 end;
