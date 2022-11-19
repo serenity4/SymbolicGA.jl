@@ -80,18 +80,17 @@ using LazyGeometricAlgebra: extract_weights, kvector_expression, extract_base_ex
   @test res == (1, 1)
 
   # Preserve element types.
-  res = @ga 3 begin
-    (1::e1 * 1::e1 + 1.0::e12)::Multivector
-  end
+  res = @ga 3 (1::e1 * 1::e1 + 1.0::e12)::Multivector
   @test res == (1, 1.0)
 
-  res = @ga 3 begin
-    (1::e1 * 1::e1 + 2::e12)::Multivector
-  end
+  res = @ga 3 (1::e1 * 1::e1 + 2::e12)::Multivector
   @test res == (1, 2)
 
+  res = @ga 3 ((x::Vector)')
+  @test res == x
+  res = @ga 3 ((x::Bivector)')
+  @test res == (-).(x)
+
   x = (1, 2, 3)
-  @test_broken @macroexpand @ga 3 begin
-    (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector
-  end isa Expr
+  @test_broken @macroexpand (@ga 3 (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector) isa Expr
 end;

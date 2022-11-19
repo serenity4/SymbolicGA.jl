@@ -72,6 +72,7 @@ function extract_grade(head::Symbol, args)
   head === :basis && return 1
   head === :blade && return count(isodd, map(x -> count(==(x) ∘ basis_index, args), unique!(basis_index.(args))))
   head === :project && return args[1]::Int
+  head === :reverse && return (args[1]::Expression).grade
   if head === :*
     # Fast path for frequently encountered expressions.
     length(args) == 2 && isexpr(args[1], :scalar) && return (args[2]::Expression).grade
@@ -181,6 +182,7 @@ kvector(xs...) = kvector(collect(Any, xs))
 multivector(args::AbstractVector) = Expression(:multivector, args)
 multivector(xs...) = multivector(collect(Any, xs))
 project(g::Integer, args) = Expression(:project, g, args)
+Base.reverse(ex::Expression) = Expression(:reverse, ex)
 
 weighted(ex::Expression, weight) = scalar(weight) * ex
 

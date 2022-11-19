@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: distribute, restructure_sums, canonicalize_blades, apply_metric, disassociate_kvectors, fill_kvector_components
+using LazyGeometricAlgebra: distribute, restructure_sums, canonicalize_blades, apply_metric, disassociate_kvectors, fill_kvector_components, apply_reverse_operators
 
 @testset "Passes" begin
   e12 = blade(1, 2)
@@ -11,7 +11,7 @@ using LazyGeometricAlgebra: distribute, restructure_sums, canonicalize_blades, a
   ex = distribute(ex)
   @test ex == (w * x) + (w * z) + (y * x) + (y * z)
 
-  ex = distribute(scalar(1.0) * kvector(e12))
+  ex = distribute(weighted(kvector(e12), 1.0))
   @test ex == weighted(e12, 1.0)
 
   ex = distribute((kvector(weighted(e12, 1.0)) + kvector(weighted(e4, 3.0))) * kvector(weighted(e123, 1.0)))
@@ -25,6 +25,13 @@ using LazyGeometricAlgebra: distribute, restructure_sums, canonicalize_blades, a
   ex = restructure_sums(x + y + z)
   @test ex == multivector(kvector(x, y), z)
   @test isa(repr(ex), String)
+
+  ex = apply_reverse_operators(reverse(blade(1, 2)))
+  @test ex == blade(2, 1)
+  ex = apply_reverse_operators(reverse(weighted(blade(1, 2), 2.0)))
+  @test ex == weighted(blade(2, 1), 2.0)
+  ex = apply_reverse_operators(reverse(weighted(blade(1, 2), 2.0) * kvector(blade(1), blade(2))))
+  @test ex == kvector(blade(1), blade(2)) * weighted(blade(2, 1), 2.0)
 
   sig = Signature(1, 1, 1)
   ex = canonicalize_blades(blade(1, 2, 1))

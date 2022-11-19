@@ -17,9 +17,9 @@ function extract_signature(ex)
   s = Signature(ex.args...)
 end
 
-const TRANSPOSE_SYMBOL = Symbol("'")
+const REVERSE_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, :×, :-, TRANSPOSE_SYMBOL))
+isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, :×, :-, REVERSE_SYMBOL))
 
 function extract_blade_from_annotation(t, ::S) where {S<:Signature}
   isa(t, Symbol) || return nothing
@@ -56,10 +56,12 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
   Meta.isexpr(ex, :block) && (ex = expand_variables(ex))
   @debug "After variable expansion: $(stringc(ex))"
   postwalk(ex) do ex
-    if Meta.isexpr(ex, :call)
+    if Meta.isexpr(ex, Symbol('''))
+      Expression(:reverse, ex.args[1]::Expression)
+    elseif Meta.isexpr(ex, :call)
       op = ex.args[1]::Symbol
       !isreserved(op) && return ex
-      op == TRANSPOSE_SYMBOL && (op = :transpose)
+      op == REVERSE_SYMBOL && (op = :reverse)
       Expression(op, ex.args[2:end])
     elseif Meta.isexpr(ex, :(::))
       ex, T = ex.args
@@ -212,30 +214,46 @@ end
 
 function simplify(ex::Expression, s::Signature)
   @debug "Base expression: $(stringc(ex))"
+
+  # Expand all operators from e.g. ∧ to the equivalent expression based on the geometric product.
+  # Replaces operators `∧`, `⋅`, `⦿` and `×` with projections over a geometric product.
+  # After this stage, the only allowed operators are `scalar`, `basis`, `blade`, `kvector`, `multivector`, `+`, `*`, `reverse` and `project`.
   ex = expand_operators(ex)
   @debug "After operator expansion: $(stringc(ex))"
 
-  # Flatten everything.
+  # Turn all k-vector and multivector expressions into `+` expressions, and distribute multiplication over addition.
   ex = distribute(ex)
   @debug "After distribution: $(stringc(ex))"
 
   # Structure the different parts into multivectors and k-vectors.
+  # All `+` operations are replaced with k-vector or multivector expressions.
   ex = restructure_sums(ex)
   @debug "After sum restructuring: $(stringc(ex))"
 
   # Apply algebraic rules.
+
+  # Filter out unneeded elements in projections.
+  # All `project` operations are replaced by k-vector or multivector expressions.
   ex = apply_projections(ex)
   @debug "After projection filtering: $(stringc(ex))"
+  # Reverse expression arguments according to semantics of the reversion operator.
+  # All `reverse` operations are removed.
+  ex = apply_reverse_operators(ex)
+  @debug "After reversion: $(stringc(ex))"
   ex = canonicalize_blades(ex)
   @debug "After blade canonicalization: $(stringc(ex))"
   ex = apply_metric(ex, s)
   @debug "After metric simplifications: $(stringc(ex))"
 
   # Restructure the result.
+
+  # Unnest k-vector expressions.
   ex = disassociate_kvectors(ex)
   @debug "After k-vector disassocation: $(stringc(ex))"
+  # Group all components of a k-vector by blade elements, such that a given blade is covered by only one argument of the k-vector expression.
   ex = group_kvector_blades(ex)
   @debug "After blade grouping: $(stringc(ex))"
+  # Add zero-factored components for blades not represented in k-vectors.
   ex = fill_kvector_components(ex, s)
   @debug "After k-vector component filling: $(stringc(ex))"
   @debug "After all transforms: $(stringc(ex))"

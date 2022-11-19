@@ -109,6 +109,31 @@ function apply_projections(ex::Expression)
   end
 end
 
+function apply_reverse_operators(ex::Expression)
+  prewalk(ex) do ex
+    isexpr(ex, :reverse) || return ex
+    arg = ex[1]
+    isa(arg, Expression) || error("Expected an expression as argument to `reverse`.")
+    if isexpr(arg, (:+, :kvector, :multivector)) # distribute over addition
+      Expression(arg.head, propagate_reverse(arg.args))
+    elseif isexpr(arg, (:*, :blade))
+      (; args) = arg
+      new_args = isexpr(arg, :blade) || count(x -> x.grade !== 0, args) > 1 ? reverse(args) : args
+      Expression(arg.head, propagate_reverse(new_args))
+    else
+      @assert false "Unexpected operator $(arg.head) encountered when applying reverse operators."
+    end
+  end
+end
+
+function propagate_reverse(args)
+  res = Any[]
+  for arg::Expression in args
+    in(arg.grade, (0, 1)) ? push!(res, arg) : push!(res, reverse(arg))
+  end
+  res
+end
+
 function canonicalize_blades(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, :blade) || return ex
@@ -167,6 +192,8 @@ function group_kvector_blades(ex::Expression)
   isexpr(ex, :blade) && return ex
   isweighted(ex) && isexpr(ex[2], :blade) && return ex
   @assert isexpr(ex, :kvector) "Expected k-vector expression, got $ex"
+
+  # Fast path for 0-vectors.
   grade(ex) == 0 && return kvector(Expression(:+, ex.args))
 
   blade_weights = Dict{Vector{Int},Expression}()
