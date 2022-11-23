@@ -2,7 +2,7 @@ macro ga(T, sig, ex)
   s = extract_signature(sig)
   ex = extract_base_expression(ex, s)
   ex = simplify(ex, s)
-  ex = to_expr(ex)
+  ex = to_expr_final(ex)
   esc(:($construct($T, $ex)))
 end
 
@@ -12,6 +12,7 @@ end
 
 function extract_signature(ex)
   isa(ex, Integer) && return Signature(ex)
+  isa(ex, Tuple) && return Signature(ex...)
   Meta.isexpr(ex, :tuple) || error("Expected tuple as signature, got $ex")
   all(isa(x, Int) for x in ex.args) || error("Expected literals in signature, got $ex")
   s = Signature(ex.args...)
@@ -19,7 +20,7 @@ end
 
 const REVERSE_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, :×, :-, REVERSE_SYMBOL))
+isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, :×, :-, :/, :inv, REVERSE_SYMBOL))
 
 function extract_blade_from_annotation(t, ::S) where {S<:Signature}
   isa(t, Symbol) || return nothing
@@ -56,12 +57,11 @@ function extract_base_expression(ex::Expr, s::S) where {S<:Signature}
   Meta.isexpr(ex, :block) && (ex = expand_variables(ex))
   @debug "After variable expansion: $(stringc(ex))"
   postwalk(ex) do ex
-    if Meta.isexpr(ex, Symbol('''))
+    if Meta.isexpr(ex, REVERSE_SYMBOL)
       Expression(:reverse, ex.args[1]::Expression)
     elseif Meta.isexpr(ex, :call)
       op = ex.args[1]::Symbol
       !isreserved(op) && return ex
-      op == REVERSE_SYMBOL && (op = :reverse)
       Expression(op, ex.args[2:end])
     elseif Meta.isexpr(ex, :(::))
       ex, T = ex.args
@@ -129,31 +129,25 @@ function expand_variables(ex::Expr)
     lhs, rhs = Meta.isexpr(subex, :(=), 2) ? subex.args : (nothing, subex)
 
     # Expand references and function calls.
-    rhs = postwalk(rhs) do x
-      expanded_call = expand_function_call(funcs, x)
-      x = something(expanded_call, x)
-      expanded_ref = expand_reference(refs, x)
-      isnothing(expanded_ref) && isnothing(expanded_call) && return x
-      used_refs = Set(Symbol[])
-      if !isnothing(expanded_ref)
-        ref, x = expanded_ref
-        push!(used_refs, ref)
-      end
-      prewalk(x) do y
-        expanded_call = expand_function_call(funcs, y)
-        !isnothing(expanded_call) && return expanded_call
-        isa(y, Symbol) || return y
-        in(y, used_refs) && return y
-        expanded_ref = expand_reference(refs, y)
-        isnothing(expanded_ref) && return y
-        ref, y = expanded_ref
-        push!(used_refs, ref)
-        y
-      end
-    end
+    rhs = postwalk(ex -> expand_subtree(ex, refs, funcs, Set{Symbol}()), rhs)
     !isnothing(lhs) && (refs[lhs] = rhs)
   end
   rhs
+end
+
+function expand_subtree(ex, refs, funcs, used_refs)
+  expanded_call = expand_function_call(funcs, ex)
+  !isnothing(expanded_call) && return postwalk(x -> expand_subtree(x, refs, funcs, used_refs), expanded_call)
+  !isa(ex, Symbol) && return ex
+  used_refs_subtree = nothing
+  while isa(ex, Symbol) && (isnothing(used_refs_subtree) || !in(ex, used_refs_subtree))
+    expanded_ref = expand_reference(refs, ex)
+    isnothing(expanded_ref) && break
+    ref, ex = expanded_ref
+    used_refs_subtree = isnothing(used_refs_subtree) ? Set([ref]) : push!(used_refs_subtree, ref)
+    isa(ex, Expr) && return postwalk(x -> expand_subtree(ex, refs, funcs, used_refs_subtree), ex)
+  end
+  ex
 end
 
 extract_type(ex) = Meta.isexpr(ex, :(::), 2) ? ex.args[2] : nothing
@@ -216,7 +210,7 @@ function simplify(ex::Expression, s::Signature)
   @debug "Base expression: $(stringc(ex))"
 
   # Expand all operators from e.g. ∧ to the equivalent expression based on the geometric product.
-  # Replaces operators `∧`, `⋅`, `⦿` and `×` with projections over a geometric product.
+  # Replaces operators `∧`, `⋅`, `/`, `⦿` and `×` with projections over a geometric product.
   # After this stage, the only allowed operators are `scalar`, `basis`, `blade`, `kvector`, `multivector`, `+`, `*`, `reverse` and `project`.
   ex = expand_operators(ex)
   @debug "After operator expansion: $(stringc(ex))"
@@ -263,13 +257,14 @@ end
 function promote_to_expr(ex::Expression)
   isexpr(ex, :kvector) && return Some(Expr(:tuple, to_expr_final.(ex)))
   isexpr(ex, :blade) && return Some(nothing)
-  isexpr(ex, :scalar) && return Some(to_expr(ex[1]))
+  isexpr(ex, :scalar) && return Some(to_expr_final(ex[1]))
   nothing
 end
 
 function to_expr_final(arg)
   final = to_expr(arg)
   @assert !isnothing(final) "`nothing` value detected as output element for argument $arg"
+  @assert !isa(final, Expression) "Expected non-Expression element, got $ex"
   final
 end
 
@@ -286,14 +281,20 @@ function to_expr(ex)
     end
     return expr
   end
-  isexpr(ex, :scalar) && return to_expr(ex[1])
-  isexpr(ex, :kvector) && return length(ex) == 1 ? to_expr(only(ex)) : Expr(:tuple, to_expr_final.(ex.args)...)
+  isexpr(ex, :scalar) && return to_expr_final(ex[1])
+  if isexpr(ex, :kvector)
+    ret = if length(ex) == 1
+      to_expr_final(only(ex))
+    else
+      Expr(:tuple, to_expr_final.(ex.args)...)
+    end
+    return ret
+  end
   isexpr(ex, :blade) && return 1
   if isexpr(ex, :*)
     @assert length(ex) == 2
     @assert isexpr(ex[2], :blade)
-    return to_expr(ex[1])
+    return to_expr_final(ex[1]::Expression)
   end
-  @assert !isa(ex, Expression) "Expected non-Expression element, got $ex"
   ex
 end

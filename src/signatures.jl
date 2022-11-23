@@ -22,6 +22,6 @@ metric(::Signature{P,N,D}, i::Integer) where {P,N,D} = i <= P ? 1 : i <= P + N ?
 metric(sig::Signature{P,N,D}, i::Val{I}, j::Val{I}) where {P,N,D,I} = metric(sig, i)
 metric(::Signature, ::Val{I}, ::Val{J}) where {I,J} = 0
 
-show(io::IO, sig::Signature) = print(io, sig == Signature(0, 0, 0) ? "Ø" : "<" * join(["+", "-", "𝟎"] .^ triplet(sig)) * ">")
+Base.show(io::IO, sig::Signature) = print(io, sig == Signature(0, 0, 0) ? "Ø" : "<" * join(["+", "-", "𝟎"] .^ triplet(sig)) * ">")
 
 nelements(::Type{S}, K::Int) where {S<:Signature} = binomial(dimension(S), K)

@@ -40,6 +40,12 @@ using LazyGeometricAlgebra: extract_grade
 
   @test -basis(1) == weighted(basis(1), -1)
   @test basis(1) * scalar(1) == basis(1)
-  @test scalar(1) * scalar(2) == scalar(2)
   @test basis(1) - basis(2) == basis(1) + -basis(2)
+
+  @testset "Scalar simplifications" begin
+    @test scalar(1) * scalar(2) == scalar(2)
+    @test scalar(inv(scalar(5))) * scalar(5) == scalar(0.2) * scalar(5) == scalar(:(0.2 * 5))
+    a = 2 * basis(1) * basis(1)
+    @test isexpr(scalar(a) * scalar(2), :*, 2)
+  end
 end;

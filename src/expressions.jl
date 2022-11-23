@@ -4,53 +4,69 @@ mutable struct Expression
   args::Vector{Any}
   Expression(head::Symbol, args...) = Expression(head, collect(Any, args))
   function Expression(head::Symbol, args::AbstractVector)
-    # Disallow nested scalar expressions.
-    head === :scalar && isexpr(args[1], :scalar) && return args[1]
-    # Disallow `Expression` scalar argument.
-    head === :scalar && length(args) == 1 && isa(args[1], Expression) && return args[1]
+    # Simplify nested scalar expressions.
+    head === :scalar && isexpr(args[1], :scalar) && return scalar(args[1][1])
+    # Force inverse of scalar to be a scalar expression at top-level.
+    head === :inverse && isexpr(args[1], :scalar) && return scalar(inverse(args[1][1]))
+    # Simplify scalar reverses.
+    head === :reverse && isexpr(args[1], :scalar) && return args[1]
 
     if head === :-
-      length(args) == 1 && return weighted(only(args), -1)
+      # Simplify unary minus operator to a multiplication with -1.
+      length(args) == 1 && return scalar(-1) * args[1]
+      # Transform binary minus expression into an addition where one
       @assert length(args) == 2
       return args[1] - args[2]
     end
     if in(head, (:*, :+))
       if head === :*
-        # Simplify scalar products that involve units.
-        args = filter(x -> !isexpr(x, :scalar) || x[1] ≠ 1, args)
+        # Remove scalar unit elements.
+        filter!(x -> !isexpr(x, :scalar) || x[1] ≠ 1, args)
         isempty(args) && return scalar(1)
       end
-      length(args) == 1 && return only(args)
+      length(args) == 1 && return args[1]
+
+      # Disassociate * and +.
       any(isexpr(head), args) && (args = disassociate1(args, head))
+
       ns = count(isexpr(:scalar), args)
-      # Collapse all scalars into one at the front, or return a scalar expression if all arguments are scalars.
       if ns ≥ 2
-        scalars = ns == length(args) ? args : filter(isexpr(:scalar), args)
-        sc = scalar(Expr(:call, head, [arg[1] for arg in scalars]...))
-        ns == length(args) && return sc
-        return Expression(head, sc, filter(!isexpr(:scalar), args)...)
+        # Collapse all scalars into one at the front, or return a scalar expression if all arguments are scalars.
+        scalars, nonscalars = filter(isexpr(:scalar), args), filter(!isexpr(:scalar), args)
+        opaque_scalars = filter(isopaquescalar, scalars)
+        if length(opaque_scalars) ≥ 2
+          opaque_part = scalar(Expr(:call, head, [arg[1] for arg in opaque_scalars]...))
+          opaque_scalar = length(opaque_scalars) == ns ? opaque_part : Expression(head, scalar.(filter!(!isopaquescalar, scalars))..., opaque_part)
+          length(opaque_scalars) == length(args) && return opaque_scalar
+          scalars = opaque_scalar
+        end
+        args = [scalars; nonscalars]
       elseif ns == 1 && !isexpr(args[1]::Expression, :scalar)
+        # Put the scalar at the front.
         i = findfirst(isexpr(:scalar), args)
         sc = args[i]::Expression
         deleteat!(args, i)
         pushfirst!(args, sc)
         return Expression(head, args)
       elseif head === :*
-        # Collapse all bases and blades into one blade.
+        # Collapse all bases and blades into a single blade.
         nb = count(isexpr((:basis, :blade)), args)
         if nb ≥ 2
-          xs = nb == length(args) ? args : filter(isexpr((:basis, :blade)), args)
+          n = length(args)
+          xs = nb == n ? args : filter(isexpr((:basis, :blade)), args)
           blade_args = []
           for x in xs
             isexpr(x, :basis) ? push!(blade_args, x) : append!(blade_args, x.args)
           end
           ex = blade(blade_args)
-          nb == length(args) && return ex
+          # Return the blade if all the terms were collapsed.
+          nb == n && return ex
           return *(ex, filter!(!isexpr((:basis, :blade)), args)...)
         end
       end
     end
 
+    # Check that arguments make sense.
     @assert head === :blade || !isempty(args)
     if head === :scalar
       @assert length(args) == 1
@@ -59,20 +75,25 @@ mutable struct Expression
     elseif head === :blade
       @assert all(isexpr(ex, :basis) for ex in args)
     elseif head === :project
+      length(args) == 1 && isa(args[1], Int) && return nothing
       @assert length(args) == 2 && isa(args[1], Int) && isa(args[2], Expression)
     end
     grade = extract_grade(head, args)
+    # Check that the grade is properly inferred for certain operations.
     in(head, (:scalar, :basis, :blade, :kvector, :project)) && grade::Int
     new(head, grade, args)
   end
 end
 
+inverse(ex::Expr) = :(inv($ex))
+inverse(ex) = inv(ex)
+
 function extract_grade(head::Symbol, args)
-  head === :scalar && return 0
+  head in (:scalar, ⦿) && return 0
   head === :basis && return 1
   head === :blade && return count(isodd, map(x -> count(==(x) ∘ basis_index, args), unique!(basis_index.(args))))
   head === :project && return args[1]::Int
-  head === :reverse && return (args[1]::Expression).grade
+  head in (:reverse, :inverse) && return (args[1]::Expression).grade
   if head === :*
     # Fast path for frequently encountered expressions.
     length(args) == 2 && isexpr(args[1], :scalar) && return (args[2]::Expression).grade
@@ -130,7 +151,7 @@ end
 
 # Basic interfaces.
 
-(==)(x::Expression, y::Expression) = x.head == y.head && x.grade === y.grade && x.args == y.args
+Base.:(==)(x::Expression, y::Expression) = x.head == y.head && x.grade === y.grade && x.args == y.args
 Base.getindex(x::Expression, args...) = x.args[args...]
 Base.firstindex(x::Expression) = firstindex(x.args)
 Base.lastindex(x::Expression) = lastindex(x.args)
@@ -147,6 +168,7 @@ isexpr(heads) = ex -> isexpr(ex, heads)
 isgrade(ex::Expression, grade::Int) = ex.grade === grade
 grade(ex::Expression) = ex.grade::Int
 isweighted(ex) = isexpr(ex, :*, 2) && isexpr(ex[1]::Expression, :scalar)
+isopaquescalar(ex) = isexpr(ex, :scalar) && !isa(ex[1], Expression)
 
 function basis_index(ex::Expression)
   @assert isexpr(ex, :basis, 1)
@@ -181,15 +203,24 @@ kvector(args::AbstractVector) = Expression(:kvector, args)
 kvector(xs...) = kvector(collect(Any, xs))
 multivector(args::AbstractVector) = Expression(:multivector, args)
 multivector(xs...) = multivector(collect(Any, xs))
-project(g::Integer, args) = Expression(:project, g, args)
+project(g::Integer, ex) = Expression(:project, g, ex)
 Base.reverse(ex::Expression) = Expression(:reverse, ex)
 
 weighted(ex::Expression, weight) = scalar(weight) * ex
 
 Base.:(*)(x::Expression, y::Expression) = Expression(:*, x, y)
+@commutative Base.:(*)(x::Number, y::Expression) = scalar(x) * y
 Base.:(+)(x::Expression, y::Expression) = Expression(:+, x, y)
+@commutative Base.:(+)(x::Number, y::Expression) = scalar(x) + y
 Base.:(-)(x::Expression, y::Expression) = x + -y
 Base.:(-)(x::Expression) = x * scalar(-1)
+Base.:(/)(x::Expression, y::Expression) = x * inv(y)
+Base.inv(x::Expression) = Expression(:inverse, x)
+⦿(x::Expression, y::Expression) = Expression(:⦿, x, y)
+⋅(x::Expression, y::Expression) = Expression(:⋅, x, y)
+∧(x::Expression, y::Expression) = Expression(:∧, x, y)
+×(x::Expression, y::Expression) = Expression(:×, x, y)
+∨(x::Expression, y::Expression) = Expression(:∨, x, y)
 
 # Traversal/transformation utilities.
 
@@ -198,11 +229,11 @@ walk(ex, inner, outer) = outer(ex)
 postwalk(f, ex) = walk(ex, x -> postwalk(f, x), f)
 prewalk(f, ex) = walk(f(ex), x -> prewalk(f, x), identity)
 
-function traverse(f, ex)
+function traverse(f, ex, ::Type{T} = Expression) where {T}
   f(ex) === false && return nothing
-  !isa(ex, Expression) && return nothing
+  !isa(ex, T) && return nothing
   for arg in ex.args
-    traverse(f, arg)
+    traverse(f, arg, T)
   end
 end
 

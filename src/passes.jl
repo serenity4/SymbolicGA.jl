@@ -1,5 +1,5 @@
 function expand_operators(ex::Expression)
-  prewalk(ex) do ex
+  postwalk(ex) do ex
     if isexpr(ex, :∧)
       # The outer product is associative, no issues there.
       # FIXME: The grade may be unknown for multivectors.
@@ -8,13 +8,21 @@ function expand_operators(ex::Expression)
       length(ex) == 2 || error("The inner product must have only two operands, as no associativity law is available to derive a canonical binarization.")
       # Homogeneous vectors are expected, so the grade should be known.
       r, s = grade(ex[1]::Expression), grade(ex[2]::Expression)
-      project(iszero(r) || iszero(s) ? nothing : abs(r - s), Expression(:*, ex.args))
+      (iszero(r) || iszero(s)) && return scalar(0)
+      project(abs(r - s), Expression(:*, ex.args))
     elseif isexpr(ex, :⦿)
       project(0, Expression(:*, ex.args))
     elseif isexpr(ex, :×)
       length(ex) == 2 || error("The commutator product must have only two operands, as no associativity law is available to derive a canonical binarization.")
       a, b = ex[1]::Expression, ex[2]::Expression
-      weighted(a * b - b * a, 0.5)
+      scalar(0.5) * (a * b - b * a)
+    elseif isexpr(ex, :inverse)
+      @assert length(ex) == 1
+      a = ex[1]::Expression
+      reverse(a) / project(0, a * a)
+    elseif isexpr(ex, :/)
+      @assert length(ex) == 2
+      /(ex...)
     else
       ex
     end

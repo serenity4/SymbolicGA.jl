@@ -6,7 +6,7 @@ function new_geometric_algebra(args...; signature, definitions = Expr(:block))
     push!(definitions.args, ex)
     ex = definitions
   end
-  esc(:(@ga $T $(Expr(:tuple, signature...)) $ex))
+  esc(:(@ga $T $signature $ex))
 end
 
 macro cga3(args...)
@@ -15,9 +15,10 @@ macro cga3(args...)
     n̄ = 1.0::e4 - 1.0::e5
     vector_3d(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
     magnitude2(x) = x ⦿ x
-    weight(X) = -X ⋅ n
-    # normalize(X) = X / weight(X)
-    # radius2(X) = magnitude2(X)::Scalar / magnitude2(X ∧ n)::Scalar
+    weight(X) = (-X ⋅ n)::Scalar
+    normalize(X) = X / weight(X)
+    radius2(X) = (magnitude2(X) / magnitude2(X ∧ n))::Scalar
+    radius(X) = normalize(radius2(X))::Scalar
     center(X) = X * n * X
   end
   new_geometric_algebra(args...; signature = (4, 1, 0), definitions)
@@ -41,9 +42,11 @@ plane(A, B, C) = @cga3 circle(A, B, C)::Trivector ∧ n
   @test all(isnullvector, (A, B, C, D))
   S1 = sphere(A, B, C, D)
   @test S1 == (0., 2.0, 0., 0., 0.)
+  @test (@cga3 normalize((A .* 2)::Vector)) == A
   O = point((0, 0, 0))
-  C1 = @cga3 center(S1::Quadvector)
-  @test_broken normalize(C1) == O
+  C1 = @cga3 center(S1::Quadvector)::Vector
+  @test (@cga3 normalize(C1::Vector)) == O
+  @test_broken (@cga3 radius(S1::Quadvector)) == 1
 end;
 
 macro pga3(args...)

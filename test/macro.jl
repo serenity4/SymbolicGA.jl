@@ -1,4 +1,13 @@
-using LazyGeometricAlgebra: extract_weights, kvector_expression, extract_base_expression, expand_variables
+using LazyGeometricAlgebra: extract_weights, kvector_expression, extract_base_expression, expand_variables, traverse
+
+function traverse_collect(f, x, T = Expression)
+  res = []
+  traverse(x, T) do y
+    f(y) === true && push!(res, y)
+    nothing
+  end
+  res
+end
 
 @testset "Macro frontend" begin
   @testset "Function and variable expansion" begin
@@ -19,6 +28,19 @@ using LazyGeometricAlgebra: extract_weights, kvector_expression, extract_base_ex
     end
     ex2 = expand_variables(ex)
     @test ex2 == :((1, 2, 3)::Vector + 1::e1)
+
+    ex = quote
+      n = 1.0::e4 + 1.0::e5
+      magnitude2(x) = x ⦿ x
+      weight(X) = (-X ⋅ n)::Scalar
+      normalize(X) = X / weight(X)
+      radius2(X) = (magnitude2(X) / magnitude2(X ∧ n))::Scalar
+      radius(X) = normalize(radius2(X))::Scalar
+      radius(S::Quadvector)
+    end
+    ex2 = expand_variables(ex)
+    symbols = traverse_collect(ex -> in(ex, (:radius, :radius2, :normalize, :weight, :magnitude2, :n)), ex2, Expr)
+    @test isempty(symbols)
   end
 
   s = Signature(1, 1, 1)
