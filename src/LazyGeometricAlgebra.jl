@@ -4,14 +4,13 @@ using Combinatorics
 
 const Optional{T} = Union{T,Nothing}
 
-import Base: sum, +, -, *, /, ^, inv, reverse, ==, ≈, eltype, promote_rule, length, zero, iszero, fill, getindex, setindex!, convert, show
-
 include("utils.jl")
 include("signatures.jl")
 include("expressions.jl")
 include("passes.jl")
 include("interface.jl")
 include("macro.jl")
+# include("types.jl")
 
 export @ga,
   # algebra
