@@ -115,4 +115,6 @@ end
 
   x = (1, 2, 3)
   @test_broken @macroexpand (@ga 3 (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector) isa Expr
+
+  @test (@ga 3 dual(1::e2)) == (@ga 3 1::e13)
 end;

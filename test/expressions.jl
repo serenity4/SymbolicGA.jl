@@ -1,51 +1,78 @@
-using LazyGeometricAlgebra: extract_grade
+using LazyGeometricAlgebra: infer_grade
+
+sig = Signature(3, 1)
 
 @testset "Expressions" begin
-  @test extract_grade(:scalar, 0) == 0
-  @test extract_grade(:basis, basis.([1])) == 1
-  @test extract_grade(:basis, basis.([3])) == 1
-  @test extract_grade(:blade, basis.([1, 2, 3])) == 3
-  @test extract_grade(:blade, basis.([1, 2, 3, 3])) == 2
-  @test extract_grade(:blade, basis.([1, 2, 3, 3, 3])) == 3
-  @test extract_grade(:blade, basis.([1, 1, 2, 2, 3, 3, 3])) == 1
-  @test extract_grade(:blade, basis.([1, 2, 3, 1, 2, 4, 1, 2])) == 4
-  @test extract_grade(:kvector, [blade(1, 2), blade(2, 3)]) == 2
-  @test extract_grade(:multivector, [blade(1, 2), blade(2, 3)]) == 2
-  @test extract_grade(:multivector, [kvector(blade(1, 2), blade(2, 3)), kvector(blade(1))]) === nothing
+  @testset "Expression basics" begin
+    @test isexpr(scalar(0), :scalar, 1)
+    @test !isexpr(blade(1, 2), :blade, 1)
+    @test isexpr(blade(1, 2), :blade, 2)
+    @test isexpr(blade(1, 2), (:scalar, :blade))
 
-  ex = scalar(0)
-  @test ex.grade == 0
-  @test isexpr(ex, :scalar)
+    ex = blade(1, 2)
+    ex2 = postwalk(x -> isa(x, Int) ? x + 1 : x, ex)
+    @test ex2 == blade(2, 3)
+  end
 
-  ex = basis(1)
-  @test ex.grade == 1
-  @test isexpr(ex, :basis, 1)
+  @testset "Grade inference" begin
+    @test infer_grade(:scalar, 0) == 0
+    @test infer_grade(:blade, [1, 2, 3]) == 3
+    @test infer_grade(:blade, [1, 2, 3, 3]) == 2
+    @test infer_grade(:blade, [1, 2, 3, 3, 3]) == 3
+    @test infer_grade(:blade, [1, 1, 2, 2, 3, 3, 3]) == 1
+    @test infer_grade(:blade, [1, 2, 3, 1, 2, 4, 1, 2]) == 4
+    @test infer_grade(:kvector, [blade(1, 2), blade(2, 3)]) == 2
+    @test infer_grade(:multivector, [blade(1, 2), blade(2, 3)]) == [2]
+    @test infer_grade(:multivector, [kvector(blade(1, 2), blade(2, 3)), kvector(blade(1))]) == [1, 2]
+  end
 
-  ex = blade(1, 2)
-  @test !isexpr(ex, :blade, 1)
-  @test isexpr(ex, :blade, 2)
-  @test isexpr(ex, (:basis, :blade))
-  @test ex.grade == 2
+  @testset "Blades and metric simplifications" begin
+    ex = blade(sig, 1, 1)
+    @test ex.grade == 0
+    @test ex == scalar(1)
 
-  ex = blade(1, 1)
-  @test ex.grade == 0
+    ex = blade(sig, 1, 2, 3, 1)
+    @test ex.grade == 2
+    @test ex == blade(2, 3)
 
-  ex = blade(1, 2, 3, 1)
-  @test ex.grade == 2
+    ex = blade(sig, 4, 4)
+    @test ex.grade == 0
+    @test ex == scalar(-1)
 
-  ex2 = postwalk(x -> isexpr(x, :basis) ? basis(basis_index(x) + 1) : x, ex)
-  @test ex2 == blade(2, 3, 4, 2)
+    ex = blade(sig, 1, 2, 1)
+    @test ex.grade == 1
+    @test ex == scalar(-1) * blade(2)
 
-  @test blade(1, 2) * basis(3) == blade(1, 2, 3)
+    @test blade(1) * blade(2) == blade(1, 2)
+    @test blade(1, 2) * blade(3) == blade(1, 2, 3)
+  end
 
-  @test -basis(1) == weighted(basis(1), -1)
-  @test basis(1) * scalar(1) == basis(1)
-  @test basis(1) - basis(2) == basis(1) + -basis(2)
-
-  @testset "Scalar simplifications" begin
-    @test scalar(1) * scalar(2) == scalar(2)
+  @testset "Simplification and canonicalization of scalar factors" begin
+    @test blade(1, 2) * scalar(3) == Expression(:*, scalar(3), blade(1, 2); simplify = false)
+    @test blade(1, 2) * scalar(3) * scalar(5) == Expression(:*, scalar(:(3 * 5)), blade(1, 2); simplify = false)
+    @test blade(1, 2) * scalar(:x) * scalar(:(y[1])) == Expression(:*, scalar(:(x * y[1])), blade(1, 2); simplify = false)
+    @test scalar(1) * blade(1, 2) * scalar(3) == Expression(:*, scalar(3), blade(1, 2); simplify = false)
+    @test blade(1, 2) * scalar(0) == scalar(0)
     @test scalar(inv(scalar(5))) * scalar(5) == scalar(0.2) * scalar(5) == scalar(:(0.2 * 5))
-    a = 2 * basis(1) * basis(1)
-    @test isexpr(scalar(a) * scalar(2), :*, 2)
+  end
+
+  @testset "Simplification of null scalars in addition" begin
+    @test scalar(1) + scalar(0) == Expression(:scalar, 1; simplify = false)
+    @test blade(1) + scalar(0) == Expression(:blade, 1; simplify = false)
+  end
+
+  @testset "Disassociation of products and sums" begin
+    @test scalar(1) * (scalar(2) * scalar(3)) == scalar(:(2 * 3))
+    @test scalar(4) * (scalar(2) * scalar(3)) == scalar(:(4 * (2 * 3)))
+    @test scalar(1) + (scalar(2) + scalar(3)) == scalar(:(1 + (2 + 3)))
+    @test scalar(1) + (scalar(2) + scalar(0)) == scalar(:(1 + 2))
+  end
+
+  @testset "Distribution of products" begin
+    # Scalars operations are not distributed.
+    @test (scalar(:x) + scalar(:y)) * (scalar(:w) + scalar(:z)) == scalar(:((x + y) * (w + z)))
+
+    @test (blade(1) + blade(3)) * (blade(2) + blade(4)) == Expression(:+, blade(1, 2), blade(1, 4), blade(3, 2), blade(3, 4); simplify = false)
+    @test (scalar(:x) + blade(1)) * (scalar(:y) + blade(4)) == Expression(:+, scalar(:(x * y)), scalar(:x) * blade(4), blade(1) * scalar(:y), blade(1, 4); simplify = false)
   end
 end;

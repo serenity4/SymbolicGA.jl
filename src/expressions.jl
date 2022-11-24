@@ -1,111 +1,191 @@
+const GradeInfo = Union{Int,Vector{Int}}
+
 mutable struct Expression
   head::Symbol
-  grade::Optional{Int}
+  grade::GradeInfo
   args::Vector{Any}
-  Expression(head::Symbol, args...) = Expression(head, collect(Any, args))
-  function Expression(head::Symbol, args::AbstractVector)
-    # Simplify nested scalar expressions.
-    head === :scalar && isexpr(args[1], :scalar) && return scalar(args[1][1])
-    # Force inverse of scalar to be a scalar expression at top-level.
-    head === :inverse && isexpr(args[1], :scalar) && return scalar(inverse(args[1][1]))
-    # Simplify scalar reverses.
-    head === :reverse && isexpr(args[1], :scalar) && return args[1]
-
-    if head === :-
-      # Simplify unary minus operator to a multiplication with -1.
-      length(args) == 1 && return scalar(-1) * args[1]
-      # Transform binary minus expression into an addition where one
-      @assert length(args) == 2
-      return args[1] - args[2]
-    end
-    if in(head, (:*, :+))
-      if head === :*
-        # Remove scalar unit elements.
-        filter!(x -> !isexpr(x, :scalar) || x[1] ≠ 1, args)
-        isempty(args) && return scalar(1)
-      end
-      length(args) == 1 && return args[1]
-
-      # Disassociate * and +.
-      any(isexpr(head), args) && (args = disassociate1(args, head))
-
-      ns = count(isexpr(:scalar), args)
-      if ns ≥ 2
-        # Collapse all scalars into one at the front, or return a scalar expression if all arguments are scalars.
-        scalars, nonscalars = filter(isexpr(:scalar), args), filter(!isexpr(:scalar), args)
-        opaque_scalars = filter(isopaquescalar, scalars)
-        if length(opaque_scalars) ≥ 2
-          opaque_part = scalar(Expr(:call, head, [arg[1] for arg in opaque_scalars]...))
-          opaque_scalar = length(opaque_scalars) == ns ? opaque_part : Expression(head, scalar.(filter!(!isopaquescalar, scalars))..., opaque_part)
-          length(opaque_scalars) == length(args) && return opaque_scalar
-          scalars = opaque_scalar
-        end
-        args = [scalars; nonscalars]
-      elseif ns == 1 && !isexpr(args[1]::Expression, :scalar)
-        # Put the scalar at the front.
-        i = findfirst(isexpr(:scalar), args)
-        sc = args[i]::Expression
-        deleteat!(args, i)
-        pushfirst!(args, sc)
-        return Expression(head, args)
-      elseif head === :*
-        # Collapse all bases and blades into a single blade.
-        nb = count(isexpr((:basis, :blade)), args)
-        if nb ≥ 2
-          n = length(args)
-          xs = nb == n ? args : filter(isexpr((:basis, :blade)), args)
-          blade_args = []
-          for x in xs
-            isexpr(x, :basis) ? push!(blade_args, x) : append!(blade_args, x.args)
-          end
-          ex = blade(blade_args)
-          # Return the blade if all the terms were collapsed.
-          nb == n && return ex
-          return *(ex, filter!(!isexpr((:basis, :blade)), args)...)
-        end
-      end
-    end
-
-    # Check that arguments make sense.
-    @assert head === :blade || !isempty(args)
-    if head === :scalar
-      @assert length(args) == 1
-    elseif head === :basis
-      @assert length(args) == 1 && isa(args[1], Int)
-    elseif head === :blade
-      @assert all(isexpr(ex, :basis) for ex in args)
-    elseif head === :project
-      length(args) == 1 && isa(args[1], Int) && return nothing
-      @assert length(args) == 2 && isa(args[1], Int) && isa(args[2], Expression)
-    end
-    grade = extract_grade(head, args)
-    # Check that the grade is properly inferred for certain operations.
-    in(head, (:scalar, :basis, :blade, :kvector, :project)) && grade::Int
-    new(head, grade, args)
+  function Expression(head::Symbol, args::AbstractVector; simplify = true, grade = nothing)
+    ex = new()
+    ex.head = head
+    ex.args = args
+    !simplify && return ex
+    simplify!(ex, nothing)
   end
+  Expression(head::Symbol, args...; simplify = true, grade = nothing) = Expression(head, collect(Any, args); simplify, grade)
+end
+# Can mutate arguments.
+simplified(sig, head::Symbol, args...) = simplify!(Expression(head, args...; simplify = false), sig)
+simplified(head::Symbol, args...) = simplified(nothing, head, args...)
+
+function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
+  (; head, args) = ex
+  # Simplify nested scalar expressions.
+  head === :scalar && isexpr(args[1], :scalar) && return simplify!(args[1]::Expression, sig)
+  # Force inverse of scalar to be a scalar expression at top-level.
+  if head === :inverse && isexpr(args[1], :scalar)
+    arg = inverse(args[1][1])
+    if isa(arg, Expression)
+      return simplified(sig, :scalar, simplified(sig, :inverse, arg))
+    else
+      return simplified(sig, :scalar, arg)
+    end
+  end
+  # Simplify scalar reverses.
+  head === :reverse && isexpr(args[1], :scalar) && return simplify!(args[1], sig)
+
+  if head === :blade
+    # Sort basis vectors.
+    if !issorted(args)
+      perm = sortperm(args)
+      fac = isodd(parity(perm)) ? -1 : 1
+      return simplified(sig, :*, simplified(sig, :scalar, fac), simplified(sig, :blade, args[perm]))
+    end
+
+    # Apply metric.
+    if !allunique(args)
+      sig::Signature
+      last = nothing
+      fac = 1
+      i = 1
+      while length(args) ≥ 2
+        i > lastindex(args) && break
+        new = args[i]
+        if !isnothing(last)
+          if new == last
+            m = metric(sig, last)
+            if iszero(m)
+              fac = 0
+              break
+            end
+            fac *= m
+            length(args) == 2 && return simplified(sig, :scalar, fac)
+            deleteat!(args, i)
+            deleteat!(args, i - 1)
+            i = max(i - 2, 1)
+            last = i < firstindex(args) ? nothing : args[i]
+          else
+            last = new
+          end
+        else
+          last = new
+        end
+        i += 1
+      end
+      iszero(fac) && return simplified(sig, :scalar, fac)
+      return simplified(sig, :*, simplified(sig, :scalar, fac), simplified(sig, :blade, args))
+    end
+  end
+
+  if head === :-
+    # Simplify unary minus operator to a multiplication with -1.
+    length(args) == 1 && return simplified(sig, :*, scalar(-1), args[1])
+    # Transform binary minus expression into an addition.
+    @assert length(args) == 2
+    return simplified(sig, :+, args[1], -args[2])
+  end
+
+  # Simplify whole expression to zero if a product term is zero.
+  head === :* && any(isexpr(x, :scalar) && x[1] == 0 for x in args) && return scalar(0)
+
+  # Remove scalar unit elements for multiplication and addition.
+  if head === :*
+    filter!(x -> !isexpr(x, :scalar) || x[1] ≠ 1, args)
+    isempty(args) && return scalar(1)
+  elseif head === :+
+    filter!(x -> !isexpr(x, :scalar) || x[1] ≠ 0, args)
+    isempty(args) && return scalar(0)
+  end
+
+  if in(head, (:*, :+))
+    length(args) == 1 && return args[1]
+
+    # Disassociate * and +.
+    any(isexpr(head), args) && (args = disassociate1(args, head))
+
+    ns = count(isexpr(:scalar), args)
+    if ns ≥ 2
+      # Collapse all scalars into one at the front, or return a scalar expression if all arguments are scalars.
+      scalars, nonscalars = filter(isexpr(:scalar), args), filter(!isexpr(:scalar), args)
+      opaque_scalars = filter(isopaquescalar, scalars)
+      if length(opaque_scalars) ≥ 2
+        opaque_part = scalar(Expr(:call, head, [arg[1] for arg in opaque_scalars]...))
+        opaque_scalar = length(opaque_scalars) == ns ? opaque_part : Expression(head, scalar.(filter!(!isopaquescalar, scalars))..., opaque_part)
+        length(opaque_scalars) == length(args) && return opaque_scalar
+        scalars = opaque_scalar
+      end
+      args = [scalars; nonscalars]
+    elseif ns == 1 && !isexpr(args[1]::Expression, :scalar)
+      # Put the scalar at the front.
+      i = findfirst(isexpr(:scalar), args)
+      sc = args[i]::Expression
+      deleteat!(args, i)
+      pushfirst!(args, sc)
+      return Expression(head, args)
+    elseif head === :*
+      # Collapse all bases and blades into a single blade.
+      nb = count(isexpr(:blade), args)
+      if nb > 1
+        n = length(args)
+        blade_args = []
+        for i in reverse(eachindex(args))
+          x = args[i]
+          isexpr(x, :blade) || continue
+          for arg in reverse(x.args)
+            pushfirst!(blade_args, arg::Int)
+          end
+          deleteat!(args, i)
+        end
+        ex = blade(sig, blade_args)
+        # Return the blade if all the terms were collapsed.
+        nb == n && return ex
+        return *(ex, args...)
+      end
+    end
+  end
+
+  # Check that arguments make sense.
+  n = expected_nargs(head)
+  !isnothing(n) && @assert length(args) == n "Expected $n arguments for expression $head, $n were provided\nArguments: $args"
+  @assert head === :blade || !isempty(args)
+  head === :blade && @assert all(isa(i, Int) for i in args)
+  if head === :project
+    @assert isa(args[1], Int) && isa(args[2], Expression)
+    !isnothing(sig) && @assert 0 ≤ args[1] ≤ dimension(sig)
+  end
+  head === :dual && @assert isa(args[1], Expression)
+
+  ex.grade = infer_grade(head, args)::GradeInfo
+  ex.args = args
+
+  # Distribute multiplication over addition.
+  head === :* && any(isexpr(arg, :+) for arg in args) && return distribute1(ex)
+
+  ex
+end
+
+function expected_nargs(head)
+  in(head, (:scalar, :inverse, :reverse, :dual)) && return 1
+  in(head, (:project,)) && return 2
+  nothing
 end
 
 inverse(ex::Expr) = :(inv($ex))
 inverse(ex) = inv(ex)
 
-function extract_grade(head::Symbol, args)
-  head in (:scalar, ⦿) && return 0
-  head === :basis && return 1
-  head === :blade && return count(isodd, map(x -> count(==(x) ∘ basis_index, args), unique!(basis_index.(args))))
-  head === :project && return args[1]::Int
-  head in (:reverse, :inverse) && return (args[1]::Expression).grade
+function infer_grade(head::Symbol, args)
+  in(head, (:scalar, ⦿)) && return 0
+  head === :blade && return count(isodd, map(x -> count(==(x), args), unique(args)))
+  head === :project && return args[1]::GradeInfo
+  head === :dual && return dimension(args[1]::Signature)
+  in(head, (:reverse, :inverse)) && return (args[1]::Expression).grade
   if head === :*
     # Fast path for frequently encountered expressions.
     length(args) == 2 && isexpr(args[1], :scalar) && return (args[2]::Expression).grade
 
-    # Infer the grade when there are only scalars except one graded element.
     computed_grade = compute_grade_for_product(args)
     !isnothing(computed_grade) && return computed_grade
   end
-  if head === :+ || head === :multivector
-    g = compute_grade_for_sum(args)
-    !isnothing(g) && return g
-  end
+  in(head, (:+, :multivector)) && return sort!(unique!(grade.(args)))
   head === :kvector || return nothing
   grades = map(args) do arg
     isa(arg, Expression) || error("Expected argument of type $Expression, got $arg")
@@ -123,8 +203,7 @@ end
 function compute_grade_for_product(args)
   res = nothing
   for arg in args
-    g = arg.grade
-    isnothing(g) && break
+    g = grade(arg)
     iszero(g) && continue
     if isnothing(res)
       res = g
@@ -151,12 +230,13 @@ end
 
 # Basic interfaces.
 
-Base.:(==)(x::Expression, y::Expression) = x.head == y.head && x.grade === y.grade && x.args == y.args
+Base.:(==)(x::Expression, y::Expression) = x.head == y.head && (!isdefined(x, :grade) || !isdefined(y, :grade) || x.grade == y.grade) && x.args == y.args
 Base.getindex(x::Expression, args...) = x.args[args...]
 Base.firstindex(x::Expression) = firstindex(x.args)
 Base.lastindex(x::Expression) = lastindex(x.args)
 Base.length(x::Expression) = length(x.args)
 Base.iterate(x::Expression, args...) = iterate(x.args, args...)
+Base.keys(x::Expression) = keys(x.args)
 Base.view(x::Expression, args...) = view(x.args, args...)
 
 # Introspection utilities.
@@ -165,21 +245,17 @@ isexpr(ex, head::Symbol) = isa(ex, Expression) && ex.head === head
 isexpr(ex, heads) = isa(ex, Expression) && in(ex.head, heads)
 isexpr(ex, head::Symbol, n::Int) = isa(ex, Expression) && isexpr(ex, head) && length(ex.args) == n
 isexpr(heads) = ex -> isexpr(ex, heads)
-isgrade(ex::Expression, grade::Int) = ex.grade === grade
-grade(ex::Expression) = ex.grade::Int
+grade(ex::Expression) = ex.grade::GradeInfo
+grades(ex::Expression) = ex.grade::Vector{Int}
 isweighted(ex) = isexpr(ex, :*, 2) && isexpr(ex[1]::Expression, :scalar)
+isweightedblade(ex) = isweighted(ex) && isexpr(ex[2]::Expression, :blade)
 isopaquescalar(ex) = isexpr(ex, :scalar) && !isa(ex[1], Expression)
 
-function basis_index(ex::Expression)
-  @assert isexpr(ex, :basis, 1)
-  ex.args[1]::Int
-end
-
 function basis_vectors(ex::Expression)
-  isexpr(ex, :*, 2) && isexpr(ex[1], :scalar) && isexpr(ex[2], :blade) && return basis_vectors(ex[2]::Expression)
-  isexpr(ex, :blade) && return [basis_index(arg) for arg::Expression in ex]
+  isweightedblade(ex) && return basis_vectors(ex[2]::Expression)
+  isexpr(ex, :blade) && return collect(Int, ex.args)
   isexpr(ex, :scalar) && return Int[]
-  error("Expected blade or weighted blade expression, got $ex")
+  error("Expected scalar, blade or weighted blade expression, got $ex")
 end
 
 function lt_basis_order(xinds, yinds)
@@ -194,27 +270,21 @@ end
 # Helper functions.
 
 scalar(x) = Expression(:scalar, x)
-basis(i::Integer) = Expression(:basis, i)
-blade(indices::Integer...) = blade(indices)
-blade(args::AbstractVector) = Expression(:blade, args)
-blade(args::AbstractVector{<:Integer}) = blade(Any[basis(i) for i in args])
-blade(xs) = blade(Any[isa(x, Int) ? basis(x) : x for x in xs])
+blade(xs...) = Expression(:blade, xs...)
 kvector(args::AbstractVector) = Expression(:kvector, args)
 kvector(xs...) = kvector(collect(Any, xs))
 multivector(args::AbstractVector) = Expression(:multivector, args)
 multivector(xs...) = multivector(collect(Any, xs))
-project(g::Integer, ex) = Expression(:project, g, ex)
+project(g::GradeInfo, ex) = Expression(:project, g, ex)
 Base.reverse(ex::Expression) = Expression(:reverse, ex)
+pseudoscalar(s::Signature) = blade(1:dimension(s))
 
-weighted(ex::Expression, weight) = scalar(weight) * ex
+blade(sig::Optional{Signature}, xs...) = simplified(sig, :blade, xs...)
 
-Base.:(*)(x::Expression, y::Expression) = Expression(:*, x, y)
-@commutative Base.:(*)(x::Number, y::Expression) = scalar(x) * y
-Base.:(+)(x::Expression, y::Expression) = Expression(:+, x, y)
-@commutative Base.:(+)(x::Number, y::Expression) = scalar(x) + y
-Base.:(-)(x::Expression, y::Expression) = x + -y
-Base.:(-)(x::Expression) = x * scalar(-1)
-Base.:(/)(x::Expression, y::Expression) = x * inv(y)
+Base.:(*)(x::Expression, args::Expression...) = Expression(:*, x, args...)
+Base.:(+)(x::Expression, args::Expression...) = Expression(:+, x, args...)
+Base.:(-)(x::Expression, args::Expression...) = Expression(:-, x, args...)
+Base.:(/)(x::Expression, y::Expression) = Expression(:/, x, y)
 Base.inv(x::Expression) = Expression(:inverse, x)
 ⦿(x::Expression, y::Expression) = Expression(:⦿, x, y)
 ⋅(x::Expression, y::Expression) = Expression(:⋅, x, y)
@@ -240,8 +310,7 @@ end
 # Display.
 
 function Base.show(io::IO, ex::Expression)
-  isexpr(ex, :basis) && return print(io, 'b', subscript(basis_index(ex)))
-  isexpr(ex, :blade) && return print(io, 'e', join(subscript.(basis_vectors(ex))))
+  isexpr(ex, :blade) && return print(io, 'e', join(subscript.(ex)))
   isexpr(ex, :scalar) && return print_scalar(io, ex[1])
   if isexpr(ex, :*) && isexpr(ex[end], :blade)
     if length(ex) == 2 && isexpr(ex[1], :scalar) && (!Meta.isexpr(ex[1][1], :call) || ex[1][1].args[1] == getcomponent)

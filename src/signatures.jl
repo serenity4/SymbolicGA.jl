@@ -11,7 +11,7 @@ negative(::Signature{P,N}) where {P,N} = N
 
 degenerate(::Signature{P,N,D}) where {P,N,D} = D
 
-dimension(::Type{Signature{P,N,D}}) where {P,N,D} = P + N + D
+dimension(::Signature{P,N,D}) where {P,N,D} = P + N + D
 
 is_degenerate(sig::Signature) = degenerate(sig) ≠ 0
 
@@ -24,4 +24,4 @@ metric(::Signature, ::Val{I}, ::Val{J}) where {I,J} = 0
 
 Base.show(io::IO, sig::Signature) = print(io, sig == Signature(0, 0, 0) ? "Ø" : "<" * join(["+", "-", "𝟎"] .^ triplet(sig)) * ">")
 
-nelements(::Type{S}, K::Int) where {S<:Signature} = binomial(dimension(S), K)
+nelements(s::Signature, k::Int) = binomial(dimension(s), k)

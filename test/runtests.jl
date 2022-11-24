@@ -1,5 +1,5 @@
 using LazyGeometricAlgebra, Test
-using LazyGeometricAlgebra: Expression, isexpr, isgrade, postwalk, weighted, simplify, isweighted, getcomponent, blade, scalar, kvector, multivector, basis, basis_index, project, grade
+using LazyGeometricAlgebra: Expression, isexpr, postwalk, simplify!, simplified, isweighted, getcomponent, blade, scalar, kvector, multivector, project, grade
 
 ENV["JULIA_DEBUG"] = "LazyGeometricAlgebra"
 ENV["JULIA_DEBUG"] = ""

@@ -1,4 +1,4 @@
-function expand_operators(ex::Expression)
+function expand_operators(ex::Expression, s::Signature)
   postwalk(ex) do ex
     if isexpr(ex, :∧)
       # The outer product is associative, no issues there.
@@ -17,12 +17,13 @@ function expand_operators(ex::Expression)
       a, b = ex[1]::Expression, ex[2]::Expression
       scalar(0.5) * (a * b - b * a)
     elseif isexpr(ex, :inverse)
-      @assert length(ex) == 1
       a = ex[1]::Expression
       reverse(a) / project(0, a * a)
     elseif isexpr(ex, :/)
       @assert length(ex) == 2
       /(ex...)
+    elseif isexpr(ex, :dual)
+      ex[1]::Expression * reverse(pseudoscalar(s))
     else
       ex
     end
@@ -109,6 +110,7 @@ function apply_projections(ex::Expression)
     g, ex = ex.args
     isexpr(ex, :scalar) && return iszero(g) ? ex : nothing
     args = filter(x -> grade(x) == g, ex.args)
+    isempty(args) && return scalar(0)
     if isexpr(ex, :multivector)
       iszero(g) ? Expression(:+, scalar.(args)) : kvector(args)
     else
@@ -142,51 +144,6 @@ function propagate_reverse(args)
   res
 end
 
-function canonicalize_blades(ex::Expression)
-  postwalk(ex) do ex
-    isexpr(ex, :blade) || return ex
-    perm = sortperm(ex.args, by = basis_index)
-    new_ex = blade(ex[perm])
-    iseven(parity(perm)) && return new_ex
-    weighted(new_ex, -1)
-  end
-end
-
-function apply_metric(ex::Expression, s::Signature)
-  postwalk(ex) do ex
-    isexpr(ex, :blade) || return ex
-    @assert all(isexpr(arg, :basis) for arg in ex.args)
-    new_args = copy(ex.args)
-    last = nothing
-    fac = 1
-    i = 1
-    while length(new_args) ≥ 2
-      i > lastindex(new_args) && break
-      arg = new_args[i]
-      new = basis_index(arg)
-      if !isnothing(last)
-        if new == last
-          m = metric(s, last)
-          iszero(m) && return nothing
-          fac *= m
-          length(new_args) == 2 && return scalar(fac)
-          deleteat!(new_args, i)
-          deleteat!(new_args, i - 1)
-          i = max(i - 2, 1)
-          last = i < firstindex(new_args) ? nothing : basis_index(new_args[i])
-        else
-          last = new
-        end
-      else
-        last = new
-      end
-      i += 1
-    end
-    new_ex = blade(new_args)
-    isone(fac) ? new_ex : weighted(new_ex, fac)
-  end
-end
-
 function disassociate_kvectors(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, :kvector) && any(isexpr(:kvector), ex.args) && return disassociate1(ex, :kvector)
@@ -218,19 +175,19 @@ function group_kvector_blades(ex::Expression)
       blade_weights[indices] = weight
     end
   end
-  kvector(Any[weighted(blade(indices), weight) for (indices, weight) in pairs(blade_weights)])
+  kvector(Any[weight * blade(indices) for (indices, weight) in pairs(blade_weights)])
 end
 
-function fill_kvector_components(ex::Expression, s::S) where {S<:Signature}
+function fill_kvector_components(ex::Expression, s::Signature)
   postwalk(ex) do ex
     isexpr(ex, :kvector) || return ex
     g = grade(ex)
     i = 1
     ex = kvector(sort(ex.args, by = basis_vectors, lt = lt_basis_order))
-    for indices in combinations(1:dimension(S), g)
+    for indices in combinations(1:dimension(s), g)
       next = i ≤ lastindex(ex) ? ex[i]::Expression : nothing
       if isnothing(next) || indices ≠ basis_vectors(next)
-        insert!(ex.args, i, weighted(blade(indices), 0))
+        insert!(ex.args, i, scalar(0))
       end
       i += 1
     end
