@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: infer_grade
+using LazyGeometricAlgebra: infer_grade, project!
 
 sig = Signature(3, 1)
 
@@ -74,5 +74,13 @@ sig = Signature(3, 1)
 
     @test (blade(1) + blade(3)) * (blade(2) + blade(4)) == Expression(:+, blade(1, 2), blade(1, 4), blade(3, 2), blade(3, 4); simplify = false)
     @test (scalar(:x) + blade(1)) * (scalar(:y) + blade(4)) == Expression(:+, scalar(:(x * y)), scalar(:x) * blade(4), blade(1) * scalar(:y), blade(1, 4); simplify = false)
+  end
+
+  @testset "Projections" begin
+    @test project!(scalar(:x), 1) == scalar(0)
+    @test project!(scalar(:x), 0) == scalar(:x)
+    @test project!(blade(1, 2), 1) == scalar(0)
+    @test project!(blade(1, 2) + blade(1), 1) == blade(1)
+    @test project!(blade(1) + blade(1, 2) + blade(1, 2, 3), 2) == blade(1, 2)
   end
 end;

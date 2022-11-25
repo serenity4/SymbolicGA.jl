@@ -104,18 +104,12 @@ function restructure_sums(ex::Expression)
   end
 end
 
-function apply_projections(ex::Expression)
-  postwalk(ex) do ex
-    isexpr(ex, :project) || return ex
-    g, ex = ex.args
-    isexpr(ex, :scalar) && return iszero(g) ? ex : nothing
-    args = filter(x -> grade(x) == g, ex.args)
-    isempty(args) && return scalar(0)
-    if isexpr(ex, :multivector)
-      iszero(g) ? Expression(:+, scalar.(args)) : kvector(args)
-    else
-      Expression(ex.head, args)
-    end
+function project!(ex::Expression, g::GradeInfo)
+  prewalk(ex) do ex
+    isa(ex, Expression) || return ex
+    isexpr(ex, :scalar) && return in(0, g) ? ex : scalar(0)
+    issubset(g, grade(ex)) || return scalar(0)
+    ex
   end
 end
 

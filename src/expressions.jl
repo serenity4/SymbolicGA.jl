@@ -160,6 +160,9 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   # Distribute multiplication over addition.
   head === :* && any(isexpr(arg, :+) for arg in args) && return distribute1(ex)
 
+  # Eagerly apply projections.
+  head === :project && return project!(args[2]::Expression, args[1]::GradeInfo)
+
   ex
 end
 
