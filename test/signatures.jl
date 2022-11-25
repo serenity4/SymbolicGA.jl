@@ -1,3 +1,5 @@
+using LazyGeometricAlgebra: metric, dimension, is_degenerate
+
 @testset "Signature" begin
     @test Signature("+++") == Signature(3, 0)
     @test Signature("++-") == Signature(2, 1)

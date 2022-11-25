@@ -98,6 +98,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     # Disassociate * and +.
     any(isexpr(head), args) && return disassociate1(args, head, sig)
 
+    # Apply scalar simplifications and group any scalars at the front.
     ns = count(isexpr(:scalar), args)
     if ns ≥ 2
       # Collapse all scalars into one at the front, or return a scalar expression if all arguments are scalars.
@@ -118,6 +119,8 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
       pushfirst!(args, sc)
       return Expression(head, args)
     end
+
+    # Collapse all blades as one.
     if head === :*
       # Collapse all bases and blades into a single blade.
       nb = count(isexpr(:blade), args)
@@ -135,7 +138,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
         ex = blade(sig, blade_args)
         # Return the blade if all the terms were collapsed.
         nb == n && return ex
-        return *(ex, args...)
+        return simplified(sig, :*, Any[ex; args])
       end
     end
   end
@@ -222,7 +225,7 @@ function infer_grade(head::Symbol, args)
   end
   in(head, (:+, :multivector)) && return sort!(unique!(grade.(args)))
   if head === :kvector
-    grades = map(args) do arg
+    grades = map(filter(≠(scalar(0)), args)) do arg
       isa(arg, Expression) || error("Expected argument of type $Expression, got $arg")
       g = arg.grade
       isa(g, Int) || error("Expected grade to be known for argument $arg in $head expression")
