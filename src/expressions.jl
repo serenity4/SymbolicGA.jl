@@ -24,11 +24,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   # Force inverse of scalar to be a scalar expression at top-level.
   if head === :inverse && isexpr(args[1], :scalar)
     arg = inverse(args[1][1])
-    if isa(arg, Expression)
-      return simplified(sig, :scalar, simplified(sig, :inverse, arg))
-    else
-      return simplified(sig, :scalar, arg)
-    end
+    return simplified(sig, :scalar, arg)
   end
   # Simplify scalar reverses.
   head === :reverse && isexpr(args[1], :scalar) && return simplify!(args[1], sig)
@@ -100,7 +96,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     length(args) == 1 && return args[1]
 
     # Disassociate * and +.
-    any(isexpr(head), args) && (args = disassociate1(args, head))
+    any(isexpr(head), args) && return disassociate1(args, head, sig)
 
     ns = count(isexpr(:scalar), args)
     if ns ≥ 2
@@ -121,7 +117,8 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
       deleteat!(args, i)
       pushfirst!(args, sc)
       return Expression(head, args)
-    elseif head === :*
+    end
+    if head === :*
       # Collapse all bases and blades into a single blade.
       nb = count(isexpr(:blade), args)
       if nb > 1
@@ -154,21 +151,59 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   end
   head === :dual && @assert isa(args[1], Expression)
 
-  ex.grade = infer_grade(head, args)::GradeInfo
-  ex.args = args
 
-  # Distribute multiplication over addition.
-  head === :* && any(isexpr(arg, :+) for arg in args) && return distribute1(ex)
+  # Distribute products over addition.
+  head in (:*, :⦿, :∧, :⋅, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
 
   # Eagerly apply projections.
   head === :project && return project!(args[2]::Expression, args[1]::GradeInfo)
+
+  # Eagerly apply reversions.
+  head === :reverse && return apply_reverse_operators(ex)
+
+  # Expand common operators.
+  # ========================
+
+  # The outer product is associative, no issues there.
+  head === :∧ && return project!(Expression(:*, ex.args), sum(grade, ex))
+
+  if head === :⋅
+    # The inner product must have only two operands, as no associativity law is available to derive a canonical binarization.
+    # Homogeneous vectors are expected, so the grade should be known.
+    r, s = grade(args[1]::Expression)::Int, grade(args[2]::Expression)::Int
+    (iszero(r) || iszero(s)) && return scalar(0)
+    return project!(simplified(sig, :*, args), abs(r - s))
+  end
+
+  head === :⦿ && return project!(simplified(sig, :*, args), 0)
+
+  if head === :×
+    # The commutator product must have only two operands, as no associativity law is available to derive a canonical binarization.
+    a, b = args[1]::Expression, args[2]::Expression
+    return simplified(sig, :*, scalar(0.5), simplified(sig, :*, a, b) - simplified(sig, :*, b, a))
+  end
+
+  if head === :inverse
+    a = args[1]::Expression
+    return reverse(a) / simplified(sig, :⦿, a, a)
+  end
+
+  if head === :/
+    a, b = args[1]::Expression, args[2]::Expression
+    return simplified(sig, :*, a, simplified(sig, :inverse, b))
+  end
+
+  head === :dual && return simplified(sig, :*, args[1]::Expression, reverse(pseudoscalar(sig)))
+
+  ex.grade = infer_grade(head, args)::GradeInfo
+  ex.args = args
 
   ex
 end
 
 function expected_nargs(head)
   in(head, (:scalar, :inverse, :reverse, :dual)) && return 1
-  in(head, (:project,)) && return 2
+  in(head, (:project, :⋅, :/, :×)) && return 2
   nothing
 end
 
@@ -178,9 +213,6 @@ inverse(ex) = inv(ex)
 function infer_grade(head::Symbol, args)
   in(head, (:scalar, ⦿)) && return 0
   head === :blade && return count(isodd, map(x -> count(==(x), args), unique(args)))
-  head === :project && return args[1]::GradeInfo
-  head === :dual && return dimension(args[1]::Signature)
-  in(head, (:reverse, :inverse)) && return (args[1]::Expression).grade
   if head === :*
     # Fast path for frequently encountered expressions.
     length(args) == 2 && isexpr(args[1], :scalar) && return (args[2]::Expression).grade
@@ -189,18 +221,18 @@ function infer_grade(head::Symbol, args)
     !isnothing(computed_grade) && return computed_grade
   end
   in(head, (:+, :multivector)) && return sort!(unique!(grade.(args)))
-  head === :kvector || return nothing
-  grades = map(args) do arg
-    isa(arg, Expression) || error("Expected argument of type $Expression, got $arg")
-    g = arg.grade
-    isa(g, Int) || error("Expected grade to be known for $head expression with arguments $arg")
-    g
-  end
   if head === :kvector
+    grades = map(args) do arg
+      isa(arg, Expression) || error("Expected argument of type $Expression, got $arg")
+      g = arg.grade
+      isa(g, Int) || error("Expected grade to be known for argument $arg in $head expression")
+      g
+    end
     unique!(grades)
     length(grades) == 1 || error("Expected unique grade for k-vector expression, got grades $grades")
     return first(grades)
   end
+  error("Cannot infer grade for unexpected $head expression with arguments $args")
 end
 
 function compute_grade_for_product(args)

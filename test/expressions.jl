@@ -83,4 +83,19 @@ sig = Signature(3, 1)
     @test project!(blade(1, 2) + blade(1), 1) == blade(1)
     @test project!(blade(1) + blade(1, 2) + blade(1, 2, 3), 2) == blade(1, 2)
   end
+
+  @testset "Reversions" begin
+    @test reverse(blade(1, 2)) == blade(2, 1)
+    @test reverse(scalar(:x) * blade(1, 2)) == scalar(:x) * blade(2, 1)
+    @test reverse(blade(1, 2, 3) + blade(2) + blade(2, 3)) == blade(3, 2, 1) + blade(2) + blade(3, 2)
+  end
+
+  @testset "Common operators" begin
+    @test simplified(sig, :⦿, blade(1, 2), blade(1, 2)) == scalar(-1)
+    @test simplified(sig, :⋅, blade(1), blade(1, 2)) == blade(2)
+    @test simplified(sig, :×, blade(1), blade(2)) == scalar(0.5) * blade(1, 2) + scalar(:(0.5 * (-1 * -1))) * blade(1, 2)
+    @test simplified(sig, :dual, blade(1)) == blade(2, 3, 4)
+    @test simplified(sig, :inverse, blade(1)) == blade(1)
+    @test simplified(sig, :inverse, scalar(0.5) * blade(1)) == scalar(:(0.5 * inv(0.5 * 0.5))) * blade(1)
+  end
 end;

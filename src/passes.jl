@@ -3,7 +3,7 @@ function expand_operators(ex::Expression, s::Signature)
     if isexpr(ex, :∧)
       # The outer product is associative, no issues there.
       # FIXME: The grade may be unknown for multivectors.
-      project(sum(grade, ex), Expression(:*, ex.args))
+      project!(Expression(:*, ex.args), sum(grade, ex))
     elseif isexpr(ex, :⋅)
       length(ex) == 2 || error("The inner product must have only two operands, as no associativity law is available to derive a canonical binarization.")
       # Homogeneous vectors are expected, so the grade should be known.
@@ -30,16 +30,7 @@ function expand_operators(ex::Expression, s::Signature)
   end
 end
 
-function distribute(ex::Expression)
-  postwalk(ex) do ex
-    isexpr(ex, (:kvector, :multivector)) && return Expression(:+, ex.args)
-    isexpr(ex, :+) && return disassociate1(ex, :+)
-    isexpr(ex, :*) && any(isexpr(arg, :+) for arg in ex.args) && return distribute1(ex)
-    ex
-  end
-end
-
-function disassociate1(args, op::Symbol)
+function disassociate1(args, op::Symbol, sig::Optional{Signature})
   new_args = []
   for arg in args
     if isexpr(arg, op)
@@ -48,12 +39,10 @@ function disassociate1(args, op::Symbol)
       push!(new_args, arg)
     end
   end
-  new_args
+  simplified(sig, op, new_args)
 end
 
-disassociate1(ex::Expression, op::Symbol) = Expression(op, disassociate1(ex.args, op))
-
-function distribute1(ex::Expression)
+function distribute1(ex::Expression, op::Symbol, sig::Optional{Signature})
   x, ys = ex[1], @view ex[2:end]
   base = isexpr(x, :+) ? x.args : [x]
   for y in ys
@@ -61,7 +50,7 @@ function distribute1(ex::Expression)
     yterms = isexpr(y, :+) ? y.args : (y,)
     for xterm in base
       for yterm in yterms
-        push!(new_base, xterm * yterm)
+        push!(new_base, simplified(sig, op, xterm, yterm))
       end
     end
     base = new_base
@@ -123,7 +112,8 @@ function apply_reverse_operators(ex::Expression)
     elseif isexpr(arg, (:*, :blade))
       (; args) = arg
       new_args = isexpr(arg, :blade) || count(x -> x.grade !== 0, args) > 1 ? reverse(args) : args
-      Expression(arg.head, propagate_reverse(new_args))
+      !isexpr(arg, (:scalar, :blade)) && (new_args = propagate_reverse(new_args))
+      Expression(arg.head, new_args)
     else
       @assert false "Unexpected operator $(arg.head) encountered when applying reverse operators."
     end
@@ -132,7 +122,8 @@ end
 
 function propagate_reverse(args)
   res = Any[]
-  for arg::Expression in args
+  for arg in args
+    arg::Expression
     in(arg.grade, (0, 1)) ? push!(res, arg) : push!(res, reverse(arg))
   end
   res
