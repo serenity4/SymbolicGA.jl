@@ -117,7 +117,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
       sc = args[i]::Expression
       deleteat!(args, i)
       pushfirst!(args, sc)
-      return Expression(head, args)
+      return simplified(sig, :*, args)
     end
 
     # Collapse all blades as one.
@@ -168,7 +168,10 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   # ========================
 
   # The outer product is associative, no issues there.
-  head === :∧ && return project!(Expression(:*, ex.args), sum(grade, ex))
+  if head === :∧
+    g = sum(x -> grade(x::Expression)::Int, args)
+    return project!(simplified(sig, :*, args), g)
+  end
 
   if head === :⋅
     # The inner product must have only two operands, as no associativity law is available to derive a canonical binarization.
@@ -183,7 +186,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   if head === :×
     # The commutator product must have only two operands, as no associativity law is available to derive a canonical binarization.
     a, b = args[1]::Expression, args[2]::Expression
-    return simplified(sig, :*, scalar(0.5), simplified(sig, :*, a, b) - simplified(sig, :*, b, a))
+    return simplified(sig, :*, scalar(0.5), simplified(sig, :-, simplified(sig, :*, a, b), simplified(sig, :*, b, a)))
   end
 
   if head === :inverse
@@ -253,17 +256,6 @@ function compute_grade_for_product(args)
     end
   end
   res
-end
-
-function compute_grade_for_sum(args)
-  g = nothing
-  for arg in args
-    g′ = arg.grade
-    isnothing(g′) && return nothing
-    isnothing(g) && (g = g′)
-    g ≠ g′ && return nothing
-  end
-  g
 end
 
 # Basic interfaces.

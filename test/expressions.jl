@@ -97,5 +97,6 @@ sig = Signature(3, 1)
     @test simplified(sig, :dual, blade(1)) == blade(2, 3, 4)
     @test simplified(sig, :inverse, blade(1)) == blade(1)
     @test simplified(sig, :inverse, scalar(0.5) * blade(1)) == scalar(:(0.5 * inv(0.5 * 0.5))) * blade(1)
+    @test simplified(sig, :∧, blade(1), blade(2)) == blade(1, 2)
   end
 end;

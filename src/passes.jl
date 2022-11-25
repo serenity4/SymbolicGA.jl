@@ -55,7 +55,7 @@ function distribute1(ex::Expression, op::Symbol, sig::Optional{Signature})
     end
     base = new_base
   end
-  Expression(:+, base)
+  simplified(sig, :+, base)
 end
 
 """
@@ -93,13 +93,17 @@ function restructure_sums(ex::Expression)
   end
 end
 
-function project!(ex::Expression, g::GradeInfo)
-  prewalk(ex) do ex
-    isa(ex, Expression) || return ex
-    isexpr(ex, :scalar) && return in(0, g) ? ex : scalar(0)
-    issubset(g, grade(ex)) || return scalar(0)
-    ex
+function project!(ex, g)
+  isa(ex, Expression) || return ex
+  isexpr(ex, :scalar) && return in(0, g) ? ex : scalar(0)
+  any(!isempty(intersect(g, g′)) for g′ in grade(ex)) || return scalar(0)
+  if isexpr(ex, :+)
+    for (i, x) in enumerate(ex)
+      ex.args[i] = project!(x, g)
+    end
+    return simplify!(ex)
   end
+  ex
 end
 
 function apply_reverse_operators(ex::Expression)

@@ -1,8 +1,8 @@
-macro ga(T, sig, ex)
-  s = extract_signature(sig)
-  ex = extract_base_expression(ex, s)
-  ex = simplify(ex, s)
-  ex = to_expr_final(ex)
+macro ga(T, sig_ex, ex)
+  sig = extract_signature(sig_ex)
+  ex = extract_expression(ex, sig)
+  ex = restructure(ex, sig)
+  ex = to_final_expr(ex)
   esc(:($construct($T, $ex)))
 end
 
@@ -22,15 +22,15 @@ const ADJOINT_SYMBOL = Symbol("'")
 
 isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :⦿, :*, :+, :×, :-, :/, :inv, :reverse, :dual))
 
-function extract_blade_from_annotation(t, s::Signature)
+function extract_blade_from_annotation(t, sig::Signature)
   isa(t, Symbol) || return nothing
   (t === :e || t === :e0) && return :scalar
   m = match(r"^e(\d+)$", string(t))
-  dimension(s) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
+  dimension(sig) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
   isnothing(m) && return nothing
   indices = parse.(Int, collect(m[1]))
   allunique(indices) || error("Index duplicates found in blade annotation $t.")
-  maximum(indices) ≤ dimension(s) || error("One or more indices exceeds the dimension of the specified space for blade $t")
+  maximum(indices) ≤ dimension(sig) || error("One or more indices exceeds the dimension of the specified space for blade $t")
   blade(indices)
 end
 
@@ -38,54 +38,40 @@ end
 # - extract grade 4 for expressions x::4, x::KVector{4}, x::Quadvector.
 # - extract grades 1 and 3 for expressions x::(1 + 3), x::(Vector + Trivector), x::(KVector{1} + KVector{3}), x::Multivector{1, 3}, etc.
 # We might want to reduce the number of syntactically valid expressions though.
-function extract_grade_from_annotation(t, s::Signature)
+function extract_grade_from_annotation(t, sig::Signature)
   isa(t, Int) && return t
   t === :Scalar && return 0
   t === :Vector && return 1
   t === :Bivector && return 2
   t === :Trivector && return 3
   t === :Quadvector && return 4
-  t === :Pseudoscalar && return dimension(s)
-  t === :Multivector && return nothing
+  t === :Pseudoscalar && return dimension(sig)
+  t === :Multivector && return 0:dimension(sig)
   Meta.isexpr(t, :curly, 2) && t.args[1] === :KVector && return t.args[2]::Int
-  Meta.isexpr(t, :call) && t.args[1] === :+ && return Int[extract_grade_from_annotation(t, s) for t in @view t.args[2:end]]
+  Meta.isexpr(t, :call) && t.args[1] === :+ && return Int[extract_grade_from_annotation(t, sig) for t in @view t.args[2:end]]
   Meta.isexpr(t, :curly) && t.args[1] === :Multivector && return @view t.args[2:end]
   error("Unknown grade projection for algebraic element $t")
 end
 
-function extract_base_expression(ex::Expr, s::Signature)
+function extract_expression(ex::Expr, sig::Signature)
   Meta.isexpr(ex, :block) && (ex = expand_variables(ex))
   @debug "After variable expansion: $(stringc(ex))"
   postwalk(ex) do ex
     if Meta.isexpr(ex, ADJOINT_SYMBOL)
-      Expression(:reverse, ex.args[1]::Expression)
+      simplified(sig, :reverse, ex.args[1]::Expression)
     elseif Meta.isexpr(ex, :call)
       op = ex.args[1]::Symbol
       !isreserved(op) && return ex
       args = ex.args[2:end]
-      op === :dual && (args = [args; s])
-      Expression(op, args)
+      simplified(sig, op, args)
     elseif Meta.isexpr(ex, :(::))
       ex, T = ex.args
-      b = extract_blade_from_annotation(T, s)
+      b = extract_blade_from_annotation(T, sig)
       b === :scalar && return scalar(ex)
       !isnothing(b) && return scalar(ex) * b
-      g = extract_grade_from_annotation(T, s)
-      if isa(ex, Expression)
-        isnothing(g) && return ex
-        project(g, ex)
-      else
-        if isa(g, Int)
-          if iszero(g)
-            Expression(:scalar, :($getcomponent($ex)))
-          else
-            kvector_expression(s, ex, g)
-          end
-        else
-          g = something(g, 0:dimension(s))
-          Expression(:multivector, kvector_expression(s, ex, g′, n′) for (g′, n′) in zip(g, cumsum(nelements(s, g′) for g′ in g)))
-        end
-      end
+      g = extract_grade_from_annotation(T, sig)
+      isa(ex, Expression) && return project!(ex, g)
+      input_expression(sig, ex, g)
     else
       ex
     end
@@ -188,14 +174,18 @@ function expand_reference(refs, ex)
   ex => ref
 end
 
-function extract_weights(s::Signature, ex, g::Int, offset::Int)
-  n = nelements(s, g)
+function extract_weights(sig::Signature, ex, g::Int, offset::Int)
+  n = nelements(sig, g)
   n == 1 && return [:($getcomponent($ex))]
   [:($getcomponent($ex, $(i + offset))) for i in 1:n]
 end
 
-function kvector_expression(s::Signature, ex, g::Int, offset::Int = 0)
-  kvector(Any[scalar(w) * blade for (blade, w) in zip(map(blade, combinations(1:dimension(s), g)), extract_weights(s, ex, g, offset))])
+function input_expression(sig::Signature, ex, g::Int, offset::Int = 0)
+  iszero(g) && return scalar(:($getcomponent($ex)))
+  simplified(sig, :+, Any[scalar(w) * blade for (blade, w) in zip(map(blade, combinations(1:dimension(sig), g)), extract_weights(sig, ex, g, offset))])
+end
+function input_expression(sig::Signature, ex, g, offset::Int = 0)
+  simplified(sig, :+, input_expression(sig, ex, g′, n′) for (g′, n′) in zip(g, cumsum(nelements(sig, g′) for g′ in g)))
 end
 
 function walk(ex::Expr, inner, outer)
@@ -207,62 +197,37 @@ function walk(ex::Expr, inner, outer)
   outer(new_ex)
 end
 
-# function simplify(ex::Expression, s::Signature)
-#   @debug "Base expression: $(stringc(ex))"
+function restructure(ex::Expression, sig::Signature)
+  @debug "Before restructuring: $(stringc(ex))"
 
-#   # Expand all operators from e.g. ∧ to the equivalent expression based on the geometric product.
-#   # Replaces operators `∧`, `⋅`, `/`, `⦿` and `×` with projections over a geometric product.
-#   # After this stage, the only allowed operators are `scalar`, `blade`, `kvector`, `multivector`, `+`, `*`, `reverse`, 'dual', 'inverse' and `project`.
-#   ex = expand_operators(ex, s)
-#   @debug "After operator expansion: $(stringc(ex))"
+  # Structure the different parts into multivectors and k-vectors.
+  # All `+` operations are replaced with k-vector or multivector expressions.
+  ex = restructure_sums(ex)
+  @debug "After sum restructuring: $(stringc(ex))"
 
-#   # Turn all k-vector and multivector expressions into `+` expressions, and distribute multiplication over addition.
-#   ex = distribute(ex)
-#   @debug "After distribution: $(stringc(ex))"
+  # Unnest k-vector expressions.
+  # TODO: Is this needed?
+  # ex = disassociate_kvectors(ex)
+  # @debug "After k-vector disassocation: $(stringc(ex))"
 
-#   # Structure the different parts into multivectors and k-vectors.
-#   # All `+` operations are replaced with k-vector or multivector expressions.
-#   ex = restructure_sums(ex)
-#   @debug "After sum restructuring: $(stringc(ex))"
-
-#   # Apply algebraic rules.
-
-#   # Filter out unneeded elements in projections.
-#   # All `project` operations are replaced by k-vector or multivector expressions.
-#   ex = apply_projections(ex)
-#   @debug "After projection filtering: $(stringc(ex))"
-#   # Reverse expression arguments according to semantics of the reversion operator.
-#   # All `reverse` operations are removed.
-#   ex = apply_reverse_operators(ex)
-#   @debug "After reversion: $(stringc(ex))"
-#   ex = canonicalize_blades(ex)
-#   @debug "After blade canonicalization: $(stringc(ex))"
-#   ex = apply_metric(ex, s)
-#   @debug "After metric simplifications: $(stringc(ex))"
-
-#   # Restructure the result.
-
-#   # Unnest k-vector expressions.
-#   ex = disassociate_kvectors(ex)
-#   @debug "After k-vector disassocation: $(stringc(ex))"
-#   # Group all components of a k-vector by blade elements, such that a given blade is covered by only one argument of the k-vector expression.
-#   ex = group_kvector_blades(ex)
-#   @debug "After blade grouping: $(stringc(ex))"
-#   # Add zero-factored components for blades not represented in k-vectors.
-#   ex = fill_kvector_components(ex, s)
-#   @debug "After k-vector component filling: $(stringc(ex))"
-#   @debug "After all transforms: $(stringc(ex))"
-#   ex
-# end
+  # Group all components of a k-vector by blade elements, such that a given blade is covered by only one argument of the k-vector expression.
+  ex = group_kvector_blades(ex)
+  @debug "After blade grouping: $(stringc(ex))"
+  # Add zero-factored components for blades not represented in k-vectors.
+  ex = fill_kvector_components(ex, sig)
+  @debug "After k-vector component filling: $(stringc(ex))"
+  @debug "After restructuring: $(stringc(ex))"
+  ex
+end
 
 function promote_to_expr(ex::Expression)
-  isexpr(ex, :kvector) && return Some(Expr(:tuple, to_expr_final.(ex)))
+  isexpr(ex, :kvector) && return Some(Expr(:tuple, to_final_expr.(ex)))
   isexpr(ex, :blade) && return Some(nothing)
-  isexpr(ex, :scalar) && return Some(to_expr_final(ex[1]))
+  isexpr(ex, :scalar) && return Some(to_final_expr(ex[1]))
   nothing
 end
 
-function to_expr_final(arg)
+function to_final_expr(arg)
   final = to_expr(arg)
   @assert !isnothing(final) "`nothing` value detected as output element for argument $arg"
   @assert !isa(final, Expression) "Expected non-Expression element, got $ex"
@@ -273,7 +238,7 @@ function to_expr(ex)
   if isexpr(ex, :multivector)
     expr = Expr(:tuple)
     for arg in ex.args
-      arg = to_expr_final(arg)
+      arg = to_final_expr(arg)
       if Meta.isexpr(arg, :tuple)
         append!(expr.args, arg.args)
       else
@@ -282,12 +247,12 @@ function to_expr(ex)
     end
     return expr
   end
-  isexpr(ex, :scalar) && return to_expr_final(ex[1])
+  isexpr(ex, :scalar) && return to_final_expr(ex[1])
   if isexpr(ex, :kvector)
     ret = if length(ex) == 1
-      to_expr_final(only(ex))
+      to_final_expr(only(ex))
     else
-      Expr(:tuple, to_expr_final.(ex.args)...)
+      Expr(:tuple, to_final_expr.(ex.args)...)
     end
     return ret
   end
@@ -295,7 +260,7 @@ function to_expr(ex)
   if isexpr(ex, :*)
     @assert length(ex) == 2
     @assert isexpr(ex[2], :blade)
-    return to_expr_final(ex[1]::Expression)
+    return to_final_expr(ex[1]::Expression)
   end
   ex
 end
