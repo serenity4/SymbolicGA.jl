@@ -13,5 +13,5 @@
     -(B × (C × A) + C × (A × B))
   end
 
-  @test lhs ≈ rhs
+  @test_broken lhs ≈ rhs
 end;
