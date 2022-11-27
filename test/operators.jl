@@ -15,15 +15,41 @@ end
 
 generate_typed_expression(sig, types, ex) = generate_expression(sig, annotate_variables(ex, types))
 
-@testset "Associativity" begin
-  types = Dict(:A => :Vector, :B => :Vector, :C => :Vector)
+types = Dict(:A => :Vector, :B => :Vector, :C => :Vector)
+A = (1, 2, 3)
+B = (10, 20, 30)
+C = (100, 200, 300)
 
+@testset "Associativity" begin
+  ex1 = generate_typed_expression(3, types, :(A + (B + C)))
+  ex2 = generate_typed_expression(3, types, :((A + B) + C))
+  @test ex1 == ex2
+  jex1 = codegen(Vector, ex1)
+  jex2 = codegen(Vector, ex2)
+  @test jex1 == jex2
+  @test eval(jex1) == eval(jex2)
+
+  ex1 = generate_typed_expression(3, types, :(A * (B * C)))
+  ex2 = generate_typed_expression(3, types, :((A * B) * C))
+  @test_broken ex1 == ex2
+  jex1 = codegen(Vector, ex1)
+  jex2 = codegen(Vector, ex2)
+  @test_broken jex1 == jex2
+  @test eval(jex1) == eval(jex2)
+end
+
+@testset "Distributivity" begin
   ex1 = generate_typed_expression(3, types, :(A * (B + C)))
   ex2 = generate_typed_expression(3, types, :(A * B + A * C))
   @test_broken ex1 == ex2
-  A = (1, 2, 3)
-  B = (10, 20, 30)
-  C = (100, 200, 300)
+  jex1 = codegen(Vector, ex1)
+  jex2 = codegen(Vector, ex2)
+  @test_broken jex1 == jex2
+  @test eval(jex1) == eval(jex2)
+
+  ex1 = generate_typed_expression(3, types, :(A ∧ (B + C)))
+  ex2 = generate_typed_expression(3, types, :(A ∧ B + A ∧ C))
+  @test_broken ex1 == ex2
   jex1 = codegen(Vector, ex1)
   jex2 = codegen(Vector, ex2)
   @test_broken jex1 == jex2
