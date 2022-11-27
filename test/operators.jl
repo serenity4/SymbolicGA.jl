@@ -1,3 +1,35 @@
+using LazyGeometricAlgebra: generate_expression, postwalk, traverse, codegen
+
+function annotate_variables(ex, types::Dict{Symbol,<:Any})
+  already_annotated = Set{Symbol}()
+  traverse(ex) do ex
+    Meta.isexpr(ex, :(::)) && isa(ex.args[1], Symbol) && push!(already_annotated, ex.args[1])
+    nothing
+  end
+  postwalk(ex) do ex
+    isa(ex, Symbol) || return ex
+    !in(ex, already_annotated) && haskey(types, ex) && return :($ex::$(types[ex]))
+    ex
+  end
+end
+
+generate_typed_expression(sig, types, ex) = generate_expression(sig, annotate_variables(ex, types))
+
+@testset "Associativity" begin
+  types = Dict(:A => :Vector, :B => :Vector, :C => :Vector)
+
+  ex1 = generate_typed_expression(3, types, :(A * (B + C)))
+  ex2 = generate_typed_expression(3, types, :(A * B + A * C))
+  @test_broken ex1 == ex2
+  A = (1, 2, 3)
+  B = (10, 20, 30)
+  C = (100, 200, 300)
+  jex1 = codegen(Vector, ex1)
+  jex2 = codegen(Vector, ex2)
+  @test_broken jex1 == jex2
+  @test eval(jex1) == eval(jex2)
+end
+
 @testset "Jacobi identity" begin
   lhs = @ga Vector 4 begin
     A = 1.3::e1 + 2.7::e12

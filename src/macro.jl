@@ -1,14 +1,14 @@
-macro ga(T, sig_ex, ex)
+macro ga(T, sig_ex, ex) esc(codegen_expression(T, sig_ex, ex)) end
+macro ga(sig, ex) esc(:(@ga Tuple $sig $ex)) end
+
+function generate_expression(sig_ex, ex)
   sig = extract_signature(sig_ex)
   ex = extract_expression(ex, sig)
   ex = restructure(ex, sig)
-  ex = to_final_expr(ex)
-  esc(:($construct($T, $ex)))
 end
 
-macro ga(sig, ex)
-  esc(:(@ga Tuple $sig $ex))
-end
+codegen(T, ex::Expression) = :($construct($T, $(to_final_expr(ex))))
+codegen_expression(T, sig_ex, ex) = codegen(T, generate_expression(sig_ex, ex))
 
 function extract_signature(ex)
   isa(ex, Integer) && return Signature(ex)
