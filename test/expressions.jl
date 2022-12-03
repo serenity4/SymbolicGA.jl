@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: infer_grade, project!
+using LazyGeometricAlgebra: infer_grade, project!, right_complement
 
 sig = Signature(3, 1)
 
@@ -54,6 +54,8 @@ sig = Signature(3, 1)
     @test scalar(1) * blade(1, 2) * scalar(3) == Expression(:*, scalar(3), blade(1, 2); simplify = false)
     @test blade(1, 2) * scalar(0) == scalar(0)
     @test scalar(inv(scalar(5))) * scalar(5) == scalar(0.2) * scalar(5) == scalar(:(0.2 * 5))
+    @test scalar(:(-1 * -1)) == scalar(1)
+    @test scalar(:(-1 * -1)) * blade(1, 2) == blade(1, 2)
   end
 
   @testset "Simplification of null scalars in addition" begin
@@ -90,12 +92,32 @@ sig = Signature(3, 1)
     @test reverse(blade(1, 2, 3) + blade(2) + blade(2, 3)) == blade(3, 2, 1) + blade(2) + blade(3, 2)
   end
 
+  @testset "Complements" begin
+    sig = Signature(3, 0, 1)
+
+    b = blade(1, 3)
+    b̅ = right_complement(sig, b)
+    @test b̅ == blade(4, 2)
+
+    b̅̅ = right_complement(sig, b̅)
+    @test b̅̅ == b
+    @test right_complement(sig, right_complement(sig, b)) == b
+
+    b = blade(4)
+    b̅ = right_complement(sig, b)
+    @test b̅ == blade(3, 2, 1)
+
+    b̅̅ = right_complement(sig, b̅)
+    @test b̅̅ == -b
+    @test simplified(sig, :∧, b, b̅) == pseudoscalar(sig)
+  end
+
   @testset "Common operators" begin
     @test simplified(sig, :⦿, blade(1, 2), blade(1, 2)) == scalar(-1)
     @test simplified(sig, :⋅, blade(1), blade(1, 2)) == blade(2)
-    @test simplified(sig, :×, blade(1), blade(2)) == scalar(0.5) * blade(1, 2) + scalar(:(0.5 * (-1 * -1))) * blade(1, 2)
-    @test simplified(sig, :dual, blade(1)) == blade(2, 3, 4)
-    @test simplified(sig, :inverse, blade(1)) == blade(1)
+    @test simplified(sig, :×, blade(1), blade(2)) == scalar(0.5) * blade(1, 2) + scalar(0.5) * blade(1, 2)
+    @test simplified(sig, :dual, blade(1)) == blade(4, 3, 2)
+    @test simplified(sig, :inverse, blade(1)) == scalar(1.0) * blade(1)
     @test simplified(sig, :inverse, scalar(0.5) * blade(1)) == scalar(:(0.5 * inv(0.5 * 0.5))) * blade(1)
     @test simplified(sig, :∧, blade(1), blade(2)) == blade(1, 2)
   end

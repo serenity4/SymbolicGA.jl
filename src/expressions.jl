@@ -8,6 +8,7 @@ mutable struct Expression
     ex = new()
     ex.head = head
     ex.args = args
+    !isnothing(grade) && (ex.grade = grade)
     !simplify && return ex
     simplify!(ex, nothing)
   end
@@ -83,13 +84,8 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   end
 
   # Remove scalar unit elements for multiplication and addition.
-  if head === :*
-    filter!(x -> !isexpr(x, :scalar) || x[1] ≠ 1, args)
-    isempty(args) && return scalar(1)
-  elseif head === :+
-    filter!(x -> !isexpr(x, :scalar) || x[1] ≠ 0, args)
-    isempty(args) && return scalar(0)
-  end
+  sc = remove_unit_elements!(args, head)
+  !isnothing(sc) && return sc
 
   if in(head, (:*, :+))
     length(args) == 1 && return args[1]
@@ -105,9 +101,8 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
       opaque_scalars = filter(isopaquescalar, scalars)
       if length(opaque_scalars) ≥ 2
         opaque_part = scalar(Expr(:call, head, [arg[1] for arg in opaque_scalars]...))
-        opaque_scalar = length(opaque_scalars) == ns ? opaque_part : Expression(head, scalar.(filter!(!isopaquescalar, scalars))..., opaque_part)
-        length(opaque_scalars) == length(args) && return opaque_scalar
-        scalars = opaque_scalar
+        length(opaque_scalars) == ns && return simplified(sig, head, opaque_part, nonscalars...)
+        return simplified(sig, head, opaque_part, setdiff(scalars, opaque_scalars)...)
       end
       args = [scalars; nonscalars]
     elseif ns == 1 && !isexpr(args[1]::Expression, :scalar)
@@ -137,10 +132,13 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
         ex = blade(sig, blade_args)
         # Return the blade if all the terms were collapsed.
         nb == n && return ex
-        return simplified(sig, :*, Any[ex; args])
+        return simplified(sig, :*, Any[args; ex])
       end
     end
   end
+
+  # Simplify -1 factors in scalar products.
+  head === :scalar && (args[1] = simplify_scalar_negations(args[1]))
 
   # Check that arguments make sense.
   n = expected_nargs(head)
@@ -152,7 +150,6 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     !isnothing(sig) && @assert 0 ≤ args[1] ≤ dimension(sig)
   end
   head === :dual && @assert isa(args[1], Expression)
-
 
   # Distribute products over addition.
   head in (:*, :⦿, :∧, :⋅, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
@@ -201,12 +198,23 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     return simplified(sig, :*, a, simplified(sig, :inverse, b))
   end
 
-  head === :dual && return simplified(sig, :*, args[1]::Expression, reverse(pseudoscalar(sig)))
+  head === :dual && return right_complement(sig, args[1]::Expression)
 
   ex.grade = infer_grade(head, args)::GradeInfo
   ex.args = args
 
   ex
+end
+
+function remove_unit_elements!(args, head)
+  if head === :*
+    filter!(x -> !isexpr(x, :scalar) || x[1] !== 1, args)
+    isempty(args) && return scalar(1)
+  elseif head === :+
+    filter!(x -> !isexpr(x, :scalar) || x[1] !== 0, args)
+    isempty(args) && return scalar(0)
+  end
+  nothing
 end
 
 function expected_nargs(head)

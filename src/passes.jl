@@ -81,6 +81,42 @@ function project!(ex, g, level = 0)
   ex
 end
 
+"""
+Return the right complement x̅ of x.
+
+It is assumed that all products have been distributed and all blades simplified.
+"""
+function right_complement(sig, ex)
+  # Mark all blades to complement.
+  # They are not complemented directly because simplifications may lead to further calls to
+  # the closure with already complemented blades, causing it to be complemented more than once.
+  marked = postwalk(ex) do ex
+    isexpr(ex, :blade) && return Expression(:blade_complement, ex.args; simplify = false, grade = ex.grade)
+    ex
+  end
+  prewalk(marked) do ex
+    isexpr(ex, :blade_complement) && return right_complement_blade(sig, ex.args)
+    ex
+  end
+end
+
+function right_complement_blade(sig, indices)
+  blade(sig, reverse(setdiff(1:dimension(sig), indices)))
+end
+
+function simplify_scalar_negations(sc)
+  if Meta.isexpr(sc, :call) && sc.args[1] === :*
+    n = count(x -> x === -1, sc.args)
+    if n > 1
+      sc_args = filter(x -> x !== -1, sc.args)
+      isodd(n) && insert!(sc_args, 2, -1)
+      length(sc_args) == 1 && return 1
+      return Expr(:call, sc_args...)
+    end
+  end
+  sc
+end
+
 function apply_reverse_operators(ex::Expression)
   prewalk(ex) do ex
     isexpr(ex, :reverse) || return ex
