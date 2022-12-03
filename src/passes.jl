@@ -1,35 +1,3 @@
-function expand_operators(ex::Expression, s::Signature)
-  postwalk(ex) do ex
-    if isexpr(ex, :∧)
-      # The outer product is associative, no issues there.
-      # FIXME: The grade may be unknown for multivectors.
-      project!(Expression(:*, ex.args), sum(grade, ex))
-    elseif isexpr(ex, :⋅)
-      length(ex) == 2 || error("The inner product must have only two operands, as no associativity law is available to derive a canonical binarization.")
-      # Homogeneous vectors are expected, so the grade should be known.
-      r, s = grade(ex[1]::Expression), grade(ex[2]::Expression)
-      (iszero(r) || iszero(s)) && return scalar(0)
-      project(abs(r - s), Expression(:*, ex.args))
-    elseif isexpr(ex, :⦿)
-      project(0, Expression(:*, ex.args))
-    elseif isexpr(ex, :×)
-      length(ex) == 2 || error("The commutator product must have only two operands, as no associativity law is available to derive a canonical binarization.")
-      a, b = ex[1]::Expression, ex[2]::Expression
-      scalar(0.5) * (a * b - b * a)
-    elseif isexpr(ex, :inverse)
-      a = ex[1]::Expression
-      reverse(a) / project(0, a * a)
-    elseif isexpr(ex, :/)
-      @assert length(ex) == 2
-      /(ex...)
-    elseif isexpr(ex, :dual)
-      ex[1]::Expression * reverse(pseudoscalar(s))
-    else
-      ex
-    end
-  end
-end
-
 function disassociate1(args, op::Symbol, sig::Optional{Signature})
   new_args = []
   for arg in args
@@ -93,13 +61,20 @@ function restructure_sums(ex::Expression)
   end
 end
 
-function project!(ex, g)
+function project!(ex, g, level = 0)
   isa(ex, Expression) || return ex
-  isexpr(ex, :scalar) && return in(0, g) ? ex : scalar(0)
-  any(!isempty(intersect(g, g′)) for g′ in grade(ex)) || return scalar(0)
+  if isexpr(ex, :scalar)
+    in(0, g) && return ex
+    iszero(level) && @debug "Scalar expression annihilated in projection into grade(s) $g" ex
+    return scalar(0)
+  end
+  if all(isempty(intersect(g, g′)) for g′ in grade(ex))
+    iszero(level) && @debug "Non-scalar expression annihilated in projection into grade(s) $g" ex
+    return scalar(0)
+  end
   if isexpr(ex, :+)
     for (i, x) in enumerate(ex)
-      ex.args[i] = project!(x, g)
+      ex.args[i] = project!(x, g, level + 1)
     end
     return simplify!(ex)
   end
@@ -131,13 +106,6 @@ function propagate_reverse(args)
     in(arg.grade, (0, 1)) ? push!(res, arg) : push!(res, reverse(arg))
   end
   res
-end
-
-function disassociate_kvectors(ex::Expression)
-  postwalk(ex) do ex
-    isexpr(ex, :kvector) && any(isexpr(:kvector), ex.args) && return disassociate1(ex, :kvector)
-    ex
-  end
 end
 
 function group_kvector_blades(ex::Expression)

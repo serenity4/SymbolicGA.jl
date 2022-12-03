@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: restructure_sums, disassociate_kvectors, fill_kvector_components
+using LazyGeometricAlgebra: restructure_sums, fill_kvector_components
 
 @testset "Passes" begin
   x, y = scalar(:x) * blade(1, 3), scalar(:x) * blade(1, 2)

@@ -48,7 +48,7 @@ function extract_grade_from_annotation(t, sig::Signature)
   t === :Pseudoscalar && return dimension(sig)
   t === :Multivector && return 0:dimension(sig)
   Meta.isexpr(t, :curly, 2) && t.args[1] === :KVector && return t.args[2]::Int
-  Meta.isexpr(t, :call) && t.args[1] === :+ && return Int[extract_grade_from_annotation(t, sig) for t in @view t.args[2:end]]
+  Meta.isexpr(t, :annotate_projection) && t.args[1] === :+ && return Int[extract_grade_from_annotation(t, sig) for t in @view t.args[2:end]]
   Meta.isexpr(t, :curly) && t.args[1] === :Multivector && return @view t.args[2:end]
   error("Unknown grade projection for algebraic element $t")
 end
@@ -56,7 +56,16 @@ end
 function extract_expression(ex::Expr, sig::Signature)
   Meta.isexpr(ex, :block) && (ex = expand_variables(ex))
   @debug "After variable expansion: $(stringc(ex))"
-  postwalk(ex) do ex
+
+  # Make sure calls in annotations are not interpreted as actual operations.
+  ex = prewalk(ex) do ex
+    if Meta.isexpr(ex, :(::)) && Meta.isexpr(ex.args[2], :call)
+      ex.args[2] = Expr(:annotate_projection, ex.args[2].args...)
+    end
+    ex
+  end
+
+  ex = postwalk(ex) do ex
     if Meta.isexpr(ex, ADJOINT_SYMBOL)
       simplified(sig, :reverse, ex.args[1]::Expression)
     elseif Meta.isexpr(ex, :call)
@@ -76,6 +85,9 @@ function extract_expression(ex::Expr, sig::Signature)
       ex
     end
   end
+
+  isa(ex, Expression) || error("Could not fully extract expression: $ex\n\nOutermost expression has head $(ex.head) and arguments $(ex.args)")
+  ex
 end
 
 """

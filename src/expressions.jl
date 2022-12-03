@@ -49,10 +49,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
         if !isnothing(last)
           if new == last
             m = metric(sig, last)
-            if iszero(m)
-              fac = 0
-              break
-            end
+            iszero(m) && return scalar(0)
             fac *= m
             length(args) == 2 && return simplified(sig, :scalar, fac)
             deleteat!(args, i)
@@ -67,7 +64,6 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
         end
         i += 1
       end
-      iszero(fac) && return simplified(sig, :scalar, fac)
       return simplified(sig, :*, simplified(sig, :scalar, fac), simplified(sig, :blade, args))
     end
   end
@@ -81,7 +77,10 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   end
 
   # Simplify whole expression to zero if a product term is zero.
-  head === :* && any(isexpr(x, :scalar) && x[1] == 0 for x in args) && return scalar(0)
+  if head === :* && any(isexpr(x, :scalar) && x[1] == 0 for x in args)
+    any(!isexpr(x, :scalar) for x in args) && @debug "Non-scalar expression annihilated by a zero multiplication term" args
+    return scalar(0)
+  end
 
   # Remove scalar unit elements for multiplication and addition.
   if head === :*
@@ -177,7 +176,10 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     # The inner product must have only two operands, as no associativity law is available to derive a canonical binarization.
     # Homogeneous vectors are expected, so the grade should be known.
     r, s = grade(args[1]::Expression)::Int, grade(args[2]::Expression)::Int
-    (iszero(r) || iszero(s)) && return scalar(0)
+    if (iszero(r) || iszero(s))
+      (!iszero(r) || !iszero(s)) && @debug "Non-scalar expression annihilated in inner product with a scalar"
+      return scalar(0)
+    end
     return project!(simplified(sig, :*, args), abs(r - s))
   end
 
