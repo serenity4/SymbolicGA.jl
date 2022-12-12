@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: infer_grade, project!, right_complement
+using LazyGeometricAlgebra: infer_grade, project!
 
 sig = Signature(3, 1)
 
@@ -24,6 +24,13 @@ sig = Signature(3, 1)
     @test infer_grade(:kvector, [blade(1, 2), blade(2, 3)]) == 2
     @test infer_grade(:multivector, [blade(1, 2), blade(2, 3)]) == [2]
     @test infer_grade(:multivector, [kvector(blade(1, 2), blade(2, 3)), kvector(blade(1))]) == [1, 2]
+
+    ex = blade(1, 2)
+    @test grade(ex) == 2
+    @test antigrade(Signature(3), ex) == 1
+    ex = blade(1, 2) + blade(1)
+    @test grade(ex) == [1, 2]
+    @test antigrade(Signature(3), ex) == [2, 1]
   end
 
   @testset "Blades and metric simplifications" begin
@@ -90,6 +97,25 @@ sig = Signature(3, 1)
     @test reverse(blade(1, 2)) == blade(2, 1)
     @test reverse(scalar(:x) * blade(1, 2)) == scalar(:x) * blade(2, 1)
     @test reverse(blade(1, 2, 3) + blade(2) + blade(2, 3)) == blade(3, 2, 1) + blade(2) + blade(3, 2)
+
+    @test antireverse(sig, blade(1, 2)) == blade(2, 1)
+    @test antireverse(sig, scalar(:x) * blade(1, 2)) == scalar(:x) * blade(2, 1)
+    @test antireverse(sig, blade(1, 2, 3) + blade(2) + blade(2, 3)) == blade(1, 2, 3) - blade(2) + blade(3, 2)
+  end
+
+  @testset "Exterior products" begin
+    x = blade(1, 2)
+    y = blade(3)
+
+    @test exterior_product(blade(1, 2), blade(3)) == blade(1, 2, 3)
+    @test exterior_product(sig, blade(1, 2), blade(2)) == scalar(0)
+
+    # @testset "De Morgan laws" begin
+    #   @test right_complement(sig, exterior_product(x, y)) == exterior_antiproduct(sig, right_complement(sig, a), right_complement(sig, b))
+    #   @test right_complement(sig, exterior_antiproduct(sig, x, y)) == exterior_product(right_complement(sig, a), right_complement(sig, b))
+    #   @test left_complement(exterior_product(x, y)) == exterior_antiproduct(sig, left_complement(a), left_complement(b))
+    #   @test left_complement(exterior_antiproduct(sig, x, y)) == exterior_product(left_complement(a), left_complement(b))
+    # end
   end
 
   @testset "Complements" begin

@@ -152,21 +152,22 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   head === :dual && @assert isa(args[1], Expression)
 
   # Distribute products over addition.
-  head in (:*, :⦿, :∧, :⋅, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
+  head in (:*, :⦿, :∧, :∨, :⋅, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
 
   # Eagerly apply projections.
   head === :project && return project!(args[2]::Expression, args[1]::GradeInfo)
 
   # Eagerly apply reversions.
-  head === :reverse && return apply_reverse_operators(ex)
+  head in (:reverse, :antireverse) && return apply_reverse_operators(ex, sig)
 
   # Expand common operators.
   # ========================
 
-  # The outer product is associative, no issues there.
-  if head === :∧
-    g = sum(x -> grade(x::Expression)::Int, args)
-    return project!(simplified(sig, :*, args), g)
+  # The exterior (anti)product is associative, no issues there.
+  if head in (:∧, :∨)
+    anti = head === :∨
+    n = sum(anti ? x -> antigrade(x::Expression)::Int : x -> grade(x::Expression)::Int, args)
+    return project!(simplified(sig, :*, args), n)
   end
 
   if head === :⋅
@@ -198,7 +199,8 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     return simplified(sig, :*, a, simplified(sig, :inverse, b))
   end
 
-  head === :dual && return right_complement(sig, args[1]::Expression)
+  head === :dual && (head = :right_complement)
+  head === :right_complement && return right_complement(sig, args[1]::Expression)
 
   ex.grade = infer_grade(head, args)::GradeInfo
   ex.args = args
@@ -218,7 +220,7 @@ function remove_unit_elements!(args, head)
 end
 
 function expected_nargs(head)
-  in(head, (:scalar, :inverse, :reverse, :dual)) && return 1
+  in(head, (:scalar, :inverse, :reverse, :antireverse, :dual)) && return 1
   in(head, (:project, :⋅, :/, :×)) && return 2
   nothing
 end
@@ -317,10 +319,12 @@ multivector(args::AbstractVector) = Expression(:multivector, args)
 multivector(xs...) = multivector(collect(Any, xs))
 project(g::GradeInfo, ex) = Expression(:project, g, ex)
 Base.reverse(ex::Expression) = Expression(:reverse, ex)
-pseudoscalar(s::Signature) = blade(1:dimension(s))
+antireverse(sig::Signature, ex::Expression) = simplified(sig, :antireverse, ex)
+pseudoscalar(sig::Signature) = blade(1:dimension(sig))
 
 blade(sig::Optional{Signature}, xs...) = simplified(sig, :blade, xs...)
 
+⟑(x::Expression, args::Expression...) = Expression(:⟑, x, args...)
 Base.:(*)(x::Expression, args::Expression...) = Expression(:*, x, args...)
 Base.:(+)(x::Expression, args::Expression...) = Expression(:+, x, args...)
 Base.:(-)(x::Expression, args::Expression...) = Expression(:-, x, args...)
@@ -330,7 +334,9 @@ Base.inv(x::Expression) = Expression(:inverse, x)
 ⋅(x::Expression, y::Expression) = Expression(:⋅, x, y)
 ∧(x::Expression, y::Expression) = Expression(:∧, x, y)
 ×(x::Expression, y::Expression) = Expression(:×, x, y)
-∨(x::Expression, y::Expression) = Expression(:∨, x, y)
+exterior_product(x::Expression, y::Expression) = Expression(:∧, x, y)
+exterior_product(sig::Signature, x::Expression, y::Expression) = simplified(sig, :∧, x, y)
+exterior_antiproduct(sig::Signature, x::Expression, y::Expression) = simplified(sig, :∨, x, y)
 
 # Traversal/transformation utilities.
 

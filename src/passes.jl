@@ -117,31 +117,38 @@ function simplify_scalar_negations(sc)
   sc
 end
 
-function apply_reverse_operators(ex::Expression)
+function apply_reverse_operators(ex::Expression, sig::Optional{Signature})
   prewalk(ex) do ex
-    isexpr(ex, :reverse) || return ex
-    arg = ex[1]
-    isa(arg, Expression) || error("Expected an expression as argument to `reverse`.")
-    if isexpr(arg, (:+, :kvector, :multivector)) # distribute over addition
-      Expression(arg.head, propagate_reverse(arg.args))
-    elseif isexpr(arg, (:*, :blade))
-      (; args) = arg
-      new_args = isexpr(arg, :blade) || count(x -> x.grade !== 0, args) > 1 ? reverse(args) : args
-      !isexpr(arg, (:scalar, :blade)) && (new_args = propagate_reverse(new_args))
-      Expression(arg.head, new_args)
-    else
-      @assert false "Unexpected operator $(arg.head) encountered when applying reverse operators."
-    end
+    isexpr(ex, (:reverse, :antireverse)) || return ex
+    reverse_op = ex.head
+    anti = reverse_op === :antireverse
+    anti && sig::Signature
+    ex = ex[1]
+    isa(ex, Expression) || error("Expected an expression as argument to `$reverse_op`.")
+    # Distribute over addition.
+    isexpr(ex, (:+, :kvector, :multivector)) && return simplified(sig, ex.head, anti ? antireverse.(sig, ex) : reverse.(ex))
+    !anti && in(ex.grade, (0, 1)) && return ex
+    anti && in(antigrade(sig, ex.grade), (0, 1)) && return ex
+    isexpr(ex, :*) && return propagate_reverse(reverse_op, ex, sig)
+    @assert isexpr(ex, :blade) "Unexpected operator $head encountered when applying $reverse_op operators."
+    n = anti ? antigrade(sig, ex)::Int : grade(ex)::Int
+    fac = (-1)^(n * (n - 1) ÷ 2)
+    isone(fac) ? ex : -ex
   end
 end
 
-function propagate_reverse(args)
+# grade(x) + antigrade(x) == dimension(sig)
+antigrade(sig::Signature, g::Int) = dimension(sig) - g
+antigrade(sig::Signature, g::Vector{Int}) = antigrade.(sig, g)
+antigrade(sig::Signature, ex::Expression) = antigrade(sig, ex.grade)
+
+function propagate_reverse(reverse_op, ex::Expression, sig::Optional{Signature})
   res = Any[]
-  for arg in args
+  for arg in ex
     arg::Expression
-    in(arg.grade, (0, 1)) ? push!(res, arg) : push!(res, reverse(arg))
+    in(arg.grade, (0, 1)) ? push!(res, arg) : push!(res, simplified(sig, reverse_op, arg))
   end
-  res
+  simplified(sig, :*, res)
 end
 
 function group_kvector_blades(ex::Expression)
