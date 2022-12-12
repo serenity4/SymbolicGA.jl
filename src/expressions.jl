@@ -6,6 +6,9 @@ mutable struct Expression
   args::Vector{Any}
   function Expression(head::Symbol, args::AbstractVector; simplify = true, grade = nothing)
     ex = new()
+    # Aliases.
+    head === :⋅ && (head = :●)
+    # head === :* && (head = :⟑)
     ex.head = head
     ex.args = args
     !isnothing(grade) && (ex.grade = grade)
@@ -152,7 +155,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   head === :dual && @assert isa(args[1], Expression)
 
   # Distribute products over addition.
-  head in (:*, :⦿, :∧, :∨, :⋅, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
+  head in (:*, :⟑, :⦿, :∧, :∨, :●, :○, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
 
   # Eagerly apply projections.
   head === :project && return project!(args[2]::Expression, args[1]::GradeInfo)
@@ -170,7 +173,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     return project!(simplified(sig, :*, args), n)
   end
 
-  if head === :⋅
+  if head === :●
     # The inner product must have only two operands, as no associativity law is available to derive a canonical binarization.
     # Homogeneous vectors are expected, so the grade should be known.
     r, s = grade(args[1]::Expression)::Int, grade(args[2]::Expression)::Int

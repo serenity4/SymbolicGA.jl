@@ -140,7 +140,7 @@ sig = Signature(3, 1)
 
   @testset "Common operators" begin
     @test simplified(sig, :⦿, blade(1, 2), blade(1, 2)) == scalar(-1)
-    @test simplified(sig, :⋅, blade(1), blade(1, 2)) == blade(2)
+    @test simplified(sig, :●, blade(1), blade(1, 2)) == simplified(sig, :⋅, blade(1), blade(1, 2)) == blade(2)
     @test simplified(sig, :×, blade(1), blade(2)) == scalar(0.5) * blade(1, 2) + scalar(0.5) * blade(1, 2)
     @test simplified(sig, :dual, blade(1)) == blade(4, 3, 2)
     @test simplified(sig, :inverse, blade(1)) == scalar(1.0) * blade(1)
