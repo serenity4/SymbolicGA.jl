@@ -55,10 +55,10 @@ sig = Signature(3, 1)
   end
 
   @testset "Simplification and canonicalization of scalar factors" begin
-    @test blade(1, 2) * scalar(3) == Expression(:*, scalar(3), blade(1, 2); simplify = false)
-    @test blade(1, 2) * scalar(3) * scalar(5) == Expression(:*, scalar(:(3 * 5)), blade(1, 2); simplify = false)
-    @test blade(1, 2) * scalar(:x) * scalar(:(y[1])) == Expression(:*, scalar(:(x * y[1])), blade(1, 2); simplify = false)
-    @test scalar(1) * blade(1, 2) * scalar(3) == Expression(:*, scalar(3), blade(1, 2); simplify = false)
+    @test blade(1, 2) * scalar(3) == Expression(:⟑, scalar(3), blade(1, 2); simplify = false)
+    @test blade(1, 2) * scalar(3) * scalar(5) == Expression(:⟑, scalar(:(3 * 5)), blade(1, 2); simplify = false)
+    @test blade(1, 2) * scalar(:x) * scalar(:(y[1])) == Expression(:⟑, scalar(:(x * y[1])), blade(1, 2); simplify = false)
+    @test scalar(1) * blade(1, 2) * scalar(3) == Expression(:⟑, scalar(3), blade(1, 2); simplify = false)
     @test blade(1, 2) * scalar(0) == scalar(0)
     @test scalar(inv(scalar(5))) * scalar(5) == scalar(0.2) * scalar(5) == scalar(:(0.2 * 5))
     @test scalar(:(-1 * -1)) == scalar(1)

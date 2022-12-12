@@ -129,7 +129,7 @@ function apply_reverse_operators(ex::Expression, sig::Optional{Signature})
     isexpr(ex, (:+, :kvector, :multivector)) && return simplified(sig, ex.head, anti ? antireverse.(sig, ex) : reverse.(ex))
     !anti && in(ex.grade, (0, 1)) && return ex
     anti && in(antigrade(sig, ex.grade), (0, 1)) && return ex
-    isexpr(ex, :*) && return propagate_reverse(reverse_op, ex, sig)
+    isexpr(ex, :⟑) && return propagate_reverse(reverse_op, ex, sig)
     @assert isexpr(ex, :blade) "Unexpected operator $head encountered when applying $reverse_op operators."
     n = anti ? antigrade(sig, ex)::Int : grade(ex)::Int
     fac = (-1)^(n * (n - 1) ÷ 2)
@@ -148,7 +148,7 @@ function propagate_reverse(reverse_op, ex::Expression, sig::Optional{Signature})
     arg::Expression
     in(arg.grade, (0, 1)) ? push!(res, arg) : push!(res, simplified(sig, reverse_op, arg))
   end
-  simplified(sig, :*, res)
+  simplified(sig, ex.head, res)
 end
 
 function group_kvector_blades(ex::Expression)

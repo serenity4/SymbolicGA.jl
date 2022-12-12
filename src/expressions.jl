@@ -8,7 +8,7 @@ mutable struct Expression
     ex = new()
     # Aliases.
     head === :⋅ && (head = :●)
-    # head === :* && (head = :⟑)
+    head === :* && (head = :⟑)
     ex.head = head
     ex.args = args
     !isnothing(grade) && (ex.grade = grade)
@@ -38,7 +38,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     if !issorted(args)
       perm = sortperm(args)
       fac = isodd(parity(perm)) ? -1 : 1
-      return simplified(sig, :*, simplified(sig, :scalar, fac), simplified(sig, :blade, args[perm]))
+      return simplified(sig, :⟑, simplified(sig, :scalar, fac), simplified(sig, :blade, args[perm]))
     end
 
     # Apply metric.
@@ -68,20 +68,20 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
         end
         i += 1
       end
-      return simplified(sig, :*, simplified(sig, :scalar, fac), simplified(sig, :blade, args))
+      return simplified(sig, :⟑, simplified(sig, :scalar, fac), simplified(sig, :blade, args))
     end
   end
 
   if head === :-
     # Simplify unary minus operator to a multiplication with -1.
-    length(args) == 1 && return simplified(sig, :*, scalar(-1), args[1])
+    length(args) == 1 && return simplified(sig, :⟑, scalar(-1), args[1])
     # Transform binary minus expression into an addition.
     @assert length(args) == 2
     return simplified(sig, :+, args[1], -args[2])
   end
 
   # Simplify whole expression to zero if a product term is zero.
-  if head === :* && any(isexpr(x, :scalar) && x[1] == 0 for x in args)
+  if head === :⟑ && any(isexpr(x, :scalar) && x[1] == 0 for x in args)
     any(!isexpr(x, :scalar) for x in args) && @debug "Non-scalar expression annihilated by a zero multiplication term" args
     return scalar(0)
   end
@@ -90,7 +90,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   sc = remove_unit_elements!(args, head)
   !isnothing(sc) && return sc
 
-  if in(head, (:*, :+))
+  if in(head, (:⟑, :+))
     length(args) == 1 && return args[1]
 
     # Disassociate * and +.
@@ -103,7 +103,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
       scalars, nonscalars = filter(isexpr(:scalar), args), filter(!isexpr(:scalar), args)
       opaque_scalars = filter(isopaquescalar, scalars)
       if length(opaque_scalars) ≥ 2
-        opaque_part = scalar(Expr(:call, head, [arg[1] for arg in opaque_scalars]...))
+        opaque_part = scalar(Expr(:call, head === :⟑ ? :* : head, [arg[1] for arg in opaque_scalars]...))
         length(opaque_scalars) == ns && return simplified(sig, head, opaque_part, nonscalars...)
         return simplified(sig, head, opaque_part, setdiff(scalars, opaque_scalars)...)
       end
@@ -114,11 +114,11 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
       sc = args[i]::Expression
       deleteat!(args, i)
       pushfirst!(args, sc)
-      return simplified(sig, :*, args)
+      return simplified(sig, :⟑, args)
     end
 
     # Collapse all blades as one.
-    if head === :*
+    if head === :⟑
       # Collapse all bases and blades into a single blade.
       nb = count(isexpr(:blade), args)
       if nb > 1
@@ -135,7 +135,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
         ex = blade(sig, blade_args)
         # Return the blade if all the terms were collapsed.
         nb == n && return ex
-        return simplified(sig, :*, Any[args; ex])
+        return simplified(sig, :⟑, Any[args; ex])
       end
     end
   end
@@ -155,7 +155,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   head === :dual && @assert isa(args[1], Expression)
 
   # Distribute products over addition.
-  head in (:*, :⟑, :⦿, :∧, :∨, :●, :○, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
+  head in (:⟑, :⦿, :∧, :∨, :●, :○, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
 
   # Eagerly apply projections.
   head === :project && return project!(args[2]::Expression, args[1]::GradeInfo)
@@ -170,7 +170,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   if head in (:∧, :∨)
     anti = head === :∨
     n = sum(anti ? x -> antigrade(x::Expression)::Int : x -> grade(x::Expression)::Int, args)
-    return project!(simplified(sig, :*, args), n)
+    return project!(simplified(sig, :⟑, args), n)
   end
 
   if head === :●
@@ -181,15 +181,15 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
       (!iszero(r) || !iszero(s)) && @debug "Non-scalar expression annihilated in inner product with a scalar"
       return scalar(0)
     end
-    return project!(simplified(sig, :*, args), abs(r - s))
+    return project!(simplified(sig, :⟑, args), abs(r - s))
   end
 
-  head === :⦿ && return project!(simplified(sig, :*, args), 0)
+  head === :⦿ && return project!(simplified(sig, :⟑, args), 0)
 
   if head === :×
     # The commutator product must have only two operands, as no associativity law is available to derive a canonical binarization.
     a, b = args[1]::Expression, args[2]::Expression
-    return simplified(sig, :*, scalar(0.5), simplified(sig, :-, simplified(sig, :*, a, b), simplified(sig, :*, b, a)))
+    return simplified(sig, :⟑, scalar(0.5), simplified(sig, :-, simplified(sig, :⟑, a, b), simplified(sig, :⟑, b, a)))
   end
 
   if head === :inverse
@@ -199,7 +199,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
 
   if head === :/
     a, b = args[1]::Expression, args[2]::Expression
-    return simplified(sig, :*, a, simplified(sig, :inverse, b))
+    return simplified(sig, :⟑, a, simplified(sig, :inverse, b))
   end
 
   head === :dual && (head = :right_complement)
@@ -212,7 +212,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
 end
 
 function remove_unit_elements!(args, head)
-  if head === :*
+  if head === :⟑
     filter!(x -> !isexpr(x, :scalar) || x[1] !== 1, args)
     isempty(args) && return scalar(1)
   elseif head === :+
@@ -234,7 +234,7 @@ inverse(ex) = inv(ex)
 function infer_grade(head::Symbol, args)
   in(head, (:scalar, ⦿)) && return 0
   head === :blade && return count(isodd, map(x -> count(==(x), args), unique(args)))
-  if head === :*
+  if head === :⟑
     # Fast path for frequently encountered expressions.
     length(args) == 2 && isexpr(args[1], :scalar) && return (args[2]::Expression).grade
 
@@ -292,7 +292,7 @@ isexpr(ex, head::Symbol, n::Int) = isa(ex, Expression) && isexpr(ex, head) && le
 isexpr(heads) = ex -> isexpr(ex, heads)
 grade(ex::Expression) = ex.grade::GradeInfo
 grades(ex::Expression) = ex.grade::Vector{Int}
-isweighted(ex) = isexpr(ex, :*, 2) && isexpr(ex[1]::Expression, :scalar)
+isweighted(ex) = isexpr(ex, :⟑, 2) && isexpr(ex[1]::Expression, :scalar)
 isweightedblade(ex) = isweighted(ex) && isexpr(ex[2]::Expression, :blade)
 isopaquescalar(ex) = isexpr(ex, :scalar) && !isa(ex[1], Expression)
 
@@ -328,6 +328,7 @@ pseudoscalar(sig::Signature) = blade(1:dimension(sig))
 blade(sig::Optional{Signature}, xs...) = simplified(sig, :blade, xs...)
 
 ⟑(x::Expression, args::Expression...) = Expression(:⟑, x, args...)
+⟑(x, ys...) = *(x, ys...)
 Base.:(*)(x::Expression, args::Expression...) = Expression(:*, x, args...)
 Base.:(+)(x::Expression, args::Expression...) = Expression(:+, x, args...)
 Base.:(-)(x::Expression, args::Expression...) = Expression(:-, x, args...)
@@ -361,14 +362,14 @@ end
 function Base.show(io::IO, ex::Expression)
   isexpr(ex, :blade) && return print(io, 'e', join(subscript.(ex)))
   isexpr(ex, :scalar) && return print_scalar(io, ex[1])
-  if isexpr(ex, :*) && isexpr(ex[end], :blade)
+  if isexpr(ex, :⟑) && isexpr(ex[end], :blade)
     if length(ex) == 2 && isexpr(ex[1], :scalar) && (!Meta.isexpr(ex[1][1], :call) || ex[1][1].args[1] == getcomponent)
-      return print(io, ex[1], " * ", ex[end])
+      return print(io, ex[1], " ⟑ ", ex[end])
     else
-      return print(io, '(', join(ex[1:(end - 1)], " * "), ") * ", ex[end])
+      return print(io, '(', join(ex[1:(end - 1)], " ⟑ "), ") ⟑ ", ex[end])
     end
   end
-  isexpr(ex, (:*, :+, :multivector)) && return print(io, '(', Expr(:call, ex.head, ex.args...), ')')
+  isexpr(ex, (:⟑, :+, :multivector)) && return print(io, '(', Expr(:call, ex.head, ex.args...), ')')
   if isexpr(ex, :project)
     printstyled(io, '⟨'; color = :yellow)
     print(io, ex[2])

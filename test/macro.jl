@@ -54,7 +54,7 @@ end
   ex2 = restructure(ex, sig)
   @test isexpr(ex2, :kvector, 1)
   @test isweighted(ex2[1]) && isexpr(ex2[1][2], :blade)
-  @test string(ex2) == "kvector₃((x[1] * y[3] + x[2] * y[2] * -1 + x[3] * y[1]) * e₁₂₃)"
+  @test string(ex2) == "kvector₃((x[1] * y[3] + x[2] * y[2] * -1 + x[3] * y[1]) ⟑ e₁₂₃)"
 
   ex = @macroexpand @ga (2, 1) x::Vector ∧ y::Vector + x::Vector * z::Pseudoscalar
   @test isa(ex, Expr)

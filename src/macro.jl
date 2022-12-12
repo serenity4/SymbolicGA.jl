@@ -269,7 +269,7 @@ function to_expr(ex)
     return ret
   end
   isexpr(ex, :blade) && return 1
-  if isexpr(ex, :*)
+  if isexpr(ex, :⟑)
     @assert length(ex) == 2
     @assert isexpr(ex[2], :blade)
     return to_final_expr(ex[1]::Expression)
