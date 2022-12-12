@@ -90,10 +90,15 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   sc = remove_unit_elements!(args, head)
   !isnothing(sc) && return sc
 
-  if in(head, (:⟑, :+))
+  if head === :⩒ && length(args) == 2 && all(isexpr(:blade), args)
+    x, y = args[1]::Expression, args[2]::Expression
+    return blade_complement(sig, simplified(sig, :⟑, blade_complement(sig, x), blade_complement(sig, y)))
+  end
+
+  if in(head, (:⟑, :⩒, :+))
     length(args) == 1 && return args[1]
 
-    # Disassociate * and +.
+    # Disassociate ⟑, ⩒ and +.
     any(isexpr(head), args) && return disassociate1(args, head, sig)
 
     # Apply scalar simplifications and group any scalars at the front.
@@ -152,10 +157,9 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     @assert isa(args[1], Int) && isa(args[2], Expression)
     !isnothing(sig) && @assert 0 ≤ args[1] ≤ dimension(sig)
   end
-  head === :dual && @assert isa(args[1], Expression)
 
   # Distribute products over addition.
-  head in (:⟑, :⦿, :∧, :∨, :●, :○, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
+  head in (:⟑, :⩒, :∧, :∨, :●, :○, :⦿, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
 
   # Eagerly apply projections.
   head === :project && return project!(args[2]::Expression, args[1]::GradeInfo)
@@ -169,7 +173,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   # The exterior (anti)product is associative, no issues there.
   if head in (:∧, :∨)
     anti = head === :∨
-    n = sum(anti ? x -> antigrade(x::Expression)::Int : x -> grade(x::Expression)::Int, args)
+    n = sum(anti ? x -> antigrade(sig::Signature, x::Expression)::Int : x -> grade(x::Expression)::Int, args)
     return project!(simplified(sig, :⟑, args), n)
   end
 
@@ -202,9 +206,6 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     return simplified(sig, :⟑, a, simplified(sig, :inverse, b))
   end
 
-  head === :dual && (head = :right_complement)
-  head === :right_complement && return right_complement(sig, args[1]::Expression)
-
   ex.grade = infer_grade(head, args)::GradeInfo
   ex.args = args
 
@@ -222,9 +223,11 @@ function remove_unit_elements!(args, head)
   nothing
 end
 
+blade_complement(sig::Signature, b::Expression) = blade(sig, reverse(setdiff(1:dimension(sig), b.args)))
+
 function expected_nargs(head)
-  in(head, (:scalar, :inverse, :reverse, :antireverse, :dual)) && return 1
-  in(head, (:project, :⋅, :/, :×)) && return 2
+  in(head, (:scalar, :inverse, :reverse, :antireverse,)) && return 1
+  in(head, (:project, :⋅, :/, :×, :⩒)) && return 2
   nothing
 end
 
@@ -391,7 +394,7 @@ end
 Return `val` as a subscript, used for printing `UnitBlade` and `Blade` instances.
 """
 function subscript(val)
-    r = div(val, 10)
-    subscript_char(x) = Char(8320 + x)
-    r > 0 ? string(subscript_char(r), subscript_char(mod(val, 10))) : string(subscript_char(val))
+  r = div(val, 10)
+  subscript_char(x) = Char(8320 + x)
+  r > 0 ? string(subscript_char(r), subscript_char(mod(val, 10))) : string(subscript_char(val))
 end

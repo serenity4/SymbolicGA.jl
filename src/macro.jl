@@ -20,7 +20,7 @@ end
 
 const ADJOINT_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (:∧, :∨, :⋅, :●, :○, :⦿, :*, :+, :×, :-, :/, :inv, :reverse, :antireverse, :left_complement, :right_complement, :dual))
+isreserved(op::Symbol) = in(op, (⟑, :⩒, :∧, :∨, :⋅, :●, :○, :⦿, :*, :+, :×, :-, :/, :inv, :reverse, :antireverse))
 
 function extract_blade_from_annotation(t, sig::Signature)
   isa(t, Symbol) || return nothing
@@ -54,7 +54,7 @@ function extract_grade_from_annotation(t, sig::Signature)
 end
 
 function extract_expression(ex::Expr, sig::Signature)
-  Meta.isexpr(ex, :block) && (ex = expand_variables(ex))
+  ex = expand_variables(ex, sig)
   @debug "After variable expansion: $(stringc(ex))"
 
   # Make sure calls in annotations are not interpreted as actual operations.
@@ -90,13 +90,37 @@ function extract_expression(ex::Expr, sig::Signature)
   ex
 end
 
+macro arg(i) QuoteNode(Expr(:argument, i)) end
+
 """
 Expand variables from a block expression, yielding a final expression where all variables were substitued with their defining expression.
 """
-function expand_variables(ex::Expr)
-  @assert Meta.isexpr(ex, :block)
-  refs = Dict{Symbol,Any}()
-  funcs = Dict{Symbol,Any}()
+function expand_variables(ex::Expr, sig::Signature)
+  !Meta.isexpr(ex, :block) && (ex = Expr(:block, ex))
+  refs = Dict{Symbol,Any}(
+    :𝟏 => :e,
+    :𝟙 => Symbol(:e, join(1:dimension(sig))),
+    :⊣ => :left_interior_product,
+    :⊢ => :right_interior_product,
+    :⨼ => :left_interior_antiproduct,
+    :⨽ => :right_interior_antiproduct,
+  )
+  funcs = Dict{Symbol,Any}(
+    :bulk_left_complement => :(antireverse($(@arg 1)) ⟑ 𝟙),
+    :bulk_right_complement => :(reverse($(@arg 1)) ⟑ 𝟙),
+    :weight_left_complement => :(𝟏 ⩒ antireverse($(@arg 1))),
+    :weight_right_complement => :(𝟏 ⩒ reverse($(@arg 1))),
+    :left_complement => :(bulk_left_complement($(@arg 1)) + weight_left_complement($(@arg 1))),
+    :right_complement => :(bulk_right_complement($(@arg 1)) + weight_right_complement($(@arg 1))),
+    :left_interior_product => :(left_complement($(@arg 1)) ∨ $(@arg 2)),
+    :right_interior_product => :($(@arg 1) ∨ right_complement($(@arg 2))),
+    :left_interior_antiproduct => :($(@arg 1) ∧ right_complement($(@arg 2))),
+    :right_interior_antiproduct => :(left_complement($(@arg 1)) ∧ $(@arg 2)),
+    :bulk_norm => :(sqrt(○($(@arg 1), reverse($(@arg 1)))::𝟏)),
+    :weight_norm => :(sqrt(○($(@arg 1), antireverse(@arg 1))::𝟙)),
+    :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
+    :unitize => :($(@arg 1) / weight_norm($(@arg 1))),
+  )
   rhs = nothing
   for subex in ex.args
     isa(subex, LineNumberNode) && continue

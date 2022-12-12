@@ -109,40 +109,12 @@ sig = Signature(3, 1)
 
     @test exterior_product(blade(1, 2), blade(3)) == blade(1, 2, 3)
     @test exterior_product(sig, blade(1, 2), blade(2)) == scalar(0)
-
-    # @testset "De Morgan laws" begin
-    #   @test right_complement(sig, exterior_product(x, y)) == exterior_antiproduct(sig, right_complement(sig, a), right_complement(sig, b))
-    #   @test right_complement(sig, exterior_antiproduct(sig, x, y)) == exterior_product(right_complement(sig, a), right_complement(sig, b))
-    #   @test left_complement(exterior_product(x, y)) == exterior_antiproduct(sig, left_complement(a), left_complement(b))
-    #   @test left_complement(exterior_antiproduct(sig, x, y)) == exterior_product(left_complement(a), left_complement(b))
-    # end
-  end
-
-  @testset "Complements" begin
-    sig = Signature(3, 0, 1)
-
-    b = blade(1, 3)
-    b̅ = right_complement(sig, b)
-    @test b̅ == blade(4, 2)
-
-    b̅̅ = right_complement(sig, b̅)
-    @test b̅̅ == b
-    @test right_complement(sig, right_complement(sig, b)) == b
-
-    b = blade(4)
-    b̅ = right_complement(sig, b)
-    @test b̅ == blade(3, 2, 1)
-
-    b̅̅ = right_complement(sig, b̅)
-    @test b̅̅ == -b
-    @test simplified(sig, :∧, b, b̅) == pseudoscalar(sig)
   end
 
   @testset "Common operators" begin
     @test simplified(sig, :⦿, blade(1, 2), blade(1, 2)) == scalar(-1)
     @test simplified(sig, :●, blade(1), blade(1, 2)) == simplified(sig, :⋅, blade(1), blade(1, 2)) == blade(2)
     @test simplified(sig, :×, blade(1), blade(2)) == scalar(0.5) * blade(1, 2) + scalar(0.5) * blade(1, 2)
-    @test simplified(sig, :dual, blade(1)) == blade(4, 3, 2)
     @test simplified(sig, :inverse, blade(1)) == scalar(1.0) * blade(1)
     @test simplified(sig, :inverse, scalar(0.5) * blade(1)) == scalar(:(0.5 * inv(0.5 * 0.5))) * blade(1)
     @test simplified(sig, :∧, blade(1), blade(2)) == blade(1, 2)

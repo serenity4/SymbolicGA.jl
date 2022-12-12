@@ -11,12 +11,14 @@ end
 
 @testset "Macro frontend" begin
   @testset "Function and variable expansion" begin
+    sig = Signature(3)
+
     # Recursive reference.
     ex = quote
       x = x::Vector
       x * x
     end
-    @test expand_variables(ex) == :(x::Vector * x::Vector)
+    @test expand_variables(ex, sig) == :(x::Vector * x::Vector)
 
     # Interleaved references/function calls.
     ex = quote
@@ -26,7 +28,7 @@ end
       x = g(y::Vector)
       x
     end
-    ex2 = expand_variables(ex)
+    ex2 = expand_variables(ex, sig)
     @test ex2 == :((1, 2, 3)::Vector + 1::e1)
 
     ex = quote
@@ -38,7 +40,7 @@ end
       radius(X) = normalize(radius2(X))::Scalar
       radius(S::Quadvector)
     end
-    ex2 = expand_variables(ex)
+    ex2 = expand_variables(ex, sig)
     symbols = traverse_collect(ex -> in(ex, (:radius, :radius2, :normalize, :weight, :magnitude2, :n)), ex2, Expr)
     @test isempty(symbols)
   end
@@ -116,7 +118,7 @@ end
   x = (1, 2, 3)
   @test_broken @macroexpand (@ga 3 (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector) isa Expr
 
-  @test (@ga 3 dual(1::e2)) == (@ga 3 1::e31)
+  @test_broken @eval (@ga 3 right_complement(1::e2)) == (@ga 3 1::e31)
 
   y = (101, 102, 103)
   @test (@ga 3 (x::1 × y::1)::2) == (@ga 3 (x::1 ∧ y::1))

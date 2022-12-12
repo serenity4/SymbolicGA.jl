@@ -57,7 +57,6 @@ macro pga3(args...)
     vector_3d(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
     magnitude2(x) = x ⦿ x
     point(x) = vector_3d(x) + 1.0::e4
-    regressive_product(x, y) = dual(dual(x) ∧ dual(y))
   end
   new_geometric_algebra(args...; signature = (3, 0, 1), definitions)
 end
@@ -70,7 +69,7 @@ Camera(A₁, A₂, A₃, A₄) = Camera(@pga3(point(A₄)), @pga3 point(A₁) �
 
 project_point(camera::Camera, x) = @pga3 begin
   line = camera.optical_center::Vector ∧ point(x)
-  regressive_product(line, camera.image_plane::Trivector)::(1 + 2 + 3)
+  (line ∨ camera.image_plane::Trivector)::(1 + 2 + 3)
 end
 
 @testset "3D Projective Geometric Algebra" begin
