@@ -90,7 +90,7 @@ C = (100, 200, 300)
   #   b̅̅ = right_complement(sig, b̅)
   #   @test b̅̅ == -b
 
-  #   @test simplified(sig, :∧, b, b̅) == pseudoscalar(sig)
+  #   @test simplified(sig, :∧, b, b̅) == antiscalar(sig)
   # end
 
   # @testset "De Morgan laws" begin

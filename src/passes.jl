@@ -51,7 +51,7 @@ function restructure_sums(ex::Expression)
       j = something(j, lastindex(grades) - (i - 1))
       j += i
       if j > i + 1
-        push!(new_args, iszero(g) ? +(args[i:(j - 1)]...) : kvector(args[i:(j - 1)]))
+        push!(new_args, kvector(args[i:(j - 1)]))
       else
         push!(new_args, args[i])
       end
@@ -63,14 +63,9 @@ end
 
 function project!(ex, g, level = 0)
   isa(ex, Expression) || return ex
-  if isexpr(ex, :scalar)
-    in(0, g) && return ex
-    iszero(level) && @debug "Scalar expression annihilated in projection into grade(s) $g" ex
-    return scalar(0)
-  end
   if all(isempty(intersect(g, g′)) for g′ in grade(ex))
     iszero(level) && @debug "Non-scalar expression annihilated in projection into grade(s) $g" ex
-    return scalar(0)
+    return factor(0)
   end
   if isexpr(ex, :+)
     for (i, x) in enumerate(ex)
@@ -81,17 +76,17 @@ function project!(ex, g, level = 0)
   ex
 end
 
-function simplify_scalar_negations(sc)
-  if Meta.isexpr(sc, :call) && sc.args[1] === :*
-    n = count(x -> x === -1, sc.args)
+function simplify_negations(fac)
+  if Meta.isexpr(fac, :call) && fac.args[1] === :*
+    n = count(x -> x === -1, fac.args)
     if n > 1
-      sc_args = filter(x -> x !== -1, sc.args)
+      sc_args = filter(x -> x !== -1, fac.args)
       isodd(n) && insert!(sc_args, 2, -1)
       length(sc_args) == 1 && return 1
       return Expr(:call, sc_args...)
     end
   end
-  sc
+  fac
 end
 
 function apply_reverse_operators(ex::Expression, sig::Optional{Signature})
@@ -130,20 +125,16 @@ end
 
 function group_kvector_blades(ex::Expression)
   isexpr(ex, :multivector) && return Expression(:multivector, group_kvector_blades.(ex.args))
-  isexpr(ex, :scalar) && return ex
   isexpr(ex, :blade) && return ex
-  isweighted(ex) && isexpr(ex[2], :blade) && return ex
+  isweightedblade(ex) && return ex
   @assert isexpr(ex, :kvector) "Expected k-vector expression, got $ex"
-
-  # Fast path for 0-vectors.
-  grade(ex) == 0 && return kvector(Expression(:+, ex.args))
 
   blade_weights = Dict{Vector{Int},Expression}()
   for arg in ex.args
     if isweighted(arg)
       weight, blade = arg[1]::Expression, arg[2]::Expression
     else
-      weight, blade = Expression(:scalar, 1), arg
+      weight, blade = factor(1), arg
     end
     indices = basis_vectors(arg)
     if haskey(blade_weights, indices)
@@ -152,7 +143,7 @@ function group_kvector_blades(ex::Expression)
       blade_weights[indices] = weight
     end
   end
-  kvector(Any[weight * blade(indices) for (indices, weight) in pairs(blade_weights)])
+  kvector(Any[(weight == factor(0) ? factor(Zero()) : weight) * blade(indices) for (indices, weight) in pairs(blade_weights)])
 end
 
 function fill_kvector_components(ex::Expression, s::Signature)
@@ -164,10 +155,14 @@ function fill_kvector_components(ex::Expression, s::Signature)
     for indices in combinations(1:dimension(s), g)
       next = i ≤ lastindex(ex) ? ex[i]::Expression : nothing
       if isnothing(next) || indices ≠ basis_vectors(next)
-        insert!(ex.args, i, scalar(0))
+        insert!(ex.args, i, weighted(blade(indices), Zero()))
       end
       i += 1
     end
     ex
   end
 end
+
+"Non-simplifiable zero, for use in factors."
+struct Zero end
+Base.show(io::IO, ::Zero) = print(io, '𝟎')

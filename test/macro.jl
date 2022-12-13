@@ -50,7 +50,7 @@ end
   @test ws == [:($getcomponent(x, $i)) for i in 1:3]
   ex = input_expression(sig, :x, 2)
   @test isexpr(ex, :+, 3)
-  @test ex[1] == scalar(first(ws)) * blade(1, 2)
+  @test ex[1] == factor(first(ws)) * blade(1, 2)
 
   ex = extract_expression(:((x::Vector * y::Bivector)::Trivector), sig)
   ex2 = restructure(ex, sig)
@@ -58,24 +58,24 @@ end
   @test isweighted(ex2[1]) && isexpr(ex2[1][2], :blade)
   @test string(ex2) == "kvector₃((x[1] * y[3] + x[2] * y[2] * -1 + x[3] * y[1]) ⟑ e₁₂₃)"
 
-  ex = @macroexpand @ga (2, 1) x::Vector ∧ y::Vector + x::Vector * z::Pseudoscalar
+  ex = @macroexpand @ga (2, 1) x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
   @test isa(ex, Expr)
   x = (1, 2, 3)
   y = (4, 5, 6)
   z = 3
 
   # Yields 1 bivector.
-  res = @ga (2, 1) x::Vector ∧ y::Vector + x::Vector * z::Pseudoscalar
+  res = @ga (2, 1) x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
   @test isa(res, NTuple{3,Int})
 
   x = (1, 2)
   y = (0, 50)
-  res = @ga 2 x::Vector ∧ y::Vector + x[1]::Scalar * z::Pseudoscalar
+  res = @ga 2 x::Vector ∧ y::Vector + x[1]::Scalar * z::Antiscalar
   @test res == 1 * 50 + 1 * 3
-  # Yields 1 pseudoscalar and 1 vector.
-  res = @ga 2 x::Vector ∧ y::Vector + x::Vector * z::Pseudoscalar
+  # Yields 1 antiscalar and 1 vector.
+  res = @ga 2 x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
   @test isa(res, NTuple{3, Int})
-  res2 = @ga Vector 2 x::Vector ∧ y::Vector + x::Vector * z::Pseudoscalar
+  res2 = @ga Vector 2 x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
   @test collect(res) == res2
 
   x = (1.0, 2.0, 3.0)

@@ -24,7 +24,7 @@ isreserved(op::Symbol) = in(op, (⟑, :⩒, :∧, :∨, :⋅, :●, :○, :⦿, 
 
 function extract_blade_from_annotation(t, sig::Signature)
   isa(t, Symbol) || return nothing
-  (t === :e || t === :e0) && return :scalar
+  (t === :e || t === :e0) && return blade()
   m = match(r"^e(\d+)$", string(t))
   dimension(sig) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
   isnothing(m) && return nothing
@@ -45,7 +45,7 @@ function extract_grade_from_annotation(t, sig::Signature)
   t === :Bivector && return 2
   t === :Trivector && return 3
   t === :Quadvector && return 4
-  t === :Pseudoscalar && return dimension(sig)
+  t === :Antiscalar && return dimension(sig)
   t === :Multivector && return 0:dimension(sig)
   Meta.isexpr(t, :curly, 2) && t.args[1] === :KVector && return t.args[2]::Int
   Meta.isexpr(t, :annotate_projection) && t.args[1] === :+ && return Int[extract_grade_from_annotation(t, sig) for t in @view t.args[2:end]]
@@ -76,8 +76,7 @@ function extract_expression(ex::Expr, sig::Signature)
     elseif Meta.isexpr(ex, :(::))
       ex, T = ex.args
       b = extract_blade_from_annotation(T, sig)
-      b === :scalar && return scalar(ex)
-      !isnothing(b) && return scalar(ex) * b
+      !isnothing(b) && return factor(ex) * b
       g = extract_grade_from_annotation(T, sig)
       isa(ex, Expression) && return project!(ex, g)
       input_expression(sig, ex, g)
@@ -117,7 +116,7 @@ function expand_variables(ex::Expr, sig::Signature)
     :left_interior_antiproduct => :($(@arg 1) ∧ right_complement($(@arg 2))),
     :right_interior_antiproduct => :(left_complement($(@arg 1)) ∧ $(@arg 2)),
     :bulk_norm => :(sqrt(○($(@arg 1), reverse($(@arg 1)))::𝟏)),
-    :weight_norm => :(sqrt(○($(@arg 1), antireverse(@arg 1))::𝟙)),
+    :weight_norm => :(sqrt(○($(@arg 1), antireverse($(@arg 1)))::𝟙)),
     :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
     :unitize => :($(@arg 1) / weight_norm($(@arg 1))),
   )
@@ -217,8 +216,8 @@ function extract_weights(sig::Signature, ex, g::Int, offset::Int)
 end
 
 function input_expression(sig::Signature, ex, g::Int, offset::Int = 0)
-  iszero(g) && return scalar(:($getcomponent($ex)))
-  simplified(sig, :+, Any[scalar(w) * blade for (blade, w) in zip(map(blade, combinations(1:dimension(sig), g)), extract_weights(sig, ex, g, offset))])
+  iszero(g) && return factor(:($getcomponent($ex)))
+  simplified(sig, :+, Any[factor(w) * blade for (blade, w) in zip(map(blade, combinations(1:dimension(sig), g)), extract_weights(sig, ex, g, offset))])
 end
 function input_expression(sig::Signature, ex, g, offset::Int = 0)
   simplified(sig, :+, input_expression(sig, ex, g′, n′) for (g′, n′) in zip(g, cumsum(nelements(sig, g′) for g′ in g)))
@@ -241,11 +240,6 @@ function restructure(ex::Expression, sig::Signature)
   ex = restructure_sums(ex)
   @debug "After sum restructuring: $(stringc(ex))"
 
-  # Unnest k-vector expressions.
-  # TODO: Is this needed?
-  # ex = disassociate_kvectors(ex)
-  # @debug "After k-vector disassocation: $(stringc(ex))"
-
   # Group all components of a k-vector by blade elements, such that a given blade is covered by only one argument of the k-vector expression.
   ex = group_kvector_blades(ex)
   @debug "After blade grouping: $(stringc(ex))"
@@ -259,7 +253,7 @@ end
 function promote_to_expr(ex::Expression)
   isexpr(ex, :kvector) && return Some(Expr(:tuple, to_final_expr.(ex)))
   isexpr(ex, :blade) && return Some(nothing)
-  isexpr(ex, :scalar) && return Some(to_final_expr(ex[1]))
+  isexpr(ex, :factor) && return Some(to_final_expr(ex[1]))
   nothing
 end
 
@@ -283,7 +277,7 @@ function to_expr(ex)
     end
     return expr
   end
-  isexpr(ex, :scalar) && return to_final_expr(ex[1])
+  isexpr(ex, :factor) && return to_final_expr(ex[1])
   if isexpr(ex, :kvector)
     ret = if length(ex) == 1
       to_final_expr(only(ex))
@@ -298,5 +292,6 @@ function to_expr(ex)
     @assert isexpr(ex[2], :blade)
     return to_final_expr(ex[1]::Expression)
   end
+  ex === Zero() && return 0
   ex
 end
