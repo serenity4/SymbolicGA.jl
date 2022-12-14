@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: generate_expression, postwalk, traverse, codegen
+using LazyGeometricAlgebra: codegen_expression, postwalk, traverse, codegen
 
 function annotate_variables(ex, types::Dict{Symbol,<:Any})
   already_annotated = Set{Symbol}()
@@ -13,13 +13,18 @@ function annotate_variables(ex, types::Dict{Symbol,<:Any})
   end
 end
 
-generate_typed_expression(sig, types, ex) = generate_expression(sig, annotate_variables(ex, types))
-generate(sig, types, ex) = eval(codegen(Vector, generate_typed_expression(sig, types, ex)))
+function generate(sig, types, ex)
+  generated_ex = codegen_expression(sig, QuoteNode(:nested), nothing, annotate_variables(ex, types))
+  ex = Expr(:block)
+  for (k, v) in variables
+    push!(ex.args, :($k = $v))
+  end
+  push!(ex.args, generated_ex)
+  eval(ex)
+end
 
 types = Dict(:A => :Vector, :B => :Vector, :C => :Vector)
-A = (1, 2, 3)
-B = (10, 20, 30)
-C = (100, 200, 300)
+variables = Dict(:A => (1, 2, 3), :B => (10, 20, 30), :C => (100, 200, 300))
 
 @testset "Operators" begin
   @testset "Associativity" begin
@@ -33,14 +38,14 @@ C = (100, 200, 300)
   end
 
   @testset "Jacobi identity" begin
-    lhs = @ga Vector 4 begin
+    lhs = @ga 4 :flatten Vector begin
       A = 1.3::e1 + 2.7::e12
       B = 0.7::e3 + 1.1::e123 + 3.05::e
       C = 0.7::e4 + 0.1::e2 + 1.59::e23 + 1.1::e124 + 3.05::e1234
       A × (B × C)
     end
 
-    rhs = @ga Vector 4 begin
+    rhs = @ga 4 :flatten Vector begin
       A = 1.3::e1 + 2.7::e12
       B = 0.7::e3 + 1.1::e123 + 3.05::e
       C = 0.7::e4 + 0.1::e2 + 1.59::e23 + 1.1::e124 + 3.05::e1234

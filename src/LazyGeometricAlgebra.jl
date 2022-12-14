@@ -10,8 +10,11 @@ include("expressions.jl")
 include("passes.jl")
 include("interface.jl")
 include("macro.jl")
-# include("types.jl")
+include("types.jl")
 
 export Signature,
-  @ga
+  @ga,
+  KVector,
+  grade
+
 end

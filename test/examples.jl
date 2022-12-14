@@ -1,12 +1,12 @@
 function new_geometric_algebra(args...; signature, definitions = Expr(:block))
-  T, ex = length(args) == 1 ? (Tuple, args[1]) : args
+  T, ex = length(args) == 1 ? (nothing, args[1]) : args
   if Meta.isexpr(ex, :block)
     pushfirst!(ex.args, definitions.args...)
   else
     push!(definitions.args, ex)
     ex = definitions
   end
-  esc(:(@ga $T $signature $ex))
+  esc(:(@ga $signature $T $ex))
 end
 
 macro cga3(args...)
@@ -31,15 +31,15 @@ circle(A, B, C) = @cga3 point_pair(A, B)::Bivector ∧ C::Vector
 line(A, B, C) = @cga3 point_pair(A, B)::Bivector ∧ n
 sphere(A, B, C, D) = @cga3 circle(A, B, C)::Trivector ∧ D::Vector
 plane(A, B, C) = @cga3 circle(A, B, C)::Trivector ∧ n
-circle_radius(X) = sqrt(-@cga3 radius2(X::Trivector))
-sphere_radius(X) = sqrt(@cga3 radius2(X::Quadvector))
+circle_radius(X) = sqrt(-@cga3(radius2(X::Trivector))[])
+sphere_radius(X) = sqrt(@cga3(radius2(X::Quadvector))[])
 
 ≊(a, b) = all(isapprox.(a, b; atol = 1e-15))
 
 @testset "3D Conformal Geometric Algebra" begin
-  isnullvector(X) = iszero(@cga3 magnitude2(X::Vector))
-  @test (@cga3 n ⋅ n̄) == (@cga3 n̄ ⋅ n) == -1.0
-  @test (@cga3 magnitude2(n ⦿ n)) == (@cga3 magnitude2(n̄ ⦿ n̄)) == 0
+  isnullvector(X) = iszero(@cga3(magnitude2(X::Vector))[])
+  @test (@cga3 n ⋅ n̄) == (@cga3 n̄ ⋅ n) == KVector{0,5}((-1.0,))
+  @test (@cga3 magnitude2(n ⦿ n)) == (@cga3 magnitude2(n̄ ⦿ n̄)) == KVector{0,5}((0,))
   A = point(sqrt(2) .* (1, 0, 0))
   B = point(sqrt(2) .* (0, 1, 0))
   C = point(sqrt(2) .* (0, 0, 1))
@@ -51,7 +51,7 @@ sphere_radius(X) = sqrt(@cga3 radius2(X::Quadvector))
   C1 = @cga3 center(S1::Quadvector)::Vector
   @test @cga3(normalize(C1::Vector)) ≊ O
   @test length(@cga3 weight(S1::Quadvector)) == 10
-  @test (@cga3 radius2(S1::Quadvector)) ≈ sphere_radius(S1)^2 ≈ 2.0
+  @test (@cga3(radius2(S1::Quadvector))[]) ≈ sphere_radius(S1)^2 ≈ 2.0
 end;
 
 macro pga3(args...)
@@ -59,6 +59,8 @@ macro pga3(args...)
     vector_3d(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
     magnitude2(x) = x ⦿ x
     point(x) = vector_3d(x) + 1.0::e4
+    weight(X) = (-X ⋅ 1::e4)
+    normalize(X) = X / weight(X)
   end
   new_geometric_algebra(args...; signature = (3, 0, 1), definitions)
 end

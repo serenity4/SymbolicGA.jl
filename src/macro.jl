@@ -1,14 +1,19 @@
-macro ga(T, sig_ex, ex) esc(codegen_expression(T, sig_ex, ex)) end
-macro ga(sig, ex) esc(:(@ga Tuple $sig $ex)) end
+macro ga(sig_ex, flatten, T, ex) esc(codegen_expression(sig_ex, flatten, T, ex)) end
+macro ga(sig_ex, T_or_flatten, ex) isa(T_or_flatten, QuoteNode) ? esc(:(@ga $sig_ex $T_or_flatten $nothing $ex)) : esc(:(@ga $sig_ex :nested $T_or_flatten $ex)) end
+macro ga(sig_ex, ex) esc(:(@ga $sig_ex $nothing $ex)) end
 
-function generate_expression(sig_ex, ex)
-  sig = extract_signature(sig_ex)
+function generate_expression(sig::Signature, ex)
   ex = extract_expression(ex, sig)
   ex = restructure(ex, sig)
 end
 
-codegen(T, ex::Expression) = :($construct($T, $(to_final_expr(ex))))
-codegen_expression(T, sig_ex, ex) = codegen(T, generate_expression(sig_ex, ex))
+function codegen_expression(sig_ex, flatten::QuoteNode, T, ex)
+  flatten = flatten.value
+  in(flatten, (:flatten, :nested)) || error("Expected :flatten or :nested value for flattening keyword argument, got $flatten")
+  flatten === :flatten && isnothing(T) && (T = :Tuple)
+  sig = extract_signature(sig_ex)
+  to_final_expr(generate_expression(sig, ex), sig, flatten == :flatten, T)
+end
 
 function extract_signature(ex)
   isa(ex, Integer) && return Signature(ex)
@@ -254,35 +259,29 @@ function promote_to_expr(ex::Expression)
   nothing
 end
 
-function to_final_expr(arg)
-  final = to_expr(arg)
+function to_final_expr(arg, args...)
+  final = to_expr(arg, args...)
   @assert !isnothing(final) "`nothing` value detected as output element for argument $arg"
   @assert !isa(final, Expression) "Expected non-Expression element, got $ex"
   final
 end
 
-function to_expr(ex)
+reconstructed_type(T::Nothing, sig::Signature, ex) = :($KVector{$(ex.grade::Int), $(dimension(sig))})
+reconstructed_type(T, sig::Signature, ex) = T
+
+function to_expr(ex, sig::Optional{Signature} = nothing, flatten::Bool = false, T = nothing)
   if isexpr(ex, :multivector)
-    expr = Expr(:tuple)
-    for arg in ex.args
-      arg = to_final_expr(arg)
-      if Meta.isexpr(arg, :tuple)
-        append!(expr.args, arg.args)
-      else
-        push!(expr.args, arg)
-      end
+    if flatten
+      @assert !isnothing(T)
+      construction_exs = to_final_expr.(ex.args, sig::Signature, flatten, T)
+      args = reduce(vcat, [subex.args[3].args for subex in construction_exs]; init = Any[])
+      return :($construct($(reconstructed_type(T, sig::Signature, ex)), $(Expr(:tuple, args...))))
+    else
+      return Expr(:tuple, to_final_expr.(ex, sig::Signature, flatten, T)...)
     end
-    return expr
   end
   isexpr(ex, :factor) && return to_final_expr(ex[1])
-  if isexpr(ex, :kvector)
-    ret = if length(ex) == 1
-      to_final_expr(only(ex))
-    else
-      Expr(:tuple, to_final_expr.(ex.args)...)
-    end
-    return ret
-  end
+  isexpr(ex, :kvector) && return :($construct($(reconstructed_type(T, sig::Signature, ex)), $(Expr(:tuple, to_final_expr.(ex.args)...))))
   isexpr(ex, :blade) && return 1
   if isexpr(ex, :⟑)
     @assert length(ex) == 2

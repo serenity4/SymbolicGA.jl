@@ -58,38 +58,38 @@ end
   @test isweighted(ex2[1]) && isexpr(ex2[1][2], :blade)
   @test string(ex2) == "kvector₃((x[1] * y[3] + x[2] * y[2] * -1 + x[3] * y[1]) ⟑ e₁₂₃)"
 
-  ex = @macroexpand @ga (2, 1) x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
+  ex = @macroexpand @ga (2, 1) Tuple x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
   @test isa(ex, Expr)
   x = (1, 2, 3)
   y = (4, 5, 6)
   z = 3
 
   # Yields 1 bivector.
-  res = @ga (2, 1) x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
+  res = @ga (2, 1) Tuple x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
   @test isa(res, NTuple{3,Int})
 
   x = (1, 2)
   y = (0, 50)
-  res = @ga 2 x::Vector ∧ y::Vector + x[1]::Scalar * z::Antiscalar
-  @test res == 1 * 50 + 1 * 3
-  # Yields 1 antiscalar and 1 vector.
+  res = @ga 2 Tuple x::Vector ∧ y::Vector + x[1]::Scalar * z::Antiscalar
+  @test res == (1 * 50 + 1 * 3,)
+  # Yields 1 vector and 1 antiscalar.
   res = @ga 2 x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
-  @test isa(res, NTuple{3, Int})
-  res2 = @ga Vector 2 x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
-  @test collect(res) == res2
+  @test isa(res, Tuple{<:KVector{1}, <:KVector{2}})
+  res2 = @ga 2 Vector x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
+  @test collect.(res) == res2
 
   x = (1.0, 2.0, 3.0)
   y = (50.0, 70.0, 70.0)
   # Yields 1 scalar and 1 bivector.
   res = @ga 3 x::1 * y::KVector{1}
-  @test isa(res, NTuple{4,Float64})
-  @test res[1] == sum(x .* y)
+  @test grade.(res) == (0, 2)
+  @test res[1][] == sum(x .* y)
 
   res = @ga 3 begin
     x::Vector
     x * x
   end
-  @test isa(res, NTuple{4, Float64})
+  @test grade.(res) == (0, 2)
 
   res2 = @ga 3 begin
     x = (1.0, 2.0, 3.0)::Vector
@@ -98,28 +98,29 @@ end
   @test res === res2
 
   # The `1::e12` gets simplified to `e12`.
-  res = @ga 3 begin
+  res = @ga 3 :flatten begin
     (1::e1 * 1::e1 + 1::e12)::Multivector
   end
   @test res == (1, 1, 0, 0)
 
   # Preserve element types.
-  res = @ga 3 (1::e1 * 1::e1 + 1.0::e12)::Multivector
+  res = @ga 3 :flatten (1::e1 * 1::e1 + 1.0::e12)::Multivector
   @test res == (1, 1.0, 0, 0)
 
-  res = @ga 3 (1::e1 * 1::e1 + 2::e12)::Multivector
+  res = @ga 3 :flatten (1::e1 * 1::e1 + 2::e12)::Multivector
   @test res == (1, 2, 0, 0)
 
   res = @ga 3 ((x::Vector)')
-  @test res == x
+  @test res == KVector{1,3}(x)
   res = @ga 3 ((x::Bivector)')
-  @test res == (-).(x)
+  @test res == KVector{2,3}((-).(x))
 
   x = (1, 2, 3)
-  @test (@ga 3 (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector) isa NTuple
+  res = (@ga 3 (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector)
+  @test grade(res) == 2
 
   @test_broken @eval (@ga 3 right_complement(1::e2)) == (@ga 3 1::e31)
 
   y = (101, 102, 103)
-  @test (@ga 3 (x::1 × y::1)::2) == (@ga 3 (x::1 ∧ y::1))
+  @test (@ga 3 Tuple (x::1 × y::1)::2) == (@ga 3 Tuple (x::1 ∧ y::1))
 end;
