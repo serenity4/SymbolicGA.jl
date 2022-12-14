@@ -101,14 +101,14 @@ end
   res = @ga 3 begin
     (1::e1 * 1::e1 + 1::e12)::Multivector
   end
-  @test res == (1, 1)
+  @test res == (1, 1, 0, 0)
 
   # Preserve element types.
   res = @ga 3 (1::e1 * 1::e1 + 1.0::e12)::Multivector
-  @test res == (1, 1.0)
+  @test res == (1, 1.0, 0, 0)
 
   res = @ga 3 (1::e1 * 1::e1 + 2::e12)::Multivector
-  @test res == (1, 2)
+  @test res == (1, 2, 0, 0)
 
   res = @ga 3 ((x::Vector)')
   @test res == x
@@ -116,7 +116,7 @@ end
   @test res == (-).(x)
 
   x = (1, 2, 3)
-  @test_broken @macroexpand (@ga 3 (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector) isa Expr
+  @test (@ga 3 (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector) isa NTuple
 
   @test_broken @eval (@ga 3 right_complement(1::e2)) == (@ga 3 1::e31)
 

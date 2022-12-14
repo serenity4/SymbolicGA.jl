@@ -145,6 +145,26 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   # Simplify addition of factors.
   head === :+ && all(isexpr(:factor), args) && return collapse_factors(+, args)
 
+  # Group blade components over addition.
+  if head === :+
+    indices = findall(x -> isblade(x) || isweightedblade(x), args)
+    if !isempty(indices)
+      blades = args[indices]
+      if !allunique(basis_vectors(b) for b in blades)
+        blade_weights = Dict{Vector{Int},Expression}()
+        for b in blades
+          vecs = basis_vectors(b)
+          weight = isweightedblade(b) ? b.args[1] : factor(1)
+          blade_weights[vecs] = haskey(blade_weights, vecs) ? blade_weights[vecs] + weight : weight
+        end
+        new_args = args[setdiff(eachindex(args), indices)]
+        append!(new_args, weight ⟑ blade(vecs) for (vecs, weight) in blade_weights)
+        return simplified(:+, new_args)
+      end
+    end
+  end
+
+
   # Simplify -1 factors.
   head === :factor && (args[1] = simplify_negations(args[1]))
 
@@ -198,6 +218,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
 
   if head === :inverse
     a = args[1]::Expression
+    @assert a ≠ scalar(0)
     denom = simplified(sig, :⦿, a, a)
     @assert isscalar(denom)
     return reverse(a) / denom
@@ -229,22 +250,34 @@ function collapse_factors(f::F, args) where {F<:Function}
   @assert f === (*) || f === (+)
   unit = f === (*) ? one : zero
   isunit = f === (*) ? isone : iszero
-  opaque_factors = Expression[]
+  opaque_factors = Any[]
   value = unit(Int64)
   for fac in args
     if isopaquefactor(fac)
-      push!(opaque_factors, fac)
+      push!(opaque_factors, fac.args[1])
     else
       value = f(value, fac.args[1])
     end
   end
-  ex = value
+
   if !isempty(opaque_factors)
-    n = !isunit(value) + length(opaque_factors)
-    ex = isone(n) ? opaque_factors[1] : Expr(:call, Symbol(f), [arg[1] for arg in opaque_factors]...)
-    !isunit(value) && push!(ex.args, value)
+    flattened_factors = Any[]
+    for fac in opaque_factors
+      if Meta.isexpr(fac, :call) && fac.args[1] === Symbol(f)
+        append!(flattened_factors, fac.args[2:end])
+      else
+        push!(flattened_factors, fac)
+      end
+    end
+    !isunit(value) && push!(flattened_factors, value)
+    length(flattened_factors) == 1 && return factor(flattened_factors[1])
+
+    ex = Expr(:call)
+    ex.args = flattened_factors
+    pushfirst!(ex.args, Symbol(f))
+    return factor(ex)
   end
-  return factor(ex)
+  return factor(value)
 end
 
 blade_complement(sig::Signature, b::Expression) = blade(sig, reverse(setdiff(1:dimension(sig), b.args)))
@@ -269,7 +302,11 @@ function infer_grade(head::Symbol, args)
     !isnothing(computed_grade) && return computed_grade
   end
   if in(head, (:+, :multivector))
-    gs = sort!(unique!(reduce(vcat, grade.(args))))
+    gs = Int64[]
+    for arg in args
+      append!(gs, grade(arg))
+    end
+    sort!(unique!(gs))
     length(gs) == 1 && return first(gs)
     return gs
   end

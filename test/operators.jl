@@ -14,6 +14,7 @@ function annotate_variables(ex, types::Dict{Symbol,<:Any})
 end
 
 generate_typed_expression(sig, types, ex) = generate_expression(sig, annotate_variables(ex, types))
+generate(sig, types, ex) = eval(codegen(Vector, generate_typed_expression(sig, types, ex)))
 
 types = Dict(:A => :Vector, :B => :Vector, :C => :Vector)
 A = (1, 2, 3)
@@ -22,39 +23,13 @@ C = (100, 200, 300)
 
 @testset "Operators" begin
   @testset "Associativity" begin
-    ex1 = generate_typed_expression(3, types, :(A + (B + C)))
-    ex2 = generate_typed_expression(3, types, :((A + B) + C))
-    @test ex1 == ex2
-    jex1 = codegen(Vector, ex1)
-    jex2 = codegen(Vector, ex2)
-    @test jex1 == jex2
-    @test eval(jex1) == eval(jex2)
-
-    ex1 = generate_typed_expression(3, types, :(A * (B * C)))
-    ex2 = generate_typed_expression(3, types, :((A * B) * C))
-    @test_broken ex1 == ex2
-    jex1 = codegen(Vector, ex1)
-    jex2 = codegen(Vector, ex2)
-    @test_broken jex1 == jex2
-    @test eval(jex1) == eval(jex2)
+    @test generate(3, types, :(A + (B + C))) == generate(3, types, :((A + B) + C))
+    @test generate(3, types, :(A * (B * C))) == generate(3, types, :((A * B) * C))
   end
 
   @testset "Distributivity" begin
-    ex1 = generate_typed_expression(3, types, :(A * (B + C)))
-    ex2 = generate_typed_expression(3, types, :(A * B + A * C))
-    @test_broken ex1 == ex2
-    jex1 = codegen(Vector, ex1)
-    jex2 = codegen(Vector, ex2)
-    @test_broken jex1 == jex2
-    @test eval(jex1) == eval(jex2)
-
-    ex1 = generate_typed_expression(3, types, :(A ∧ (B + C)))
-    ex2 = generate_typed_expression(3, types, :(A ∧ B + A ∧ C))
-    @test_broken ex1 == ex2
-    jex1 = codegen(Vector, ex1)
-    jex2 = codegen(Vector, ex2)
-    @test_broken jex1 == jex2
-    @test eval(jex1) == eval(jex2)
+    @test generate(3, types, :(A * (B + C))) == generate(3, types, :(A * B + A * C))
+    @test generate(3, types, :(A ∧ (B + C))) == generate(3, types, :(A ∧ (B + C)))
   end
 
   @testset "Jacobi identity" begin
@@ -72,8 +47,8 @@ C = (100, 200, 300)
       -(B × (C × A) + C × (A × B))
     end
 
-    @test_broken lhs ≈ rhs
-  end;
+    @test all(lhs .≈ rhs)
+  end
 
   # @testset "Complements" begin
   #   sig = Signature(3, 0, 1)
@@ -99,4 +74,4 @@ C = (100, 200, 300)
   #   @test left_complement(exterior_product(x, y)) == exterior_antiproduct(sig, left_complement(a), left_complement(b))
   #   @test left_complement(exterior_antiproduct(sig, x, y)) == exterior_product(left_complement(a), left_complement(b))
   # end
-end
+end;

@@ -54,6 +54,18 @@ sig = Signature(3, 1)
     @test blade(1, 2) * blade(3) == blade(1, 2, 3)
   end
 
+  @testset "Blade grouping over addition" begin
+    x = weighted(blade(1, 3), :x)
+    ex = x + x
+    @test ex == weighted(blade(1, 3), :(x + x))
+
+    ex = scalar(:x) + scalar(:y)
+    @test ex == scalar(:(x + y))
+
+    ex = weighted(blade(1), :x) + weighted(blade(2, 3), :y) + weighted(blade(1), :z)
+    @test ex == weighted(blade(2, 3), :y) + weighted(blade(1), :(x + z))
+  end
+
   @testset "Simplification and canonicalization of factors" begin
     @test blade(1, 2) * factor(3) == Expression(:⟑, factor(3), blade(1, 2); simplify = false)
     @test blade(1, 2) * factor(3) * factor(5) == Expression(:⟑, factor(15), blade(1, 2); simplify = false)
@@ -80,8 +92,8 @@ sig = Signature(3, 1)
 
   @testset "Disassociation of products and sums" begin
     @test factor(1) * (factor(:x) * factor(:y)) == factor(:(x * y))
-    @test factor(:z) * (factor(:x) * factor(:y)) == factor(:(z * (x * y)))
-    @test factor(1) + (factor(:x) + factor(:y)) == factor(:((x + y) + 1))
+    @test factor(:z) * (factor(:x) * factor(:y)) == factor(:(z * x * y))
+    @test factor(1) + (factor(:x) + factor(:y)) == factor(:(x + y + 1))
     @test factor(1) + (factor(2) + factor(0)) == factor(3)
   end
 

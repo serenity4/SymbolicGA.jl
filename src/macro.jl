@@ -237,12 +237,9 @@ function restructure(ex::Expression, sig::Signature)
 
   # Structure the different parts into multivectors and k-vectors.
   # All `+` operations are replaced with k-vector or multivector expressions.
-  ex = restructure_sums(ex)
+  ex = restructure_sums(ex, sig)
   @debug "After sum restructuring: $(stringc(ex))"
 
-  # Group all components of a k-vector by blade elements, such that a given blade is covered by only one argument of the k-vector expression.
-  ex = group_kvector_blades(ex)
-  @debug "After blade grouping: $(stringc(ex))"
   # Add zero-factored components for blades not represented in k-vectors.
   ex = fill_kvector_components(ex, sig)
   @debug "After k-vector component filling: $(stringc(ex))"

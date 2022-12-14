@@ -33,32 +33,32 @@ If all elements in the sum had the same grade, a k-vector is returned.
 Otherwise, all elements of the same grade are grouped, wrapped in k-vectors
 and added to a multivector expression.
 """
-function restructure_sums(ex::Expression)
-  postwalk(ex) do ex
-    isexpr(ex, :+) || return ex
-
-    if count(==(grade(ex[1]::Expression)), grade(arg::Expression) for arg in ex) == length(ex)
-      return kvector(ex.args)
-    end
-
-    args = sort(ex.args, by = grade)
-    grades = grade.(args)
-    i = 1
-    new_args = []
-    while i ≤ lastindex(grades)
-      g = grades[i]
-      j = findfirst(≠(g), @view grades[(i + 1):end])
-      j = something(j, lastindex(grades) - (i - 1))
-      j += i
-      if j > i + 1
-        push!(new_args, kvector(args[i:(j - 1)]))
-      else
-        push!(new_args, args[i])
-      end
-      i = j
-    end
-    multivector(new_args)
+function restructure_sums(ex::Expression, sig::Signature)
+  ex == factor(0) && return kvector(scalar(Zero()))
+  if isblade(ex) || isweightedblade(ex)
+    isone(nelements(sig, ex.grade::Int)) && return kvector(ex)
+    terms = [ex]
+  else
+    @assert isexpr(ex, :+)
+    terms = ex.args
   end
+
+  # Fast path when all terms have the same grade.
+  allequal(grade.(terms)) && return kvector(terms)
+
+  args = sort(terms, by = grade)
+  grades = grade.(args)
+  i = 1
+  new_args = []
+  while i ≤ lastindex(grades)
+    g = grades[i]
+    j = findfirst(≠(g), @view grades[(i + 1):end])
+    j = something(j, lastindex(grades) - (i - 1))
+    j += i
+    push!(new_args, kvector(args[i:(j - 1)]))
+    i = j
+  end
+  multivector(new_args)
 end
 
 function project!(ex, g, level = 0)
@@ -121,29 +121,6 @@ function propagate_reverse(reverse_op, ex::Expression, sig::Optional{Signature})
     in(arg.grade, (0, 1)) ? push!(res, arg) : push!(res, simplified(sig, reverse_op, arg))
   end
   simplified(sig, ex.head, res)
-end
-
-function group_kvector_blades(ex::Expression)
-  isexpr(ex, :multivector) && return Expression(:multivector, group_kvector_blades.(ex.args))
-  isexpr(ex, :blade) && return ex
-  isweightedblade(ex) && return ex
-  @assert isexpr(ex, :kvector) "Expected k-vector expression, got $ex"
-
-  blade_weights = Dict{Vector{Int},Expression}()
-  for arg in ex.args
-    if isweighted(arg)
-      weight, blade = arg[1]::Expression, arg[2]::Expression
-    else
-      weight, blade = factor(1), arg
-    end
-    indices = basis_vectors(arg)
-    if haskey(blade_weights, indices)
-      blade_weights[indices] = blade_weights[indices] + weight
-    else
-      blade_weights[indices] = weight
-    end
-  end
-  kvector(Any[(weight == factor(0) ? factor(Zero()) : weight) * blade(indices) for (indices, weight) in pairs(blade_weights)])
 end
 
 function fill_kvector_components(ex::Expression, s::Signature)

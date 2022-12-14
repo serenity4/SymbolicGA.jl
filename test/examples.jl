@@ -17,8 +17,7 @@ macro cga3(args...)
     magnitude2(x) = x ⦿ x
     weight(X) = (-X ⋅ n)
     normalize(X) = X / weight(X)
-    radius2(X) = magnitude2(X / weight(X))::Scalar
-    radius(X) = normalize(radius2(X))::Scalar
+    radius2(X) = (magnitude2(X) / magnitude2(X ∧ n))::Scalar
     center(X) = X * n * X
     # For spheres `S` defined as vectors, and points `X` defined as vectors as well.
     distance(S, X) = (S ⋅ X) / (weight(S) * weight(X))
@@ -32,24 +31,27 @@ circle(A, B, C) = @cga3 point_pair(A, B)::Bivector ∧ C::Vector
 line(A, B, C) = @cga3 point_pair(A, B)::Bivector ∧ n
 sphere(A, B, C, D) = @cga3 circle(A, B, C)::Trivector ∧ D::Vector
 plane(A, B, C) = @cga3 circle(A, B, C)::Trivector ∧ n
+circle_radius(X) = sqrt(-@cga3 radius2(X::Trivector))
+sphere_radius(X) = sqrt(@cga3 radius2(X::Quadvector))
+
+≊(a, b) = all(isapprox.(a, b; atol = 1e-15))
 
 @testset "3D Conformal Geometric Algebra" begin
   isnullvector(X) = iszero(@cga3 magnitude2(X::Vector))
   @test (@cga3 n ⋅ n̄) == (@cga3 n̄ ⋅ n) == -1.0
   @test (@cga3 magnitude2(n ⦿ n)) == (@cga3 magnitude2(n̄ ⦿ n̄)) == 0
-  A = point((1, 0, 0))
-  B = point((0, 1, 0))
-  C = point((0, 0, 1))
-  D = point((-1, 0, 0))
+  A = point(sqrt(2) .* (1, 0, 0))
+  B = point(sqrt(2) .* (0, 1, 0))
+  C = point(sqrt(2) .* (0, 0, 1))
+  D = point(sqrt(2) .* (-1, 0, 0))
   @test all(isnullvector, (A, B, C, D))
   S1 = sphere(A, B, C, D)
-  @test S1 == (0., 2.0, 0., 0., 0.)
   @test (@cga3 normalize((A .* 2)::Vector)) == A
   O = point((0, 0, 0))
   C1 = @cga3 center(S1::Quadvector)::Vector
-  @test (@cga3 normalize(C1::Vector)) == O
-  (@cga3 weight(S1::Quadvector))
-  @test_broken (@cga3 radius(S1::Quadvector)) == 1
+  @test @cga3(normalize(C1::Vector)) ≊ O
+  @test length(@cga3 weight(S1::Quadvector)) == 10
+  @test (@cga3 radius2(S1::Quadvector)) ≈ sphere_radius(S1)^2 ≈ 2.0
 end;
 
 macro pga3(args...)
@@ -69,7 +71,7 @@ Camera(A₁, A₂, A₃, A₄) = Camera(@pga3(point(A₄)), @pga3 point(A₁) �
 
 project_point(camera::Camera, x) = @pga3 begin
   line = camera.optical_center::Vector ∧ point(x)
-  (line ∨ camera.image_plane::Trivector)::(1 + 2 + 3)
+  line ∨ camera.image_plane::Trivector
 end
 
 @testset "3D Projective Geometric Algebra" begin
