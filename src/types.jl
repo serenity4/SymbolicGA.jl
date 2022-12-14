@@ -1,3 +1,6 @@
+"""
+Geometric `K`-vector with eltype `T` with `N` elements in a geometric algebra of dimension `D`.
+"""
 struct KVector{K,T,D,N}
   elements::NTuple{N,T}
   function KVector{K,D}(elements::NTuple{N,T}) where {K,T,D,N}
@@ -25,3 +28,5 @@ grade(::Type{<:KVector{K}}) where {K} = K
 for f in (:(Base.eltype), :(Base.length), :grade)
   @eval $f(kvec::KVector) = $f(typeof(kvec))
 end
+
+Base.convert(::Type{NTuple{N,T}}, kvec::KVector{<:Any,T,<:Any,N}) where {T,N} = kvec.elements

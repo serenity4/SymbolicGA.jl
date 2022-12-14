@@ -86,5 +86,6 @@ end
   optical_center = D
 
   camera = Camera(optical_center, image_plane)
-  @test_broken project_point(camera, (1.2, 1, 0)) == (1.2, 1, 0)
+  p = project_point(camera, (1.2, 1, 0))
+  @test_broken @eval @pga3 normalize(p::Trivector) == (1.2, 1, 0)
 end;

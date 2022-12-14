@@ -15,6 +15,9 @@ include("types.jl")
 export Signature,
   @ga,
   KVector,
+  Bivector,
+  Trivector,
+  Quadvector,
   grade
 
 end
