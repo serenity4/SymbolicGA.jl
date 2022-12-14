@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: codegen_expression, postwalk, traverse, codegen
+using LazyGeometricAlgebra: codegen_expression, postwalk, traverse
 
 function annotate_variables(ex, types::Dict{Symbol,<:Any})
   already_annotated = Set{Symbol}()
