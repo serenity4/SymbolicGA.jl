@@ -2,17 +2,64 @@ macro ga(sig_ex, flatten, T, ex) esc(codegen_expression(sig_ex, flatten, T, ex))
 macro ga(sig_ex, T_or_flatten, ex) isa(T_or_flatten, QuoteNode) ? esc(:(@ga $sig_ex $T_or_flatten $nothing $ex)) : esc(:(@ga $sig_ex :nested $T_or_flatten $ex)) end
 macro ga(sig_ex, ex) esc(:(@ga $sig_ex $nothing $ex)) end
 
-function generate_expression(sig::Signature, ex)
-  ex = extract_expression(ex, sig)
+struct VariableInfo
+  refs::Dict{Symbol,Any}
+  funcs::Dict{Symbol,Any}
+end
+
+VariableInfo(; refs = Dict(), funcs = Dict()) = VariableInfo(refs, funcs)
+
+function Base.merge!(x::VariableInfo, y::VariableInfo)
+  merge!(x.refs, y.refs)
+  merge!(x.funcs, y.funcs)
+  x
+end
+
+function builtin_varinfo(sig)
+  refs = Dict{Symbol,Any}(
+    :𝟏 => :e,
+    :𝟙 => Symbol(:e, join(1:dimension(sig))),
+    :⊣ => :left_interior_product,
+    :⊢ => :right_interior_product,
+    :⨼ => :left_interior_antiproduct,
+    :⨽ => :right_interior_antiproduct,
+    :⩒ => :geometric_antiproduct,
+    :exterior_product => :∧,
+    :∨ => :exterior_antiproduct,
+  )
+
+  funcs = Dict{Symbol,Any}(
+    :bulk_left_complement => :(antireverse($(@arg 1)) ⟑ 𝟙),
+    :bulk_right_complement => :(reverse($(@arg 1)) ⟑ 𝟙),
+    :weight_left_complement => :(𝟏 ⩒ antireverse($(@arg 1))),
+    :weight_right_complement => :(𝟏 ⩒ reverse($(@arg 1))),
+    :left_interior_product => :(left_complement($(@arg 1)) ∨ $(@arg 2)),
+    :right_interior_product => :($(@arg 1) ∨ right_complement($(@arg 2))),
+    :left_interior_antiproduct => :($(@arg 1) ∧ right_complement($(@arg 2))),
+    :right_interior_antiproduct => :(left_complement($(@arg 1)) ∧ $(@arg 2)),
+    :bulk_norm => :(sqrt(○($(@arg 1), reverse($(@arg 1)))::𝟏)),
+    :weight_norm => :(sqrt(○($(@arg 1), antireverse($(@arg 1)))::𝟙)),
+    :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
+    :unitize => :($(@arg 1) / weight_norm($(@arg 1))),
+    :geometric_antiproduct => :(geometric_product(left_complement(right_complement($(@arg 1)), right_complement($(@arg 2))))),
+    :exterior_antiproduct => :(left_complement(exterior_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
+  )
+
+  VariableInfo(refs, funcs)
+end
+
+function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo} = nothing)
+  ex = extract_expression(ex, sig, varinfo)
   ex = restructure(ex, sig)
 end
 
-function codegen_expression(sig_ex, flatten::QuoteNode, T, ex)
+function codegen_expression(sig_ex, flatten::QuoteNode, T, ex, varinfo::Optional{VariableInfo} = nothing)
   flatten = flatten.value
   in(flatten, (:flatten, :nested)) || error("Expected :flatten or :nested value for flattening keyword argument, got $flatten")
   flatten === :flatten && isnothing(T) && (T = :Tuple)
   sig = extract_signature(sig_ex)
-  to_final_expr(generate_expression(sig, ex), sig, flatten == :flatten, T)
+  varinfo = merge!(builtin_varinfo(sig), @something(varinfo, VariableInfo()))
+  to_final_expr(generate_expression(sig, ex, varinfo), sig, flatten == :flatten, T)
 end
 
 function extract_signature(ex)
@@ -30,6 +77,7 @@ isreserved(op::Symbol) = in(op, (⟑, :∧, :⋅, :●, :○, :⦿, :*, :+, :×,
 function extract_blade_from_annotation(t, sig::Signature)
   isa(t, Symbol) || return nothing
   (t === :e || t === :e0) && return blade()
+  t === :e̅ && return antiscalar(sig)
   m = match(r"^e(\d+)$", string(t))
   dimension(sig) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
   isnothing(m) && return nothing
@@ -58,8 +106,8 @@ function extract_grade_from_annotation(t, sig::Signature)
   error("Unknown grade projection for algebraic element $t")
 end
 
-function extract_expression(ex::Expr, sig::Signature)
-  ex = expand_variables(ex, sig)
+function extract_expression(ex::Expr, sig::Signature, varinfo::VariableInfo)
+  ex = expand_variables(ex, sig, varinfo)
   @debug "After variable expansion: $(stringc(ex))"
 
   # Make sure calls in annotations are not interpreted as actual operations.
@@ -99,35 +147,9 @@ macro arg(i) QuoteNode(Expr(:argument, i)) end
 """
 Expand variables from a block expression, yielding a final expression where all variables were substitued with their defining expression.
 """
-function expand_variables(ex::Expr, sig::Signature)
+function expand_variables(ex::Expr, sig::Signature, varinfo::VariableInfo)
   !Meta.isexpr(ex, :block) && (ex = Expr(:block, ex))
-  refs = Dict{Symbol,Any}(
-    :𝟏 => :e,
-    :𝟙 => Symbol(:e, join(1:dimension(sig))),
-    :⊣ => :left_interior_product,
-    :⊢ => :right_interior_product,
-    :⨼ => :left_interior_antiproduct,
-    :⨽ => :right_interior_antiproduct,
-    :⩒ => :geometric_antiproduct,
-    :exterior_product => :∧,
-    :∨ => :exterior_antiproduct,
-  )
-  funcs = Dict{Symbol,Any}(
-    :bulk_left_complement => :(antireverse($(@arg 1)) ⟑ 𝟙),
-    :bulk_right_complement => :(reverse($(@arg 1)) ⟑ 𝟙),
-    :weight_left_complement => :(𝟏 ⩒ antireverse($(@arg 1))),
-    :weight_right_complement => :(𝟏 ⩒ reverse($(@arg 1))),
-    :left_interior_product => :(left_complement($(@arg 1)) ∨ $(@arg 2)),
-    :right_interior_product => :($(@arg 1) ∨ right_complement($(@arg 2))),
-    :left_interior_antiproduct => :($(@arg 1) ∧ right_complement($(@arg 2))),
-    :right_interior_antiproduct => :(left_complement($(@arg 1)) ∧ $(@arg 2)),
-    :bulk_norm => :(sqrt(○($(@arg 1), reverse($(@arg 1)))::𝟏)),
-    :weight_norm => :(sqrt(○($(@arg 1), antireverse($(@arg 1)))::𝟙)),
-    :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
-    :unitize => :($(@arg 1) / weight_norm($(@arg 1))),
-    :geometric_antiproduct => :(geometric_product(left_complement(right_complement($(@arg 1)), right_complement($(@arg 2))))),
-    :exterior_antiproduct => :(left_complement(exterior_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
-  )
+  (; refs, funcs) = varinfo
   rhs = nothing
   for subex in ex.args
     isa(subex, LineNumberNode) && continue
@@ -169,13 +191,13 @@ function expand_subtree(ex, refs, funcs, used_refs)
   expanded_call = expand_function_call(funcs, ex)
   !isnothing(expanded_call) && return postwalk(x -> expand_subtree(x, refs, funcs, used_refs), expanded_call)
   !isa(ex, Symbol) && return ex
-  used_refs_subtree = nothing
-  while isa(ex, Symbol) && (isnothing(used_refs_subtree) || !in(ex, used_refs_subtree))
+  used_refs_subtree = copy(used_refs)
+  while isa(ex, Symbol) && !in(ex, used_refs_subtree)
     expanded_ref = expand_reference(refs, ex)
     isnothing(expanded_ref) && break
     ref, ex = expanded_ref
-    used_refs_subtree = isnothing(used_refs_subtree) ? Set([ref]) : push!(used_refs_subtree, ref)
-    isa(ex, Expr) && return postwalk(x -> expand_subtree(ex, refs, funcs, used_refs_subtree), ex)
+    push!(used_refs_subtree, ref)
+    isa(ex, Expr) && return postwalk(x -> expand_subtree(x, refs, funcs, used_refs_subtree), ex)
   end
   ex
 end

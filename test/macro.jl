@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: extract_weights, input_expression, extract_expression, restructure, expand_variables, traverse
+using LazyGeometricAlgebra: extract_weights, input_expression, extract_expression, restructure, expand_variables, traverse, builtin_varinfo
 
 function traverse_collect(f, x, T = Expression)
   res = []
@@ -18,7 +18,7 @@ end
       x = x::Vector
       x * x
     end
-    @test expand_variables(ex, sig) == :(x::Vector * x::Vector)
+    @test expand_variables(ex, sig, VariableInfo()) == :(x::Vector * x::Vector)
 
     # Interleaved references/function calls.
     ex = quote
@@ -28,9 +28,23 @@ end
       x = g(y::Vector)
       x
     end
-    ex2 = expand_variables(ex, sig)
+    ex2 = expand_variables(ex, sig, VariableInfo())
     @test ex2 == :((1, 2, 3)::Vector + 1::e1)
 
+    varinfo = VariableInfo(refs = Dict(
+      :A => :((1, 2, 3)::Vector),
+      :B => :((10, 2, 30)::Vector),
+      :C => :((10, 200, 30)::Vector),
+      :A̅ => :(right_complement(A)),
+      :B̅ => :(right_complement(B)),
+      :A̲ => :(left_complement(A)),
+      :B̲ => :(left_complement(B)),
+    ))
+    ex = :(A̅ ∧ B̅)
+    ex2 = expand_variables(ex, sig, merge!(builtin_varinfo(sig), varinfo))
+    @test ex2 == :(right_complement((1, 2, 3)::Vector) ∧ right_complement((10, 2, 30)::Vector))
+
+    sig = Signature(4, 1, 0)
     ex = quote
       n = 1.0::e4 + 1.0::e5
       magnitude2(x) = x ⦿ x
@@ -40,7 +54,7 @@ end
       radius(X) = normalize(radius2(X))::Scalar
       radius(S::Quadvector)
     end
-    ex2 = expand_variables(ex, sig)
+    ex2 = expand_variables(ex, sig, builtin_varinfo(sig))
     symbols = traverse_collect(ex -> in(ex, (:radius, :radius2, :normalize, :weight, :magnitude2, :n)), ex2, Expr)
     @test isempty(symbols)
   end
@@ -52,7 +66,7 @@ end
   @test isexpr(ex, :+, 3)
   @test ex[1] == factor(first(ws)) * blade(1, 2)
 
-  ex = extract_expression(:((x::Vector * y::Bivector)::Trivector), sig)
+  ex = extract_expression(:((x::Vector * y::Bivector)::Trivector), sig, builtin_varinfo(sig))
   ex2 = restructure(ex, sig)
   @test isexpr(ex2, :kvector, 1)
   @test isweighted(ex2[1]) && isexpr(ex2[1][2], :blade)

@@ -3,41 +3,23 @@ using Combinatorics: combinations
 
 all_blades(sig::Signature) = [blade(indices) for indices in combinations(1:dimension(sig))]
 
-function annotate_variables(ex, types::Dict{Symbol,<:Any})
-  already_annotated = Set{Symbol}()
-  traverse(ex) do ex
-    Meta.isexpr(ex, :(::)) && isa(ex.args[1], Symbol) && push!(already_annotated, ex.args[1])
-    nothing
-  end
-  postwalk(ex) do ex
-    isa(ex, Symbol) || return ex
-    !in(ex, already_annotated) && haskey(types, ex) && return :($ex::$(types[ex]))
-    ex
-  end
+function ga_eval(sig_ex, ex; flatten = :nested, T = nothing, varinfo = nothing)
+  eval(codegen_expression(sig_ex, QuoteNode(flatten), T, ex, varinfo))
 end
-
-function generate(sig, types, ex)
-  generated_ex = codegen_expression(sig, QuoteNode(:nested), nothing, annotate_variables(ex, types))
-  ex = Expr(:block)
-  for (k, v) in variables
-    push!(ex.args, :($k = $v))
-  end
-  push!(ex.args, generated_ex)
-  eval(ex)
-end
-
-types = Dict(:A => :Vector, :B => :Vector, :C => :Vector)
-variables = Dict(:A => (1, 2, 3), :B => (10, 2, 30), :C => (10, 200, 3))
 
 @testset "Operators" begin
+  sig = 3
+  varinfo = VariableInfo(refs = Dict(:A => :((1, 2, 3)::Vector), :B => :((10, 2, 30)::Vector), :C => :((10, 200, 3)::Vector)))
+  generate = ex -> ga_eval(sig, ex; varinfo)
+
   @testset "Associativity" begin
-    @test generate(3, types, :(A + (B + C))) == generate(3, types, :((A + B) + C))
-    @test generate(3, types, :(A * (B * C))) == generate(3, types, :((A * B) * C))
+    @test generate(:(A + (B + C))) == generate(:((A + B) + C))
+    @test generate(:(A * (B * C))) == generate(:((A * B) * C))
   end
 
   @testset "Distributivity" begin
-    @test generate(3, types, :(A * (B + C))) == generate(3, types, :(A * B + A * C))
-    @test generate(3, types, :(A ∧ (B + C))) == generate(3, types, :(A ∧ (B + C)))
+    @test generate(:(A * (B + C))) == generate(:(A * B + A * C))
+    @test generate(:(A ∧ (B + C))) == generate(:(A ∧ (B + C)))
   end
 
   @testset "Jacobi identity" begin
@@ -67,12 +49,27 @@ variables = Dict(:A => (1, 2, 3), :B => (10, 2, 30), :C => (10, 200, 3))
     end
   end
 
-  @testset "De Morgan laws" begin
-    global variables = Dict(:A => (1, 2, 3, 4), :B => (10, 2, 30, 4), :C => (10, 200, 30, 400))
-    _eval(ex) = generate((3, 0, 1), types, ex)
-    @test _eval(:(right_complement(exterior_product(A, B)))) == _eval(:(exterior_antiproduct(right_complement(A), right_complement(B))))
-    @test _eval(:(right_complement(exterior_antiproduct(A, B)))) == _eval(:(exterior_product(right_complement(A), right_complement(B))))
-    @test _eval(:(left_complement(exterior_product(A, B)))) == _eval(:(exterior_antiproduct(left_complement(A), left_complement(B))))
-    @test _eval(:(left_complement(exterior_antiproduct(A, B)))) == _eval(:(exterior_product(left_complement(A), left_complement(B))))
+  @testset "Exterior (anti)product" begin
+    @test (@ga 3 3.0::e ∧ 4.0::e)[] == 12.0
+    @test (@ga 3 3.0::e̅ ∨ 4.0::e̅)[] == 12.0
+
+    @testset "De Morgan laws" begin
+      sig = (3, 0, 1)
+      varinfo = VariableInfo(refs = Dict(
+        :A => :((1, 2, 3, 4)::Vector),
+        :B => :((10, 2, 30, 4)::Vector),
+        :C => :((10, 200, 30, 400)::Vector),
+        :A̅ => :(right_complement(A)),
+        :B̅ => :(right_complement(B)),
+        :A̲ => :(left_complement(A)),
+        :B̲ => :(left_complement(B)),
+      ))
+      generate = ex -> ga_eval(sig, ex; varinfo)
+
+      @test generate(:(right_complement(A ∧ B))) == generate(:(A̅ ∨ B̅))
+      @test generate(:(right_complement(A ∨ B))) == generate(:(A̅ ∧ B̅))
+      @test generate(:(left_complement(A ∧ B))) == generate(:(A̲ ∨ B̲))
+      @test generate(:(left_complement(A ∨ B))) == generate(:(A̲ ∧ B̲))
+    end
   end
 end;

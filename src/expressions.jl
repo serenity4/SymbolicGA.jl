@@ -285,7 +285,7 @@ end
 # Empirical formula.
 # If anyone has a better one, please let me know.
 blade_right_complement(sig::Signature, b::Expression) = blade(sig, reverse!(setdiff(1:dimension(sig), b.args))) * factor((-1)^(
-  isodd(sum(b)) +
+  isodd(sum(b; init = 0)) +
   (dimension(sig) ÷ 2) % 2 +
   isodd(dimension(sig)) & isodd(length(b))
 ))
