@@ -166,7 +166,7 @@ function expand_variables(ex::Expr, sig::Signature, varinfo::VariableInfo)
       # Create slots so that we don't need to keep the names around; then we can directly place arguments by index.
       body = define_argument_slots(body, argnames)
       if haskey(funcs, name)
-        @warn "Replacing geometric algebra function `$name` (only one method is allowed)"
+        @warn "Replacing geometric algebra function `$name` (only one method is allowed)."
       end
       funcs[name] = body
       continue
@@ -179,12 +179,17 @@ function expand_variables(ex::Expr, sig::Signature, varinfo::VariableInfo)
     end
 
     lhs, rhs = Meta.isexpr(subex, :(=), 2) ? subex.args : (nothing, subex)
-
-    # Expand references and function calls.
-    rhs = postwalk(ex -> expand_subtree(ex, refs, funcs, Set{Symbol}()), rhs)
-    !isnothing(lhs) && (refs[lhs] = rhs)
+    if !isnothing(lhs)
+      refs[lhs] = rhs
+    else
+      subex == last(ex.args) || error("Non-final expression parsed without a left-hand side assignment.")
+      break
+    end
   end
-  rhs
+
+  isnothing(rhs) && error("No input expression could be parsed.")
+  # Expand references and function calls.
+  postwalk(ex -> expand_subtree(ex, refs, funcs, Set{Symbol}()), rhs)
 end
 
 function expand_subtree(ex, refs, funcs, used_refs)
