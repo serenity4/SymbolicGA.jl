@@ -109,7 +109,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
       factors, nonfactors = filter(isexpr(:factor), args), filter(!isexpr(:factor), args)
       fac = collapse_factors(*, factors)
       length(args) == nf && return fac
-      args = [fac; nonfactors]
+      return simplified(sig, head, Any[fac; nonfactors])
     elseif nf == 1 && !isexpr(args[1], :factor)
       # Put the factor at the front.
       i = findfirst(isexpr(:factor), args)
@@ -280,7 +280,16 @@ function collapse_factors(f::F, args) where {F<:Function}
   return factor(value)
 end
 
-blade_complement(sig::Signature, b::Expression) = blade(sig, reverse(setdiff(1:dimension(sig), b.args)))
+# Empirical formula.
+# If anyone has a better one, please let me know.
+blade_right_complement(sig::Signature, b::Expression) = blade(sig, reverse(setdiff(1:dimension(sig), b.args))) * factor((-1)^(
+  isodd(sum(b)) +
+  (dimension(sig) ÷ 2) % 2 +
+  isodd(dimension(sig)) & isodd(length(b))
+))
+
+# Exact formula derived from the right complement.
+blade_left_complement(sig::Signature, b::Expression) = factor((-1)^(grade(b) * antigrade(sig, b))) * blade_right_complement(sig, b)
 
 function expected_nargs(head)
   in(head, (:factor, :inverse, :reverse, :antireverse,)) && return 1

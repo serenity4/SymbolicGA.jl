@@ -1,4 +1,7 @@
-using LazyGeometricAlgebra: codegen_expression, postwalk, traverse
+using LazyGeometricAlgebra: codegen_expression, postwalk, traverse, blade_left_complement, blade_right_complement, dimension
+using Combinatorics: combinations
+
+all_blades(sig::Signature) = [blade(indices) for indices in combinations(1:dimension(sig))]
 
 function annotate_variables(ex, types::Dict{Symbol,<:Any})
   already_annotated = Set{Symbol}()
@@ -55,23 +58,14 @@ variables = Dict(:A => (1, 2, 3), :B => (10, 20, 30), :C => (100, 200, 300))
     @test all(lhs .≈ rhs)
   end
 
-  # @testset "Complements" begin
-  #   sig = Signature(3, 0, 1)
-
-  #   b = blade(1, 3)
-  #   b̅ = right_complement(sig, b)
-  #   @test b̅ == blade(4, 2)
-  #   b̅̅ = right_complement(sig, b̅)
-  #   @test b̅̅ == b
-
-  #   b = blade(4)
-  #   b̅ = right_complement(sig, b)
-  #   @test b̅ == blade(3, 2, 1)
-  #   b̅̅ = right_complement(sig, b̅)
-  #   @test b̅̅ == -b
-
-  #   @test simplified(sig, :∧, b, b̅) == antiscalar(sig)
-  # end
+  @testset "Complements" begin
+    for sig in [Signature.(2:3); Signature(3, 0, 1); Signature(4, 1); Signature.(6:10)]
+      @test all(all_blades(sig)) do b
+        (b ∧ blade_right_complement(sig, b) == antiscalar(sig)) &
+          (blade_left_complement(sig, b) ∧ b == antiscalar(sig))
+      end
+    end
+  end
 
   # @testset "De Morgan laws" begin
   #   @test right_complement(sig, exterior_product(x, y)) == exterior_antiproduct(sig, right_complement(sig, a), right_complement(sig, b))
