@@ -15,6 +15,8 @@ function Base.merge!(x::VariableInfo, y::VariableInfo)
   x
 end
 
+macro arg(i) QuoteNode(Expr(:argument, i)) end
+
 function builtin_varinfo(sig)
   refs = Dict{Symbol,Any}(
     :𝟏 => :e,
@@ -141,8 +143,6 @@ function extract_expression(ex::Expr, sig::Signature, varinfo::VariableInfo)
   isa(ex, Expression) || error("Could not fully extract expression: $ex\n\nOutermost expression has head $(ex.head) and arguments $(ex.args)")
   ex
 end
-
-macro arg(i) QuoteNode(Expr(:argument, i)) end
 
 """
 Expand variables from a block expression, yielding a final expression where all variables were substitued with their defining expression.
