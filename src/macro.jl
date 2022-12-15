@@ -25,7 +25,7 @@ end
 
 const ADJOINT_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (⟑, :⩒, :∧, :∨, :⋅, :●, :○, :⦿, :*, :+, :×, :-, :/, :inv, :reverse, :antireverse))
+isreserved(op::Symbol) = in(op, (⟑, :∧, :⋅, :●, :○, :⦿, :*, :+, :×, :-, :/, :inv, :reverse, :antireverse, :left_complement, :right_complement))
 
 function extract_blade_from_annotation(t, sig::Signature)
   isa(t, Symbol) || return nothing
@@ -108,14 +108,15 @@ function expand_variables(ex::Expr, sig::Signature)
     :⊢ => :right_interior_product,
     :⨼ => :left_interior_antiproduct,
     :⨽ => :right_interior_antiproduct,
+    :⩒ => :geometric_antiproduct,
+    :exterior_product => :∧,
+    :∨ => :exterior_antiproduct,
   )
   funcs = Dict{Symbol,Any}(
     :bulk_left_complement => :(antireverse($(@arg 1)) ⟑ 𝟙),
     :bulk_right_complement => :(reverse($(@arg 1)) ⟑ 𝟙),
     :weight_left_complement => :(𝟏 ⩒ antireverse($(@arg 1))),
     :weight_right_complement => :(𝟏 ⩒ reverse($(@arg 1))),
-    :left_complement => :(bulk_left_complement($(@arg 1)) + weight_left_complement($(@arg 1))),
-    :right_complement => :(bulk_right_complement($(@arg 1)) + weight_right_complement($(@arg 1))),
     :left_interior_product => :(left_complement($(@arg 1)) ∨ $(@arg 2)),
     :right_interior_product => :($(@arg 1) ∨ right_complement($(@arg 2))),
     :left_interior_antiproduct => :($(@arg 1) ∧ right_complement($(@arg 2))),
@@ -124,6 +125,8 @@ function expand_variables(ex::Expr, sig::Signature)
     :weight_norm => :(sqrt(○($(@arg 1), antireverse($(@arg 1)))::𝟙)),
     :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
     :unitize => :($(@arg 1) / weight_norm($(@arg 1))),
+    :geometric_antiproduct => :(geometric_product(left_complement(right_complement($(@arg 1)), right_complement($(@arg 2))))),
+    :exterior_antiproduct => :(left_complement(exterior_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
   )
   rhs = nothing
   for subex in ex.args

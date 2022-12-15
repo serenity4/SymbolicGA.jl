@@ -32,6 +32,14 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     return weighted(reverse(args[1][2]), fac_arg)
   end
 
+  # Apply left and right complements.
+  if head in (:left_complement, :right_complement)
+    isweightedblade(args[1]) && return weighted(simplified(sig, head, args[1][2]), args[1][1])
+    args[1] == factor(0) && return args[1]
+  end
+  head === :left_complement && isblade(args[1]) && return blade_left_complement(sig::Signature, args[1])
+  head === :right_complement && isblade(args[1]) && return blade_right_complement(sig::Signature, args[1])
+
   if head === :blade
     # Sort basis vectors.
     if !issorted(args)
@@ -88,11 +96,6 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   # Remove unit elements for multiplication and addition.
   fac = remove_unit_elements!(args, head)
   !isnothing(fac) && return scalar(fac)
-
-  if head === :⩒ && length(args) == 2 && all(isexpr(:blade), args)
-    x, y = args[1]::Expression, args[2]::Expression
-    return blade_complement(sig, simplified(sig, :⟑, blade_complement(sig, x), blade_complement(sig, y)))
-  end
 
   if in(head, (:⟑, :⩒, :+))
     length(args) == 1 && return args[1]
@@ -179,7 +182,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   end
 
   # Distribute products over addition.
-  head in (:⟑, :⩒, :∧, :∨, :●, :○, :⦿, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
+  head in (:⟑, :∧, :●, :○, :⦿, :×, :left_complement, :right_complement) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
 
   # Eagerly apply projections.
   head === :project && return project!(args[2]::Expression, args[1]::GradeInfo)
@@ -190,10 +193,9 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   # Expand common operators.
   # ========================
 
-  # The exterior (anti)product is associative, no issues there.
-  if head in (:∧, :∨)
-    anti = head === :∨
-    n = sum(anti ? x -> antigrade(sig::Signature, x::Expression)::Int : x -> grade(x::Expression)::Int, args)
+  # The exterior product is associative, no issues there.
+  if head === :∧
+    n = sum(x -> grade(x::Expression)::Int, args)
     return project!(simplified(sig, :⟑, args), n)
   end
 
@@ -282,7 +284,7 @@ end
 
 # Empirical formula.
 # If anyone has a better one, please let me know.
-blade_right_complement(sig::Signature, b::Expression) = blade(sig, reverse(setdiff(1:dimension(sig), b.args))) * factor((-1)^(
+blade_right_complement(sig::Signature, b::Expression) = blade(sig, reverse!(setdiff(1:dimension(sig), b.args))) * factor((-1)^(
   isodd(sum(b)) +
   (dimension(sig) ÷ 2) % 2 +
   isodd(dimension(sig)) & isodd(length(b))
@@ -292,7 +294,7 @@ blade_right_complement(sig::Signature, b::Expression) = blade(sig, reverse(setdi
 blade_left_complement(sig::Signature, b::Expression) = factor((-1)^(grade(b) * antigrade(sig, b))) * blade_right_complement(sig, b)
 
 function expected_nargs(head)
-  in(head, (:factor, :inverse, :reverse, :antireverse,)) && return 1
+  in(head, (:factor, :inverse, :reverse, :antireverse)) && return 1
   in(head, (:project, :⋅, :/, :×, :⩒)) && return 2
   nothing
 end
@@ -421,7 +423,6 @@ Base.inv(x::Expression) = Expression(:inverse, x)
 ×(x::Expression, y::Expression) = Expression(:×, x, y)
 exterior_product(x::Expression, y::Expression) = Expression(:∧, x, y)
 exterior_product(sig::Signature, x::Expression, y::Expression) = simplified(sig, :∧, x, y)
-exterior_antiproduct(sig::Signature, x::Expression, y::Expression) = simplified(sig, :∨, x, y)
 
 # Traversal/transformation utilities.
 

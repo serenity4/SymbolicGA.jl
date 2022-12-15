@@ -27,7 +27,7 @@ function generate(sig, types, ex)
 end
 
 types = Dict(:A => :Vector, :B => :Vector, :C => :Vector)
-variables = Dict(:A => (1, 2, 3), :B => (10, 20, 30), :C => (100, 200, 300))
+variables = Dict(:A => (1, 2, 3), :B => (10, 2, 30), :C => (10, 200, 3))
 
 @testset "Operators" begin
   @testset "Associativity" begin
@@ -67,10 +67,12 @@ variables = Dict(:A => (1, 2, 3), :B => (10, 20, 30), :C => (100, 200, 300))
     end
   end
 
-  # @testset "De Morgan laws" begin
-  #   @test right_complement(sig, exterior_product(x, y)) == exterior_antiproduct(sig, right_complement(sig, a), right_complement(sig, b))
-  #   @test right_complement(sig, exterior_antiproduct(sig, x, y)) == exterior_product(right_complement(sig, a), right_complement(sig, b))
-  #   @test left_complement(exterior_product(x, y)) == exterior_antiproduct(sig, left_complement(a), left_complement(b))
-  #   @test left_complement(exterior_antiproduct(sig, x, y)) == exterior_product(left_complement(a), left_complement(b))
-  # end
+  @testset "De Morgan laws" begin
+    global variables = Dict(:A => (1, 2, 3, 4), :B => (10, 2, 30, 4), :C => (10, 200, 30, 400))
+    _eval(ex) = generate((3, 0, 1), types, ex)
+    @test _eval(:(right_complement(exterior_product(A, B)))) == _eval(:(exterior_antiproduct(right_complement(A), right_complement(B))))
+    @test _eval(:(right_complement(exterior_antiproduct(A, B)))) == _eval(:(exterior_product(right_complement(A), right_complement(B))))
+    @test _eval(:(left_complement(exterior_product(A, B)))) == _eval(:(exterior_antiproduct(left_complement(A), left_complement(B))))
+    @test _eval(:(left_complement(exterior_antiproduct(A, B)))) == _eval(:(exterior_product(left_complement(A), left_complement(B))))
+  end
 end;

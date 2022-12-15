@@ -119,7 +119,7 @@ end
   res = (@ga 3 (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector)
   @test grade(res) == 2
 
-  @test_broken @eval (@ga 3 right_complement(1::e2)) == (@ga 3 1::e31)
+  @test (@ga 3 right_complement(1::e2)) == (@ga 3 1::e31)
 
   y = (101, 102, 103)
   @test (@ga 3 Tuple (x::1 × y::1)::2) == (@ga 3 Tuple (x::1 ∧ y::1))
