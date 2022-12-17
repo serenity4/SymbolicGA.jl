@@ -91,6 +91,8 @@ end
       :x => 2.4,
       :y => 3.2,
       :z => :(x::e + y::e̅),
+      :p1 => :(1.2::e1 + 1.56::e2 + 1.65::e3 + 1.0::e4),
+      :p2 => :((-1.2)::e1 - 1.0::e2 + 0.0::e3 - 1.0::e4),
     ))
     generate = ex -> ga_eval(sig, ex; varinfo)
 
@@ -99,6 +101,8 @@ end
 
     @test generate(:(bulk(z))) == generate(:(x::e))
     @test generate(:(weight(z))) == generate(:(y::e̅))
+    @test generate(:(weight(p1))) == generate(:(1.0::e4))
+    @test generate(:(weight(p2))) == generate(:((-1.0)::e4))
   end
 
   @testset "Norms & unitization" begin

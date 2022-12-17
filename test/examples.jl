@@ -2,20 +2,20 @@ macro cga3(args...)
   definitions = quote
     n = 1.0::e4 + 1.0::e5
     n̄ = (-0.5)::e4 + 0.5::e5
-    vector_3d(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
+    embed(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
     magnitude2(x) = x ⦿ x
-    weight(X) = (-X ⋅ n)
-    normalize(X) = X / weight(X)
+    weight(X) = -X ⋅ n
+    unitize(X) = X / weight(X)
     radius2(X) = (magnitude2(X) / magnitude2(X ∧ n))::Scalar
     center(X) = X * n * X
     # For spheres `S` defined as vectors, and points `X` defined as vectors as well.
-    distance(S, X) = (S ⋅ X) / (weight(S) * weight(X))
+    distance(S, X) = unitize(S) ⋅ unitize(X)
   end
   varinfo = parse_variable_info(definitions; warn_override = false)
   esc(codegen_expression((4, 1, 0), args...; varinfo))
 end
 
-point(x) = @cga3 (vector_3d(x) + (0.5::Scalar * magnitude2(vector_3d(x))) * n + n̄)::Vector
+point(x) = @cga3 (embed(x) + (0.5::Scalar * magnitude2(embed(x))) * n + n̄)::Vector
 point_pair(A, B) = @cga3 A::Vector ∧ B::Vector
 circle(A, B, C) = @cga3 point_pair(A, B)::Bivector ∧ C::Vector
 line(A, B, C) = @cga3 point_pair(A, B)::Bivector ∧ n
@@ -36,29 +36,27 @@ sphere_radius(X) = sqrt(@cga3(radius2(X::Quadvector))[])
   D = point(sqrt(2) .* (-1, 0, 0))
   @test all(isnullvector, (A, B, C, D))
   S1 = sphere(A, B, C, D)
-  @test (@cga3 normalize((A .* 2)::Vector)) == A
+  @test (@cga3 unitize((A .* 2)::Vector)) == A
   O = point((0, 0, 0))
   C1 = @cga3 center(S1::Quadvector)::Vector
-  @test @cga3(normalize(C1::Vector)) ≊ O
+  @test @cga3(unitize(C1::Vector)) ≊ O
   @test length(@cga3 weight(S1::Quadvector)) == 10
   @test (@cga3(radius2(S1::Quadvector))[]) ≈ sphere_radius(S1)^2 ≈ 2.0
 end;
 
 macro pga3(args...)
   definitions = quote
-    vector_3d(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
+    embed(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
     magnitude2(x) = x ⦿ x
-    point(x) = vector_3d(x) + 1.0::e4
-    weight(X) = (-X ⋅ 1::e4)
-    normalize(X) = X / weight(X)
+    point(x) = embed(x) + 1.0::e4
   end
   varinfo = parse_variable_info(definitions; warn_override = false)
-  esc(codegen_expression((3, 1, 0), args...; varinfo))
+  esc(codegen_expression((3, 0, 1), args...; varinfo))
 end
 
-struct Camera
-  optical_center::NTuple{4,Float64} # ::Vector
-  image_plane::NTuple{4,Float64} # ::Trivector
+struct Camera{T}
+  optical_center::KVector{1,T,4,4} # ::Vector
+  image_plane::KVector{3,T,4,4} # ::Trivector
 end
 Camera(A₁, A₂, A₃, A₄) = Camera(@pga3(point(A₄)), @pga3 point(A₁) ∧ point(A₂) ∧ point(A₃))
 
@@ -78,5 +76,5 @@ end
 
   camera = Camera(optical_center, image_plane)
   p = project_point(camera, (1.2, 1, 0))
-  @test_broken @eval @pga3 normalize(p::Trivector) == (1.2, 1, 0)
+  @test (@pga3 unitize(p::Vector)) == KVector{1,4}(-1.2, -1, 0, -1)
 end;

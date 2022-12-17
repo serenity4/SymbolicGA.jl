@@ -81,6 +81,7 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :bulk_norm => :(sqrt(interior_product($(@arg 1), reverse($(@arg 1))))::e),
     :weight_norm => :(sqrt(interior_antiproduct($(@arg 1), antireverse($(@arg 1))))::e̅),
     :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
+    :projected_geometric_norm => :(right_antidivision(bulk_norm($(@arg 1)), weight_norm($(@arg 1)))),
     :unitize => :(right_antidivision($(@arg 1), weight_norm($(@arg 1)))),
 
     :scalar_inverse => :(inv($(@arg 1))::Scalar),
