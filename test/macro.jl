@@ -66,10 +66,36 @@ end
     symbols = traverse_collect(ex -> in(ex, (:radius, :radius2, :normalize, :weight, :magnitude2, :n)), ex2, Expr)
     @test isempty(symbols)
 
-    varinfo = VariableInfo(refs = Dict(
-      :geometric_antiproduct => :(0::e),
-    ))
-    @test_logs expand_variables(:x, sig, merge!(builtin_varinfo(sig), varinfo))
+    @testset "Redefinition warnings" begin
+      varinfo = VariableInfo(funcs = Dict(
+        :geometric_antiproduct => :(0::e),
+      ))
+      @test_logs (:warn, r"Redefinition of built-in function") merge!(builtin_varinfo(sig), varinfo)
+
+      varinfo = VariableInfo(refs = Dict(
+        :𝟏 => :(1::e̅),
+      ))
+      @test_logs (:warn, r"Redefinition of built-in variable") merge!(builtin_varinfo(sig), varinfo)
+
+      varinfo = VariableInfo(funcs = Dict(
+        :geometric_antiproduct => :(0::e),
+      ); warn_override = false)
+      @test_logs merge!(builtin_varinfo(sig), varinfo)
+
+      ex = quote
+        f(x) = x
+        f(x, y) = x + y
+        f(1::e, 2::e1)
+      end
+      @test_logs (:warn, r"user-defined function") expand_variables(ex, sig, VariableInfo())
+
+      ex = quote
+        x = 3
+        x = 4
+        x
+      end
+      @test_logs (:warn, r"user-defined variable") expand_variables(ex, sig, VariableInfo())
+    end
   end
 
   sig = Signature(1, 1, 1)

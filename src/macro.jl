@@ -31,7 +31,7 @@ function Base.merge!(x::VariableInfo, y::VariableInfo)
   for (k, v) in pairs(y.funcs)
     if haskey(x.funcs, k) && warn_override
       ln = get(y.func_sourcelocs, k, nothing)
-      @warn "Redefinition of built-in geometric algebra function `$k`$(sourceloc(ln)) (only one method is allowed)."
+      @warn "Redefinition of built-in function `$k`$(sourceloc(ln)) (only one method is allowed)."
     end
     x.funcs[k] = v
   end
@@ -196,7 +196,7 @@ function parse_variable_info(exs; warn_override::Bool = true)
       argnames = extract_name.(args)
       # Create slots so that we don't need to keep the names around; then we can directly place arguments by index.
       body = define_argument_slots(body, argnames)
-      haskey(varinfo.funcs, name) && @warn "Redefinitino of user-defined function `$name`$(sourceloc(last_line)) (only one method is allowed)."
+      haskey(varinfo.funcs, name) && @warn "Redefinition of user-defined function `$name`$(sourceloc(last_line)) (only one method is allowed)."
       varinfo.funcs[name] = body
       !isnothing(last_line) && (varinfo.func_sourcelocs[name] = last_line)
       continue
