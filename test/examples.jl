@@ -1,14 +1,3 @@
-function new_geometric_algebra(args...; signature, definitions = Expr(:block))
-  T, ex = length(args) == 1 ? (nothing, args[1]) : args
-  if Meta.isexpr(ex, :block)
-    pushfirst!(ex.args, definitions.args...)
-  else
-    push!(definitions.args, ex)
-    ex = definitions
-  end
-  esc(:(@ga $signature $T $ex))
-end
-
 macro cga3(args...)
   definitions = quote
     n = 1.0::e4 + 1.0::e5
