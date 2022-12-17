@@ -10,8 +10,8 @@ function disassociate1(args, op::Symbol, sig::Optional{Signature})
   simplified(sig, op, new_args)
 end
 
-function distribute1(ex::Expression, op::Symbol, sig::Optional{Signature})
-  x, ys = ex[1], @view ex[2:end]
+function distribute1(args, op::Symbol, sig::Optional{Signature})
+  x, ys = args[1], @view args[2:end]
   base = isexpr(x, :+) ? x.args : [x]
   for y in ys
     new_base = []
@@ -90,13 +90,14 @@ function simplify_negations(fac)
 end
 
 function apply_reverse_operators(ex::Expression, sig::Optional{Signature})
+  orgex = ex
   prewalk(ex) do ex
     isexpr(ex, (:reverse, :antireverse)) || return ex
     reverse_op = ex.head
     anti = reverse_op === :antireverse
     anti && sig::Signature
     ex = ex[1]
-    isa(ex, Expression) || error("Expected an expression as argument to `$reverse_op`.")
+    @assert isa(ex, Expression) "`Expression` argument expected for `$reverse_op`."
     # Distribute over addition.
     isexpr(ex, (:+, :kvector, :multivector)) && return simplified(sig, ex.head, anti ? antireverse.(sig, ex) : reverse.(ex))
     !anti && in(ex.grade, (0, 1)) && return ex

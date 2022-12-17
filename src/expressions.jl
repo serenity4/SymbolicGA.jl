@@ -181,8 +181,11 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     !isnothing(sig) && @assert 0 ≤ args[1] ≤ dimension(sig)
   end
 
+  # Propagate complements over addition.
+  head in (:left_complement, :right_complement) && isexpr(args[1], :+) && return simplified(sig, :+, simplified.(sig, head, args[1]))
+
   # Distribute products over addition.
-  head in (:⟑, :∧, :●, :○, :⦿, :×, :left_complement, :right_complement) && any(isexpr(arg, :+) for arg in args) && return distribute1(ex, head, sig)
+  head in (:⟑, :∧, :●, :○, :⦿, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(args, head, sig)
 
   # Eagerly apply projections.
   head === :project && return project!(args[2]::Expression, args[1]::GradeInfo)
@@ -294,7 +297,7 @@ blade_right_complement(sig::Signature, b::Expression) = blade(sig, reverse!(setd
 blade_left_complement(sig::Signature, b::Expression) = factor((-1)^(grade(b) * antigrade(sig, b))) * blade_right_complement(sig, b)
 
 function expected_nargs(head)
-  in(head, (:factor, :inverse, :reverse, :antireverse)) && return 1
+  in(head, (:factor, :inverse, :reverse, :antireverse, :left_complement, :right_complement)) && return 1
   in(head, (:project, :⋅, :/, :×, :⩒)) && return 2
   nothing
 end

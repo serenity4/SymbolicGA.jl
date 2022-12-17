@@ -51,6 +51,7 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :⩒ => :geometric_antiproduct,
     :exterior_product => :∧,
     :∨ => :exterior_antiproduct,
+    :geometric_product => :⟑,
   )
 
   funcs = Dict{Symbol,Any}(
@@ -58,8 +59,8 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :bulk_right_complement => :(reverse($(@arg 1)) ⟑ 𝟙),
     :weight_left_complement => :(𝟏 ⩒ antireverse($(@arg 1))),
     :weight_right_complement => :(𝟏 ⩒ reverse($(@arg 1))),
-    :bulk => :(bulk_left_complement(bulk_right_complement($(@arg 1)))),
-    :weight => :(weight_left_complement(weight_right_complement($(@arg 1)))),
+    :bulk => :(weight_left_complement(bulk_right_complement($(@arg 1)))),
+    :weight => :(bulk_left_complement(weight_right_complement($(@arg 1)))),
     :left_interior_product => :(left_complement($(@arg 1)) ∨ $(@arg 2)),
     :right_interior_product => :($(@arg 1) ∨ right_complement($(@arg 2))),
     :left_interior_antiproduct => :($(@arg 1) ∧ right_complement($(@arg 2))),
@@ -68,7 +69,7 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :weight_norm => :(sqrt(○($(@arg 1), antireverse($(@arg 1)))::𝟙)),
     :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
     :unitize => :($(@arg 1) / weight_norm($(@arg 1))),
-    :geometric_antiproduct => :(geometric_product(left_complement(right_complement($(@arg 1)), right_complement($(@arg 2))))),
+    :geometric_antiproduct => :(left_complement(geometric_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
     :exterior_antiproduct => :(left_complement(exterior_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
   )
 
@@ -98,7 +99,7 @@ end
 
 const ADJOINT_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (⟑, :∧, :⋅, :●, :○, :⦿, :*, :+, :×, :-, :/, :inv, :reverse, :antireverse, :left_complement, :right_complement))
+isreserved(op::Symbol) = in(op, (:⟑, :∧, :⋅, :●, :○, :⦿, :*, :+, :×, :-, :/, :inv, :reverse, :antireverse, :left_complement, :right_complement))
 
 function extract_blade_from_annotation(t, sig::Signature)
   isa(t, Symbol) || return nothing
@@ -158,7 +159,7 @@ function extract_expression(ex::Expr, sig::Signature, varinfo::VariableInfo)
       !isnothing(b) && return factor(ex) * b
       g = extract_grade_from_annotation(T, sig)
       isa(ex, Expression) && return project!(ex, g)
-      input_expression(sig, ex, g)
+      input_expression(sig, ex, g)::Expression
     else
       ex
     end

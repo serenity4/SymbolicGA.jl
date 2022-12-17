@@ -72,4 +72,20 @@ end
       @test generate(:(left_complement(A ∨ B))) == generate(:(A̲ ∧ B̲))
     end
   end
+
+  @testset "Bulk and weight" begin
+    sig = (3, 0, 1)
+    varinfo = VariableInfo(refs = Dict(
+      :x => 2.4,
+      :y => 3.2,
+      :z => :(x::e + y::e̅),
+    ))
+    generate = ex -> ga_eval(sig, ex; varinfo)
+
+    @test generate(:(left_complement(z))) == generate(:(bulk_left_complement(z) + weight_left_complement(z)))
+    @test generate(:(right_complement(z))) == generate(:(bulk_right_complement(z) + weight_right_complement(z)))
+
+    @test generate(:(bulk(z))) == generate(:(x::e))
+    @test generate(:(weight(z))) == generate(:(y::e̅))
+  end
 end;
