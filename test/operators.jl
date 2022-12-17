@@ -1,10 +1,10 @@
-using LazyGeometricAlgebra: codegen_expression, postwalk, traverse, blade_left_complement, blade_right_complement, dimension
+using LazyGeometricAlgebra: postwalk, traverse, blade_left_complement, blade_right_complement, dimension
 using Combinatorics: combinations
 
 all_blades(sig::Signature) = [blade(indices) for indices in combinations(1:dimension(sig))]
 
 function ga_eval(sig_ex, ex; flatten = :nested, T = nothing, varinfo = nothing)
-  eval(codegen_expression(sig_ex, QuoteNode(flatten), T, ex, varinfo))
+  eval(codegen_expression(sig_ex, ex; flatten, T, varinfo))
 end
 
 @testset "Operators" begin

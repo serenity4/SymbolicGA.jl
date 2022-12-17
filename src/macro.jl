@@ -1,26 +1,49 @@
-macro ga(sig_ex, flatten, T, ex) esc(codegen_expression(sig_ex, flatten, T, ex)) end
-macro ga(sig_ex, T_or_flatten, ex) isa(T_or_flatten, QuoteNode) ? esc(:(@ga $sig_ex $T_or_flatten $nothing $ex)) : esc(:(@ga $sig_ex :nested $T_or_flatten $ex)) end
+const DEFAULT_FLATTENING = :nested
+const DEFAULT_TYPE = nothing
+
+macro ga(sig_ex, flatten, T, ex)
+  isa(flatten, QuoteNode) || error("Expected QuoteNode symbol for `flatten` argument, got ", repr(flatten))
+  flatten = flatten.value
+  esc(codegen_expression(sig_ex, ex; flatten, T))
+end
+macro ga(sig_ex, T_or_flatten, ex) isa(T_or_flatten, QuoteNode) ? esc(:(@ga $sig_ex $T_or_flatten $DEFAULT_TYPE $ex)) : esc(:(@ga $sig_ex $(QuoteNode(DEFAULT_FLATTENING)) $T_or_flatten $ex)) end
 macro ga(sig_ex, ex) esc(:(@ga $sig_ex $nothing $ex)) end
 
 struct VariableInfo
   refs::Dict{Symbol,Any}
   funcs::Dict{Symbol,Any}
+  warn_override::Bool
+  ref_sourcelocs::Dict{Symbol,LineNumberNode}
+  func_sourcelocs::Dict{Symbol,LineNumberNode}
 end
 
-VariableInfo(; refs = Dict(), funcs = Dict()) = VariableInfo(refs, funcs)
+VariableInfo(; refs = Dict(), funcs = Dict(), warn_override::Bool = true) = VariableInfo(refs, funcs, warn_override, Dict(), Dict())
 
 function Base.merge!(x::VariableInfo, y::VariableInfo)
-  merge!(x.refs, y.refs)
-  merge!(x.funcs, y.funcs)
+  warn_override = x.warn_override & y.warn_override
+  for (k, v) in pairs(y.refs)
+    if haskey(x.refs, k) && warn_override
+      ln = get(y.ref_sourcelocs, k, nothing)
+      @warn "Redefinition of built-in variable `$k`$(sourceloc(ln))."
+    end
+    x.refs[k] = v
+  end
+  for (k, v) in pairs(y.funcs)
+    if haskey(x.funcs, k) && warn_override
+      ln = get(y.func_sourcelocs, k, nothing)
+      @warn "Redefinition of built-in geometric algebra function `$k`$(sourceloc(ln)) (only one method is allowed)."
+    end
+    x.funcs[k] = v
+  end
   x
 end
 
 macro arg(i) QuoteNode(Expr(:argument, i)) end
 
-function builtin_varinfo(sig)
+function builtin_varinfo(sig::Signature; warn_override::Bool = true)
   refs = Dict{Symbol,Any}(
-    :𝟏 => :e,
-    :𝟙 => Symbol(:e, join(1:dimension(sig))),
+    :𝟏 => :(1::e),
+    :𝟙 => :(1::$(Symbol(:e, join(1:dimension(sig))))),
     :⊣ => :left_interior_product,
     :⊢ => :right_interior_product,
     :⨼ => :left_interior_antiproduct,
@@ -35,6 +58,8 @@ function builtin_varinfo(sig)
     :bulk_right_complement => :(reverse($(@arg 1)) ⟑ 𝟙),
     :weight_left_complement => :(𝟏 ⩒ antireverse($(@arg 1))),
     :weight_right_complement => :(𝟏 ⩒ reverse($(@arg 1))),
+    :bulk => :(bulk_left_complement(bulk_right_complement($(@arg 1)))),
+    :weight => :(weight_left_complement(weight_right_complement($(@arg 1)))),
     :left_interior_product => :(left_complement($(@arg 1)) ∨ $(@arg 2)),
     :right_interior_product => :($(@arg 1) ∨ right_complement($(@arg 2))),
     :left_interior_antiproduct => :($(@arg 1) ∧ right_complement($(@arg 2))),
@@ -47,7 +72,7 @@ function builtin_varinfo(sig)
     :exterior_antiproduct => :(left_complement(exterior_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
   )
 
-  VariableInfo(refs, funcs)
+  VariableInfo(; refs, funcs, warn_override)
 end
 
 function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo} = nothing)
@@ -55,8 +80,7 @@ function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo}
   ex = restructure(ex, sig)
 end
 
-function codegen_expression(sig_ex, flatten::QuoteNode, T, ex, varinfo::Optional{VariableInfo} = nothing)
-  flatten = flatten.value
+function codegen_expression(sig_ex, ex; flatten::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing)
   in(flatten, (:flatten, :nested)) || error("Expected :flatten or :nested value for flattening keyword argument, got $flatten")
   flatten === :flatten && isnothing(T) && (T = :Tuple)
   sig = extract_signature(sig_ex)
@@ -144,52 +168,70 @@ function extract_expression(ex::Expr, sig::Signature, varinfo::VariableInfo)
   ex
 end
 
-"""
-Expand variables from a block expression, yielding a final expression where all variables were substitued with their defining expression.
-"""
-function expand_variables(ex::Expr, sig::Signature, varinfo::VariableInfo)
-  !Meta.isexpr(ex, :block) && (ex = Expr(:block, ex))
-  (; refs, funcs) = varinfo
-  rhs = nothing
-  for subex in ex.args
-    isa(subex, LineNumberNode) && continue
+sourceloc(ln::Nothing) = ""
+sourceloc(ln::LineNumberNode) = string(" around ", ln.file, ':', ln.line)
 
-    if Meta.isexpr(subex, :(=)) && Meta.isexpr(subex.args[1], :call) || Meta.isexpr(subex, :function)
-      # Extract function definition.
-      call, body = Meta.isexpr(subex, :(=)) ? subex.args : subex.args
-      Meta.isexpr(call, :where) && error("`where` clauses are not supported.")
-      Meta.isexpr(body, :block, 2) && isa(body.args[1], LineNumberNode) && (body = body.args[2])
-      name::Symbol, args... = call.args
-      argtypes = extract_type.(args)
-      all(isnothing, argtypes) || error("Function arguments cannot have type annotations.")
-      argnames = extract_name.(args)
-      # Create slots so that we don't need to keep the names around; then we can directly place arguments by index.
-      body = define_argument_slots(body, argnames)
-      if haskey(funcs, name)
-        @warn "Replacing geometric algebra function `$name` (only one method is allowed)."
-      end
-      funcs[name] = body
+function parse_variable_info(ex::Expr; warn_override::Bool = true)
+  @assert Meta.isexpr(ex, :block)
+  parse_variable_info(ex.args; warn_override)
+end
+function parse_variable_info(exs; warn_override::Bool = true)
+  varinfo = VariableInfo(; warn_override)
+  last_line = nothing
+  for ex in exs
+    if isa(ex, LineNumberNode)
+      last_line = ex
       continue
     end
 
-    if Meta.isexpr(subex, :(::)) && isa(subex.args[1], Symbol)
+    if Meta.isexpr(ex, :(=)) && Meta.isexpr(ex.args[1], :call) || Meta.isexpr(ex, :function)
+      # Extract function definition.
+      call, body = Meta.isexpr(ex, :(=)) ? ex.args : ex.args
+      Meta.isexpr(call, :where) && error("`where` clauses are not supported", sourceloc(last_line), '.')
+      Meta.isexpr(body, :block, 2) && isa(body.args[1], LineNumberNode) && (body = body.args[2])
+      name::Symbol, args... = call.args
+      argtypes = extract_type.(args)
+      all(isnothing, argtypes) || error("Function arguments must not have type annotations", sourceloc(last_line), '.')
+      argnames = extract_name.(args)
+      # Create slots so that we don't need to keep the names around; then we can directly place arguments by index.
+      body = define_argument_slots(body, argnames)
+      haskey(varinfo.funcs, name) && @warn "Redefinitino of user-defined function `$name`$(sourceloc(last_line)) (only one method is allowed)."
+      varinfo.funcs[name] = body
+      !isnothing(last_line) && (varinfo.func_sourcelocs[name] = last_line)
+      continue
+    end
+
+    if Meta.isexpr(ex, :(::)) && isa(ex.args[1], Symbol)
       # Type declaration.
-      var, T = subex.args
-      subex = :($var = $var::$T)
+      var, T = ex.args
+      ex = :($var = $var::$T)
     end
 
-    lhs, rhs = Meta.isexpr(subex, :(=), 2) ? subex.args : (nothing, subex)
-    if !isnothing(lhs)
-      refs[lhs] = rhs
-    else
-      subex == last(ex.args) || error("Non-final expression parsed without a left-hand side assignment.")
-      break
-    end
+    !Meta.isexpr(ex, :(=), 2) && error("Non-final expression parsed without a left-hand side assignment", sourceloc(last_line), '.')
+    lhs, rhs = ex.args
+    haskey(varinfo.refs, lhs) && @warn "Redefinition of user-defined variable `$lhs`$(sourceloc(last_line))."
+    varinfo.refs[lhs] = rhs
+    !isnothing(last_line) && (varinfo.ref_sourcelocs[lhs] = last_line)
   end
+  varinfo
+end
 
-  isnothing(rhs) && error("No input expression could be parsed.")
+"""
+Expand variables from a block expression, yielding a final expression where all variables were substitued with their defining expression.
+"""
+function expand_variables(ex, sig::Signature, varinfo::VariableInfo)
+  !Meta.isexpr(ex, :block) && (ex = Expr(:block, ex))
+  rhs = nothing
+
+  i = findlast(x -> !isa(x, LineNumberNode), eachindex(ex.args))
+  isnothing(i) && error("No input expression could be parsed.")
+  parsed_varinfo = parse_variable_info(ex.args[1:(i - 1)])
+  varinfo = merge!(deepcopy(varinfo), parsed_varinfo)
+
+  last_ex = ex.args[i]
+  rhs = Meta.isexpr(last_ex, :(=)) ? last_ex.args[2] : last_ex
   # Expand references and function calls.
-  postwalk(ex -> expand_subtree(ex, refs, funcs, Set{Symbol}()), rhs)
+  postwalk(ex -> expand_subtree(ex, varinfo.refs, varinfo.funcs, Set{Symbol}()), rhs)
 end
 
 function expand_subtree(ex, refs, funcs, used_refs)

@@ -18,6 +18,9 @@ export Signature,
   Bivector,
   Trivector,
   Quadvector,
-  grade
+  grade,
+  codegen_expression,
+  VariableInfo,
+  parse_variable_info
 
 end

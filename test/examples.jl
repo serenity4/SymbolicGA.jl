@@ -22,7 +22,8 @@ macro cga3(args...)
     # For spheres `S` defined as vectors, and points `X` defined as vectors as well.
     distance(S, X) = (S ⋅ X) / (weight(S) * weight(X))
   end
-  new_geometric_algebra(args...; signature = (4, 1, 0), definitions)
+  varinfo = parse_variable_info(definitions; warn_override = false)
+  esc(codegen_expression((4, 1, 0), args...; varinfo))
 end
 
 point(x) = @cga3 (vector_3d(x) + (0.5::Scalar * magnitude2(vector_3d(x))) * n + n̄)::Vector
@@ -62,7 +63,8 @@ macro pga3(args...)
     weight(X) = (-X ⋅ 1::e4)
     normalize(X) = X / weight(X)
   end
-  new_geometric_algebra(args...; signature = (3, 0, 1), definitions)
+  varinfo = parse_variable_info(definitions; warn_override = false)
+  esc(codegen_expression((3, 1, 0), args...; varinfo))
 end
 
 struct Camera
