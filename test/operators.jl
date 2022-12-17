@@ -103,7 +103,10 @@ end
 
   @testset "Norms & unitization" begin
     sig = (3, 0, 1)
-    varinfo = VariableInfo()
+    varinfo = VariableInfo(refs = Dict(
+      :p => :(8.4::e1 + 4.2::e4),
+      :punit => :(2.0::e1 + 1.0::e4),
+    ))
     generate = ex -> ga_eval(sig, ex; varinfo)
 
     @test generate(:(bulk_norm(1::e1))) == generate(:(1.0::e))
@@ -114,5 +117,7 @@ end
     @test generate(:(weight_norm(1::e4))) == generate(:(1.0::e̅))
     @test generate(:(weight_norm(1::e1))) == KVector{4,4}(0.0)
     @test generate(:(weight_norm(3.2::e1 + 4.0::e4))) == generate(:(4.0::e̅))
+
+    @test generate(:(unitize(p))) == generate(:punit)
   end
 end;
