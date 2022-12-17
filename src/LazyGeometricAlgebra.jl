@@ -21,6 +21,7 @@ export Signature,
   grade,
   codegen_expression,
   VariableInfo,
-  parse_variable_info
+  parse_variable_info,
+  @arg
 
 end

@@ -120,6 +120,7 @@ sig = Signature(3, 1)
     @test antireverse(sig, blade(1, 2)) == blade(2, 1)
     @test antireverse(sig, factor(:x) * blade(1, 2)) == factor(:x) * blade(2, 1)
     @test antireverse(sig, blade(1, 2, 3) + blade(2) + blade(2, 3)) == blade(1, 2, 3) - blade(2) + blade(3, 2)
+    @test antireverse(Signature(3, 0, 1), weighted(blade(4), 1.0)) == antireverse(Signature(3, 0, 1), blade(4)) == -blade(4)
   end
 
   @testset "Exterior products" begin

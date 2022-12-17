@@ -38,7 +38,10 @@ function Base.merge!(x::VariableInfo, y::VariableInfo)
   x
 end
 
-macro arg(i) QuoteNode(Expr(:argument, i)) end
+macro arg(i)
+  i > 0 || error("Argument slots must be positive integers.")
+  QuoteNode(Expr(:argument, i))
+end
 
 function builtin_varinfo(sig::Signature; warn_override::Bool = true)
   refs = Dict{Symbol,Any}(
@@ -52,6 +55,8 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :exterior_product => :∧,
     :∨ => :exterior_antiproduct,
     :geometric_product => :⟑,
+    :○ => :interior_antiproduct,
+    :interior_product => :⚫,
   )
 
   funcs = Dict{Symbol,Any}(
@@ -61,16 +66,29 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :weight_right_complement => :(𝟏 ⩒ reverse($(@arg 1))),
     :bulk => :(weight_left_complement(bulk_right_complement($(@arg 1)))),
     :weight => :(bulk_left_complement(weight_right_complement($(@arg 1)))),
+
     :left_interior_product => :(left_complement($(@arg 1)) ∨ $(@arg 2)),
     :right_interior_product => :($(@arg 1) ∨ right_complement($(@arg 2))),
+    :scalar_product => :(geometric_product($(@arg 1), reverse($(@arg 1)))::e),
     :left_interior_antiproduct => :($(@arg 1) ∧ right_complement($(@arg 2))),
     :right_interior_antiproduct => :(left_complement($(@arg 1)) ∧ $(@arg 2)),
-    :bulk_norm => :(sqrt(○($(@arg 1), reverse($(@arg 1)))::𝟏)),
-    :weight_norm => :(sqrt(○($(@arg 1), antireverse($(@arg 1)))::𝟙)),
+
+    :bulk_norm => :(sqrt(interior_product($(@arg 1), reverse($(@arg 1))))::e),
+    :weight_norm => :(sqrt(interior_antiproduct($(@arg 1), antireverse($(@arg 1))))::e̅),
     :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
-    :unitize => :($(@arg 1) / weight_norm($(@arg 1))),
+    :unitize => :(right_antidivision(weight($(@arg 1)), weight_norm($(@arg 1))) + bulk($(@arg 1))),
+
+    :inverse => :($(@arg 1) / scalar_product($(@arg 1))),
+    :left_division => :(inverse($(@arg 1)) ⟑ $(@arg 2)),
+    :right_division => :($(@arg 1) ⟑ inverse($(@arg 2))),
+
     :geometric_antiproduct => :(left_complement(geometric_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
     :exterior_antiproduct => :(left_complement(exterior_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
+    :interior_antiproduct => :(left_complement(interior_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
+    :antiscalar_product => :(geometric_antiproduct($(@arg 1), antireverse($(@arg 1)))::e̅),
+    :antiinverse => :(left_complement(inverse(right_complement($(@arg 1))))),
+    :left_antidivision => :(left_complement(left_division(right_complement($(@arg 1)), right_complement($(@arg 2))))),
+    :right_antidivision => :(left_complement(right_division(right_complement($(@arg 1)), right_complement($(@arg 2))))),
   )
 
   VariableInfo(; refs, funcs, warn_override)
@@ -133,7 +151,7 @@ function extract_grade_from_annotation(t, sig::Signature)
   error("Unknown grade projection for algebraic element $t")
 end
 
-function extract_expression(ex::Expr, sig::Signature, varinfo::VariableInfo)
+function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
   ex = expand_variables(ex, sig, varinfo)
   @debug "After variable expansion: $(stringc(ex))"
 
@@ -165,7 +183,7 @@ function extract_expression(ex::Expr, sig::Signature, varinfo::VariableInfo)
     end
   end
 
-  isa(ex, Expression) || error("Could not fully extract expression: $ex\n\nOutermost expression has head $(ex.head) and arguments $(ex.args)")
+  isa(ex, Expression) || error("Could not fully extract expression: $ex\n\nOutermost expression has head $(ex.head) and arguments $(ex.args)\n")
   ex
 end
 
@@ -268,16 +286,27 @@ function expand_function_call(funcs, ex)
   f::Symbol, args... = ex.args
   func = get(funcs, f, nothing)
   isnothing(func) && return nothing
-  fill_argument_slots(funcs[f], ex, args)
+  fill_argument_slots(funcs[f], args, f)
 end
 
-function fill_argument_slots(ex, original_ex, args)
-  argtypes = extract_type.(args)
-  # all(!isnothing, argtypes) || error("Arguments must be type-annotated for function call $original_ex")
+function fill_argument_slots(ex, args, f::Symbol)
   postwalk(ex) do ex
-    Meta.isexpr(ex, :argument) && return args[ex.args[1]::Int]
+    if Meta.isexpr(ex, :argument)
+      arg = ex.args[1]::Int
+      in(arg, eachindex(args)) || throw(ArgumentError("Not enough function arguments were provided to function '$f': expected $(argument_count(ex)) arguments, $(length(args)) were provided."))
+      return args[arg]
+    end
     ex
   end
+end
+
+function argument_count(ex)
+  i = 0
+  traverse(ex, Expr) do ex
+    Meta.isexpr(ex, :argument) && (i = max(i, ex.args[1]::Int))
+    nothing
+  end
+  i
 end
 
 function expand_reference(refs, ex)
@@ -362,5 +391,7 @@ function to_expr(ex, sig::Optional{Signature} = nothing, flatten::Bool = false, 
     return to_final_expr(ex[1]::Expression)
   end
   ex === Zero() && return 0
+  # Follow through opaque function calls.
+  Meta.isexpr(ex, :call) && return Expr(:call, ex.args[1], to_expr.(ex.args[2:end], sig, flatten, T)...)
   ex
 end

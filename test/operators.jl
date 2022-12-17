@@ -73,6 +73,18 @@ end
     end
   end
 
+  @testset "Interior (anti)product" begin
+    @test (@ga 3 ●(3.0::e, 1.0::e1))[] == 0.
+    @test (@ga 3 ●(3.0::e̅, (2.0::e̅)'))[] == 6.0
+    @test (@ga 3 ●(3.0::e12, 2.0::e2)) == KVector{1,3}(6., 0., 0.)
+    @test (@ga 3 ●((sqrt(2)::e1 + sqrt(2)::e2), (sqrt(2)::e1 + sqrt(2)::e2)'))[] ≈ 4.0
+
+    @test (@ga 3 ○(3.0::e̅, 1.0::e23))[] == 0.
+    @test (@ga 3 ○(3.0::e, (2.0::e)'))[] == -6.0
+    @test (@ga 3 ○(3.0::e12, 2.0::e2)) == KVector{2,3}(0., 0., 6.)
+    @test (@ga 3 ○((sqrt(2)::e23 + sqrt(2)::e13), antireverse(sqrt(2)::e23 + sqrt(2)::e13)))[] ≈ 4.0
+  end
+
   @testset "Bulk and weight" begin
     sig = (3, 0, 1)
     varinfo = VariableInfo(refs = Dict(
@@ -87,5 +99,20 @@ end
 
     @test generate(:(bulk(z))) == generate(:(x::e))
     @test generate(:(weight(z))) == generate(:(y::e̅))
+  end
+
+  @testset "Norms & unitization" begin
+    sig = (3, 0, 1)
+    varinfo = VariableInfo()
+    generate = ex -> ga_eval(sig, ex; varinfo)
+
+    @test generate(:(bulk_norm(1::e1))) == generate(:(1.0::e))
+    # TODO: Make sure generate(:(0.0::e)) results in a KVector whose element type is Float64.
+    # @test generate(:(bulk_norm(1::e4))) == generate(:(0.0::e))
+    @test generate(:(bulk_norm(1::e4))) == KVector{0,4}(0.0)
+
+    @test generate(:(weight_norm(1::e4))) == generate(:(1.0::e̅))
+    @test generate(:(weight_norm(1::e1))) == KVector{4,4}(0.0)
+    @test generate(:(weight_norm(3.2::e1 + 4.0::e4))) == generate(:(4.0::e̅))
   end
 end;

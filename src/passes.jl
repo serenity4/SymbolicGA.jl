@@ -78,9 +78,9 @@ end
 
 function simplify_negations(fac)
   if Meta.isexpr(fac, :call) && fac.args[1] === :*
-    n = count(x -> x === -1, fac.args)
+    n = count(x -> x == -1, fac.args)
     if n > 1
-      sc_args = filter(x -> x !== -1, fac.args)
+      sc_args = filter(x -> x != -1, fac.args)
       isodd(n) && insert!(sc_args, 2, -1)
       length(sc_args) == 1 && return 1
       return Expr(:call, sc_args...)
@@ -103,7 +103,7 @@ function apply_reverse_operators(ex::Expression, sig::Optional{Signature})
     !anti && in(ex.grade, (0, 1)) && return ex
     anti && in(antigrade(sig, ex.grade), (0, 1)) && return ex
     isexpr(ex, :⟑) && return propagate_reverse(reverse_op, ex, sig)
-    @assert isexpr(ex, :blade) "Unexpected operator $head encountered when applying $reverse_op operators."
+    @assert isexpr(ex, :blade) "Unexpected operator $(ex.head) encountered when applying $reverse_op operators."
     n = anti ? antigrade(sig, ex)::Int : grade(ex)::Int
     fac = (-1)^(n * (n - 1) ÷ 2)
     isone(fac) ? ex : -ex
@@ -119,7 +119,8 @@ function propagate_reverse(reverse_op, ex::Expression, sig::Optional{Signature})
   res = Any[]
   for arg in ex
     arg::Expression
-    in(arg.grade, (0, 1)) ? push!(res, arg) : push!(res, simplified(sig, reverse_op, arg))
+    skip = isexpr(arg, :factor) || reverse_op === :reverse ? in(arg.grade, (0, 1)) : in(antigrade(sig, arg.grade), (0, 1))
+    skip ? push!(res, arg) : push!(res, simplified(sig, reverse_op, arg))
   end
   simplified(sig, ex.head, res)
 end

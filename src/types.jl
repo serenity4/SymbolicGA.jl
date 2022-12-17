@@ -11,6 +11,8 @@ struct KVector{K,T,D,N}
   KVector{K,D}(elements::Tuple) where {K,D} = KVector{K,D}(promote(elements...))
 end
 
+KVector{K,D}(xs...) where {K,D} = KVector{K,D}(xs)
+
 const Bivector{T,D,N} = KVector{2,T,D,N}
 const Trivector{T,D,N} = KVector{3,T,D,N}
 const Quadvector{T,D,N} = KVector{4,T,D,N}

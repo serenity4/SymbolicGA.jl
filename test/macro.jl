@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: extract_weights, input_expression, extract_expression, restructure, expand_variables, traverse, builtin_varinfo
+using LazyGeometricAlgebra: extract_weights, input_expression, extract_expression, restructure, expand_variables, traverse, builtin_varinfo, argument_count, fill_argument_slots
 
 function traverse_collect(f, x, T = Expression)
   res = []
@@ -10,6 +10,14 @@ function traverse_collect(f, x, T = Expression)
 end
 
 @testset "Macro frontend" begin
+  @testset "Function definition" begin
+    f = :($(@arg(1)) + $(@arg(2)))
+    @test argument_count(f) == 2
+
+    @test_throws "Not enough function arguments" fill_argument_slots(f, [:x], :f)
+    @test fill_argument_slots(f, [:x, :y], :f) == :(x + y)
+  end
+
   @testset "Function and variable expansion" begin
     sig = Signature(3)
 
