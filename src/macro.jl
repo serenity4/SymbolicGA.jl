@@ -56,7 +56,12 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :∨ => :exterior_antiproduct,
     :geometric_product => :⟑,
     :○ => :interior_antiproduct,
-    :interior_product => :⚫,
+    :⋅ => :●,
+    :interior_product => :●,
+    :⦿ => :scalar_product,
+    :/ => :division,
+    :division => :right_division,
+    :antidivision => :right_antidivision,
   )
 
   funcs = Dict{Symbol,Any}(
@@ -69,7 +74,7 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
 
     :left_interior_product => :(left_complement($(@arg 1)) ∨ $(@arg 2)),
     :right_interior_product => :($(@arg 1) ∨ right_complement($(@arg 2))),
-    :scalar_product => :(geometric_product($(@arg 1), reverse($(@arg 1)))::e),
+    :scalar_product => :(geometric_product($(@arg 1), reverse($(@arg 1)))::Scalar),
     :left_interior_antiproduct => :($(@arg 1) ∧ right_complement($(@arg 2))),
     :right_interior_antiproduct => :(left_complement($(@arg 1)) ∧ $(@arg 2)),
 
@@ -78,7 +83,8 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
     :unitize => :(right_antidivision(weight($(@arg 1)), weight_norm($(@arg 1))) + bulk($(@arg 1))),
 
-    :inverse => :($(@arg 1) / scalar_product($(@arg 1))),
+    :scalar_inverse => :(inv($(@arg 1))::Scalar),
+    :inverse => :(reverse($(@arg 1)) * scalar_inverse(scalar_product($(@arg 1)))),
     :left_division => :(inverse($(@arg 1)) ⟑ $(@arg 2)),
     :right_division => :($(@arg 1) ⟑ inverse($(@arg 2))),
 
@@ -117,7 +123,7 @@ end
 
 const ADJOINT_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (:⟑, :∧, :⋅, :●, :○, :⦿, :*, :+, :×, :-, :/, :inv, :reverse, :antireverse, :left_complement, :right_complement))
+isreserved(op::Symbol) = in(op, (:⟑, :∧, :●, :*, :+, :×, :-, :reverse, :antireverse, :left_complement, :right_complement))
 
 function extract_blade_from_annotation(t, sig::Signature)
   isa(t, Symbol) || return nothing
@@ -174,7 +180,10 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
     elseif Meta.isexpr(ex, :(::))
       ex, T = ex.args
       b = extract_blade_from_annotation(T, sig)
-      !isnothing(b) && return factor(ex) * b
+      if !isnothing(b)
+        !isa(ex, Expression) || error("Blade annotations for intermediate expressions are not supported.")
+        return weighted(b, ex)
+      end
       g = extract_grade_from_annotation(T, sig)
       isa(ex, Expression) && return project!(ex, g)
       input_expression(sig, ex, g)::Expression

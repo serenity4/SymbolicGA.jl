@@ -44,7 +44,7 @@ end
       :z => :(x::e),
     ))
     ex = :(z ⦿ z)
-    ex2 = expand_variables(ex, sig, merge!(builtin_varinfo(sig), varinfo))
+    ex2 = expand_variables(ex, sig, varinfo)
     @test ex2 == :(2.4::e ⦿ 2.4::e)
 
     varinfo = VariableInfo(refs = Dict(

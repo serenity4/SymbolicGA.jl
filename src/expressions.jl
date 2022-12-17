@@ -7,7 +7,6 @@ mutable struct Expression
   function Expression(head::Symbol, args::AbstractVector; simplify = true, grade = nothing)
     ex = new()
     # Aliases.
-    head === :⋅ && (head = :●)
     head === :* && (head = :⟑)
     ex.head = head
     ex.args = args
@@ -25,12 +24,6 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   (; head, args) = ex
   # Simplify nested factor expressions.
   head === :factor && isexpr(args[1], :factor) && return simplify!(args[1]::Expression, sig)
-  # Apply scalar and blade inversions.
-  head === :inverse && isblade(args[1]) && return reverse(args[1])
-  if head === :inverse && isweightedblade(args[1])
-    fac_arg = inverse(args[1][1][1])
-    return weighted(reverse(args[1][2]), fac_arg)
-  end
 
   # Apply left and right complements.
   if head in (:left_complement, :right_complement)
@@ -97,14 +90,14 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   fac = remove_unit_elements!(args, head)
   !isnothing(fac) && return scalar(fac)
 
-  if in(head, (:⟑, :⩒, :+))
+  if in(head, (:⟑, :+))
     length(args) == 1 && return args[1]
 
-    # Disassociate ⟑, ⩒ and +.
+    # Disassociate ⟑ and +.
     any(isexpr(head), args) && return disassociate1(args, head, sig)
   end
 
-  if in(head, (:⟑, :⩒))
+  if head === :⟑
     # Collapse factors into one and put it at the front.
     nf = count(isexpr(:factor), args)
     if nf ≥ 2
@@ -112,7 +105,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
       factors, nonfactors = filter(isexpr(:factor), args), filter(!isexpr(:factor), args)
       fac = collapse_factors(*, factors)
       length(args) == nf && return fac
-      return simplified(sig, head, Any[fac; nonfactors])
+      return simplified(sig, :⟑, Any[fac; nonfactors])
     elseif nf == 1 && !isexpr(args[1], :factor)
       # Put the factor at the front.
       i = findfirst(isexpr(:factor), args)
@@ -122,26 +115,23 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
       return simplified(sig, :⟑, args)
     end
 
-    # Collapse all blades as one.
-    if head === :⟑
-      # Collapse all bases and blades into a single blade.
-      nb = count(isexpr(:blade), args)
-      if nb > 1
-        n = length(args)
-        blade_args = []
-        for i in reverse(eachindex(args))
-          x = args[i]
-          isexpr(x, :blade) || continue
-          for arg in reverse(x.args)
-            pushfirst!(blade_args, arg::Int)
-          end
-          deleteat!(args, i)
+    # Collapse all bases and blades into a single blade.
+    nb = count(isexpr(:blade), args)
+    if nb > 1
+      n = length(args)
+      blade_args = []
+      for i in reverse(eachindex(args))
+        x = args[i]
+        isexpr(x, :blade) || continue
+        for arg in reverse(x.args)
+          pushfirst!(blade_args, arg::Int)
         end
-        ex = blade(sig, blade_args)
-        # Return the blade if all the terms were collapsed.
-        nb == n && return ex
-        return simplified(sig, :⟑, Any[args; ex])
+        deleteat!(args, i)
       end
+      ex = blade(sig, blade_args)
+      # Return the blade if all the terms were collapsed.
+      nb == n && return ex
+      return simplified(sig, :⟑, Any[args; ex])
     end
   end
 
@@ -180,12 +170,13 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     @assert isa(args[1], Int) && isa(args[2], Expression)
     !isnothing(sig) && @assert 0 ≤ args[1] ≤ dimension(sig)
   end
+  head === :factor && @assert !isa(args[1], Expression) "`Expression` argument detected in :factor expression: $(args[1])"
 
   # Propagate complements over addition.
   head in (:left_complement, :right_complement) && isexpr(args[1], :+) && return simplified(sig, :+, simplified.(sig, head, args[1]))
 
   # Distribute products over addition.
-  head in (:⟑, :∧, :●, :○, :⦿, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(args, head, sig)
+  head in (:⟑, :∧, :●, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(args, head, sig)
 
   # Eagerly apply projections.
   head === :project && return project!(args[2]::Expression, args[1]::GradeInfo)
@@ -213,25 +204,10 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     return project!(simplified(sig, :⟑, args), abs(r - s))
   end
 
-  head === :⦿ && return project!(simplified(sig, :⟑, args), 0)
-
   if head === :×
     # The commutator product must have only two operands, as no associativity law is available to derive a canonical binarization.
     a, b = args[1]::Expression, args[2]::Expression
     return weighted(simplified(sig, :-, simplified(sig, :⟑, a, b), simplified(sig, :⟑, b, a)), 0.5)
-  end
-
-  if head === :inverse
-    a = args[1]::Expression
-    @assert a ≠ scalar(0)
-    denom = simplified(sig, :⦿, a, a)
-    @assert isscalar(denom)
-    return reverse(a) / denom
-  end
-
-  if head === :/
-    a, b = args[1]::Expression, args[2]::Expression
-    return simplified(sig, :⟑, a, simplified(sig, :inverse, b))
   end
 
   ex.grade = infer_grade(head, args)::GradeInfo
@@ -298,7 +274,7 @@ blade_left_complement(sig::Signature, b::Expression) = factor((-1)^(grade(b) * a
 
 function expected_nargs(head)
   in(head, (:factor, :inverse, :reverse, :antireverse, :left_complement, :right_complement)) && return 1
-  in(head, (:project, :⋅, :/, :×, :⩒)) && return 2
+  in(head, (:project, :●, :×)) && return 2
   nothing
 end
 
@@ -418,7 +394,6 @@ blade(sig::Optional{Signature}, xs...) = simplified(sig, :blade, xs...)
 Base.:(*)(x::Expression, args::Expression...) = Expression(:*, x, args...)
 Base.:(+)(x::Expression, args::Expression...) = Expression(:+, x, args...)
 Base.:(-)(x::Expression, args::Expression...) = Expression(:-, x, args...)
-Base.:(/)(x::Expression, y::Expression) = Expression(:/, x, y)
 Base.inv(x::Expression) = Expression(:inverse, x)
 ⦿(x::Expression, y::Expression) = Expression(:⦿, x, y)
 ⋅(x::Expression, y::Expression) = Expression(:⋅, x, y)

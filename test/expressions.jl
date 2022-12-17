@@ -73,7 +73,6 @@ sig = Signature(3, 1)
     @test factor(1) * blade(1, 2) * factor(3) == Expression(:⟑, factor(3), blade(1, 2); simplify = false)
     # @test blade(1, 2) * factor(0) == Expression(:⟑, factor(0), blade(1, 2); simplify = false)
     @test blade(1, 2) * factor(0) == factor(0)
-    @test inv(scalar(5)) * scalar(5) == scalar(0.2) * scalar(5) == scalar(1.0)
     @test factor(:(-1 * -1)) == factor(1)
     @test factor(:(-1 * -1)) * blade(1, 2) == blade(1, 2)
 
@@ -132,11 +131,8 @@ sig = Signature(3, 1)
   end
 
   @testset "Common operators" begin
-    @test simplified(sig, :⦿, blade(1, 2), blade(1, 2)) == scalar(-1)
-    @test simplified(sig, :●, blade(1), blade(1, 2)) == simplified(sig, :⋅, blade(1), blade(1, 2)) == blade(2)
+    @test simplified(sig, :●, blade(1), blade(1, 2)) == blade(2)
     @test simplified(sig, :×, blade(1), blade(2)) == weighted(blade(1, 2), 0.5) + weighted(blade(1, 2), 0.5)
-    @test simplified(sig, :inverse, blade(1)) == blade(1)
-    @test simplified(sig, :inverse, factor(0.5) * blade(1)) == weighted(blade(1), 2.0)
     @test simplified(sig, :∧, blade(1), blade(2)) == blade(1, 2)
   end
 end;

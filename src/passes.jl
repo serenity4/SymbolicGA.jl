@@ -39,7 +39,7 @@ function restructure_sums(ex::Expression, sig::Signature)
     isone(nelements(sig, ex.grade::Int)) && return kvector(ex)
     terms = [ex]
   else
-    @assert isexpr(ex, :+)
+    @assert isexpr(ex, :+) "Expected addition expression, got expression type $(ex.head)"
     terms = ex.args
   end
 
