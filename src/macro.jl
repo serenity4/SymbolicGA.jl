@@ -2,15 +2,15 @@ const DEFAULT_FLATTENING = :nested
 const DEFAULT_TYPE = nothing
 
 """
-    @ga <sig> <flatten> <T> <ex>
-    @ga <sig> <flatten or T> <ex>
+    @ga <sig> <flattening> <T> <ex>
+    @ga <sig> <flattening or T> <ex>
     @ga <sig> <ex>
 
 Generate Julia code which implements the computation of geometric elements from `ex` in an algebra defined by a signature `sig` (see [`SymbolicGA.Signature`](@ref)).
 
 Supported syntax:
 - `sig`: Integer literal or tuple of 1, 2 or 3 integer literals corresponding to the number of positive, negative and degenerate basis vectors respectively, where unspecified integers default to zero.
-- `flatten`: Symbol literal.
+- `flattening`: Symbol literal.
 - `T`: Any arbitrary expression which evaluates to a type or to `nothing`.
 - `ex`: Any arbitrary expression that can be parsed algebraically.
 
@@ -45,12 +45,12 @@ See [`SymbolicGA.VariableInfo`](@ref) for more information regarding the expansi
 """
 macro ga end
 
-macro ga(sig_ex, flatten, T, ex)
-  isa(flatten, QuoteNode) || error("Expected QuoteNode symbol for `flatten` argument, got ", repr(flatten))
-  flatten = flatten.value
-  esc(codegen_expression(sig_ex, ex; flatten, T))
+macro ga(sig_ex, flattening, T, ex)
+  isa(flattening, QuoteNode) || error("Expected QuoteNode symbol for `flattening` argument, got ", repr(flattening))
+  flattening = flattening.value
+  esc(codegen_expression(sig_ex, ex; flattening, T))
 end
-macro ga(sig_ex, T_or_flatten, ex) isa(T_or_flatten, QuoteNode) ? esc(:(@ga $sig_ex $T_or_flatten $DEFAULT_TYPE $ex)) : esc(:(@ga $sig_ex $(QuoteNode(DEFAULT_FLATTENING)) $T_or_flatten $ex)) end
+macro ga(sig_ex, T_or_flattening, ex) isa(T_or_flattening, QuoteNode) ? esc(:(@ga $sig_ex $T_or_flattening $DEFAULT_TYPE $ex)) : esc(:(@ga $sig_ex $(QuoteNode(DEFAULT_FLATTENING)) $T_or_flattening $ex)) end
 macro ga(sig_ex, ex) esc(:(@ga $sig_ex $nothing $ex)) end
 
 """
@@ -169,26 +169,26 @@ function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo}
 end
 
 """
-    codegen_expression(sig, ex; flatten::Symbol = $(QuoteNode(DEFAULT_FLATTENING)), T = $DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing)
+    codegen_expression(sig, ex; flattening::Symbol = $(QuoteNode(DEFAULT_FLATTENING)), T = $DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing)
 
 Parse `ex` as an algebraic expression and generate a Julia expression which represents the corresponding computation. `sig` can be a [`SymbolicGA.Signature`](@ref) or a signature integer, tuple or tuple expression adhering to semantics of [`@ga`](@ref). See [`@ga`](@ref) for more information regarding the parsing and semantics applied to `ex`.
 
 ## Parameters
-- `flatten` controls whether the components should be nested (`:nested`) or flattened (`:flattened`). In short, setting this option to `:flattened` always returns a single tuple of components, even multiple geometric entities are present in the output; while `:nested` will return a tuple of multiple elements if several geometric entities result from the computation.
+- `flattening` controls whether the components should be nested (`:nested`) or flattened (`:flattened`). In short, setting this option to `:flattened` always returns a single tuple of components, even multiple geometric entities are present in the output; while `:nested` will return a tuple of multiple elements if several geometric entities result from the computation.
 - `T` specifies what type to use when reconstructing geometric entities from tuple components with [`construct`](@ref). If set to `nothing` with a `:nested` mode (default), then an appropriate [`KVector`](@ref) will be used depending on which type of geometric entity is returned; if multiple entities are present, a tuple of `KVector`s will be returned. With a `:flattened` mode, `T` will be set to `:Tuple` if unspecified.
 - `varinfo` is a user-provided [`SymbolicGA.VariableInfo`](@ref) which controls what expansions are carried out on the raw Julia expression before conversion to an algebraic expression.
 
 """
 function codegen_expression end
 
-codegen_expression(sig_ex, ex; flatten::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing) =
-  codegen_expression(extract_signature(sig_ex), ex; flatten, T, varinfo)
+codegen_expression(sig_ex, ex; flattening::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing) =
+  codegen_expression(extract_signature(sig_ex), ex; flattening, T, varinfo)
 
-function codegen_expression(sig::Signature, ex; flatten::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing)
-  in(flatten, (:flattened, :nested)) || error("Expected :flattened or :nested value for flattening keyword argument, got $flatten")
-  flatten === :flattened && isnothing(T) && (T = :Tuple)
+function codegen_expression(sig::Signature, ex; flattening::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing)
+  in(flattening, (:flattened, :nested)) || error("Expected :flattened or :nested value for flattening keyword argument, got $flattening")
+  flattening === :flattened && isnothing(T) && (T = :Tuple)
   varinfo = merge!(builtin_varinfo(sig), @something(varinfo, VariableInfo()))
-  to_final_expr(generate_expression(sig, ex, varinfo), sig, flatten == :flattened, T)
+  to_final_expr(generate_expression(sig, ex, varinfo), sig, flattening == :flattened, T)
 end
 
 function extract_signature(ex)

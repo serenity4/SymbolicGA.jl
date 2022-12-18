@@ -3,8 +3,8 @@ using Combinatorics: combinations
 
 all_blades(sig::Signature) = [blade(indices) for indices in combinations(1:dimension(sig))]
 
-function ga_eval(sig_ex, ex; flatten = :nested, T = nothing, varinfo = nothing)
-  eval(codegen_expression(sig_ex, ex; flatten, T, varinfo))
+function ga_eval(sig_ex, ex; flattening = :nested, T = nothing, varinfo = nothing)
+  eval(codegen_expression(sig_ex, ex; flattening, T, varinfo))
 end
 
 @testset "Operators" begin
