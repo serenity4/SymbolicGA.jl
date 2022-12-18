@@ -164,12 +164,8 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   # Check that arguments make sense.
   n = expected_nargs(head)
   !isnothing(n) && @assert length(args) == n "Expected $n arguments for expression $head, $n were provided\nArguments: $args"
-  @assert head === :blade || !isempty(args)
+  @assert !isempty(args) || head === :blade
   head === :blade && @assert all(isa(i, Int) for i in args)
-  if head === :project
-    @assert isa(args[1], Int) && isa(args[2], Expression)
-    !isnothing(sig) && @assert 0 ≤ args[1] ≤ dimension(sig)
-  end
   head === :factor && @assert !isa(args[1], Expression) "`Expression` argument detected in :factor expression: $(args[1])"
 
   # Propagate complements over addition.
@@ -177,9 +173,6 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
 
   # Distribute products over addition.
   head in (:⟑, :∧, :●, :×) && any(isexpr(arg, :+) for arg in args) && return distribute1(args, head, sig)
-
-  # Eagerly apply projections.
-  head === :project && return project!(args[2]::Expression, args[1]::GradeInfo)
 
   # Eagerly apply reversions.
   head in (:reverse, :antireverse) && return apply_reverse_operators(ex, sig)
@@ -304,19 +297,17 @@ end
 
 function expected_nargs(head)
   in(head, (:factor, :inverse, :reverse, :antireverse, :left_complement, :right_complement)) && return 1
-  in(head, (:project, :●, :×)) && return 2
+  in(head, (:●, :×)) && return 2
   nothing
 end
 
 function infer_grade(head::Symbol, args)
-  in(head, (:factor, ⦿)) && return 0
+  head === :factor && return 0
   head === :blade && return count(isodd, map(x -> count(==(x), args), unique(args)))
   if head === :⟑
     # Fast path for frequently encountered expressions.
-    length(args) == 2 && isexpr(args[1], :factor) && return (args[2]::Expression).grade
-
-    computed_grade = compute_grade_for_product(args)
-    !isnothing(computed_grade) && return computed_grade
+    @assert length(args) == 2 && isexpr(args[1], :factor)
+    return grade(args[2]::Expression)
   end
   if in(head, (:+, :multivector))
     gs = Int64[]
@@ -339,23 +330,6 @@ function infer_grade(head::Symbol, args)
     return first(grades)
   end
   error("Cannot infer grade for unexpected $head expression with arguments $args")
-end
-
-function compute_grade_for_product(args)
-  res = nothing
-  for arg in args
-    g = grade(arg)
-    iszero(g) && continue
-    if isnothing(res)
-      res = g
-      continue
-    end
-    if res ≠ g
-      res = nothing
-      break
-    end
-  end
-  res
 end
 
 # Empirical formula.
@@ -438,7 +412,6 @@ isexpr(ex, heads) = isa(ex, Expression) && in(ex.head, heads)
 isexpr(ex, head::Symbol, n::Int) = isa(ex, Expression) && isexpr(ex, head) && length(ex.args) == n
 isexpr(heads) = ex -> isexpr(ex, heads)
 grade(ex::Expression) = ex.grade::GradeInfo
-grades(ex::Expression) = ex.grade::Vector{Int}
 isblade(ex, n = nothing) = isexpr(ex, :blade) && (isnothing(n) || n == length(ex))
 isscalar(ex::Expression) = isblade(ex, 0) || isweightedblade(ex, 0)
 isweighted(ex) = isexpr(ex, :⟑, 2) && isexpr(ex[1]::Expression, :factor)
@@ -470,7 +443,6 @@ kvector(args::AbstractVector) = Expression(:kvector, args)
 kvector(xs...) = kvector(collect(Any, xs))
 multivector(args::AbstractVector) = Expression(:multivector, args)
 multivector(xs...) = multivector(collect(Any, xs))
-project(g::GradeInfo, ex) = Expression(:project, g, ex)
 Base.reverse(ex::Expression) = Expression(:reverse, ex)
 antireverse(sig::Signature, ex::Expression) = simplified(sig, :antireverse, ex)
 antiscalar(sig::Signature, fac) = factor(fac) * antiscalar(sig)
@@ -479,13 +451,9 @@ antiscalar(sig::Signature) = blade(1:dimension(sig))
 blade(sig::Optional{Signature}, xs...) = simplified(sig, :blade, xs...)
 
 ⟑(x::Expression, args::Expression...) = Expression(:⟑, x, args...)
-⟑(x, ys...) = *(x, ys...)
 Base.:(*)(x::Expression, args::Expression...) = Expression(:*, x, args...)
 Base.:(+)(x::Expression, args::Expression...) = Expression(:+, x, args...)
 Base.:(-)(x::Expression, args::Expression...) = Expression(:-, x, args...)
-Base.inv(x::Expression) = Expression(:inverse, x)
-⦿(x::Expression, y::Expression) = Expression(:⦿, x, y)
-⋅(x::Expression, y::Expression) = Expression(:⋅, x, y)
 ∧(x::Expression, y::Expression) = Expression(:∧, x, y)
 exterior_product(x::Expression, y::Expression) = Expression(:∧, x, y)
 exterior_product(sig::Signature, x::Expression, y::Expression) = simplified(sig, :∧, x, y)
@@ -518,12 +486,6 @@ function Base.show(io::IO, ex::Expression)
     end
   end
   isexpr(ex, (:⟑, :+, :multivector)) && return print(io, '(', Expr(:call, ex.head, ex.args...), ')')
-  if isexpr(ex, :project)
-    printstyled(io, '⟨'; color = :yellow)
-    print(io, ex[2])
-    printstyled(io, '⟩', subscript(grade(ex)); color = :yellow)
-    return
-  end
   isexpr(ex, :kvector) && return print(io, Expr(:call, Symbol("kvector", subscript(ex.grade)), ex.args...))
   print(io, Expression, "(:", ex.head, ", ", join(ex.args, ", "), ')')
 end

@@ -137,7 +137,9 @@ end
   res = @ga 2 x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
   @test isa(res, Tuple{<:KVector{1}, <:KVector{2}})
   res2 = @ga 2 Vector x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
-  @test collect.(res) == res2
+  @test collect.(res) == res2 && all(isa(x, Vector{Int}) for x in res2)
+  res3 = @ga 2 Vector{Float64} x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
+  @test res2 == res3 && all(isa(x, Vector{Float64}) for x in res3)
 
   x = (1.0, 2.0, 3.0)
   y = (50.0, 70.0, 70.0)
@@ -184,4 +186,12 @@ end
 
   y = (101, 102, 103)
   @test (@ga 3 Tuple (x::1 × y::1)::2) == (@ga 3 Tuple (x::1 ∧ y::1))
+
+  z = (x..., y...)
+  @test (@ga 3 𝟏 ∧ z::(1 + 2)) == (@ga 3 𝟏 ∧ z::Multivector{1, 2}) == (@ga 3 𝟏 ∧ (x::1 + y::2))
+
+  z2 = (3, z..., 2)
+  @test (@ga 3 𝟏 ∧ z2::Multivector) == (@ga 3 𝟏 ∧ (3::e + x::1 + y::2 + 2::e̅))
+
+  @test_throws "Unknown grade projection" @eval @ga 3 x::Unkonwn
 end;

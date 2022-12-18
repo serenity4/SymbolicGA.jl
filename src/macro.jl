@@ -411,12 +411,15 @@ function extract_weights(sig::Signature, ex, g::Int, offset::Int)
   [:($getcomponent($ex, $(i + offset))) for i in 1:n]
 end
 
-function input_expression(sig::Signature, ex, g::Int, offset::Int = 0)
-  iszero(g) && return factor(:($getcomponent($ex)))
+function input_expression(sig::Signature, ex, g::Int, offset::Int = 0, isscalar::Bool = true)
+  if g in (0, dimension(sig))
+    ex = isscalar ? :($getcomponent($ex)) : :($getcomponent($ex, $(1 + offset)))
+    return g == 0 ? scalar(ex) : antiscalar(sig, ex)
+  end
   simplified(sig, :+, Any[factor(w) * blade for (blade, w) in zip(map(blade, combinations(1:dimension(sig), g)), extract_weights(sig, ex, g, offset))])
 end
 function input_expression(sig::Signature, ex, g, offset::Int = 0)
-  simplified(sig, :+, input_expression(sig, ex, g′, n′) for (g′, n′) in zip(g, cumsum(nelements(sig, g′) for g′ in g)))
+  simplified(sig, :+, Any[input_expression(sig, ex, g′, n′, false) for (g′, n′) in zip(g, [0; cumsum(nelements(sig, g′) for g′ in g[begin:(end - 1)])])])
 end
 
 function walk(ex::Expr, inner, outer)
@@ -443,13 +446,6 @@ function restructure(ex::Expression, sig::Signature)
   ex
 end
 
-function promote_to_expr(ex::Expression)
-  isexpr(ex, :kvector) && return Some(Expr(:tuple, to_final_expr.(ex)))
-  isexpr(ex, :blade) && return Some(nothing)
-  isexpr(ex, :factor) && return Some(to_final_expr(ex[1]))
-  nothing
-end
-
 function to_final_expr(arg, args...)
   final = to_expr(arg, args...)
   @assert !isnothing(final) "`nothing` value detected as output element for argument $arg"
@@ -468,7 +464,7 @@ function to_expr(ex, sig::Optional{Signature} = nothing, flatten::Bool = false, 
       args = reduce(vcat, [subex.args[3].args for subex in construction_exs]; init = Any[])
       return :($construct($(reconstructed_type(T, sig::Signature, ex)), $(Expr(:tuple, args...))))
     else
-      return Expr(:tuple, to_final_expr.(ex, sig::Signature, flatten, T)...)
+      return Expr(:tuple, to_final_expr.(ex, sig::Signature, flatten, Ref(T))...)
     end
   end
   isexpr(ex, :factor) && return to_final_expr(ex[1])

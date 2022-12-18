@@ -6,4 +6,5 @@
   @test_throws "Expected" KVector{1, 3}((1, 2, 3, 4))
   @test_throws "of dimension" KVector{4, 3}((1, 2, 3, 4))
   @test collect(KVector{0, 3}((1,))) == [1]
+  @test convert(NTuple{4,Int64}, KVector{1,4}(1, 2, 3, 4)) === (1, 2, 3, 4)
 end;

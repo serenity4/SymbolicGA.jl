@@ -1,9 +1,13 @@
-using SymbolicGA: metric, dimension, is_degenerate
+using SymbolicGA: metric, dimension, is_degenerate, triplet
 
 @testset "Signature" begin
     @test Signature("+++") == Signature(3, 0)
     @test Signature("++-") == Signature(2, 1)
     @test Signature("+-𝟎") == Signature(1, 1, 1)
+
+    @test triplet(Signature(1, 2, 3)) == (1, 2, 3)
+    @test triplet(Signature(1, 2)) == (1, 2, 0)
+    @test triplet(Signature(1)) == (1, 0, 0)
 
     @test !is_degenerate(Signature(4, 0, 0))
     @test !is_degenerate(Signature(1, 3, 0))
