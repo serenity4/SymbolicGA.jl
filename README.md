@@ -9,4 +9,4 @@
 
 Geometric Algebra (GA) library with compile-time transformations into linear algebra operations.
 
-This package is currently in heavy development. The source code and public API may change at any moment. Use at your own risk.
+This package is currently in development. The source code and public API may change at any moment. Use at your own risk.
