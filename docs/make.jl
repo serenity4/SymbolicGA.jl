@@ -12,7 +12,9 @@ makedocs(;
     format = Documenter.HTML(prettyurls = true, assets = [analytics_asset]),
     pages = [
         "Home" => "index.md",
-        "API" => "api.md",
+        "Reference" => [
+            "API" => "reference/api.md",
+        ],
     ],
     repo = "https://github.com/serenity4/SymbolicGA.jl/blob/{commit}{path}#L{line}",
     sitename = "SymbolicGA.jl",
