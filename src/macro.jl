@@ -1,6 +1,50 @@
 const DEFAULT_FLATTENING = :nested
 const DEFAULT_TYPE = nothing
 
+"""
+    @ga <sig> <flatten> <T> <ex>
+    @ga <sig> <flatten or T> <ex>
+    @ga <sig> <ex>
+
+Generate Julia code which implements the computation of geometric elements from `ex` in an algebra defined by a signature `sig` (see [`SymbolicGA.Signature`](@ref)).
+
+Supported syntax:
+- `sig`: Integer literal or tuple of 1, 2 or 3 integer literals corresponding to the number of positive, negative and degenerate basis vectors respectively, where unspecified integers default to zero.
+- `flatten`: Symbol literal.
+- `T`: Any arbitrary expression which evaluates to a type or to `nothing`.
+- `ex`: Any arbitrary expression that can be parsed algebraically.
+
+See also: [`codegen_expression`](@ref).
+
+# Expression parsing
+
+`ex` can be a single statement or a block, and uses a domain-specific language to facilitate the construction of algebraic expressions.
+`ex` is logically divided into two sections: a definition section, which defines bindings, and a final algebraic expression, which will be the object of the evaluation. It is processed in three phases:
+- A definition phase, in which bindings are defined with one or several statements for use in the subsequent phase;
+- An expansion phase, where identified bindings in the final algebraic expression are expanded. The defined bindings include the ones priorly defined and a set of built-in bindings.
+- An evaluation phase, in which the core algebraic expression is simplified and translated into a Julia expression.
+
+## Binding definitions
+
+All statements prior to the last can define new variables or functions with the following syntax and semantics:
+- Variables are either declared with `<lhs::Symbol> = <rhs::Any>` or with `<lhs::Symbol>::<type>`, the latter being expanded to `<lhs> = <lhs>::<type>`.
+- Functions are declared with a standard short or long form function definition `<name>(<args...>) = <rhs>` or `function <name>(<args...>) <rhs> end`, and are restricted to simple forms to encode simple semantics. The restrictions are as follows:
+  - `where` clauses and output type annotations are not supported.
+  - Function arguments must be untyped, e.g. `f(x, y)` is allowed but not `f(x::Vector, y::Vector)`.
+  - Function arguments must not be reassigned; it is assumed that any occurence of symbols declared as arguments will reference these arguments. For example, `f(x, y) = x + y` assumes that `x + y` actually means "perform `+` on the first and second function argument". Therefore, `f(x, y) = (x = 2; x) + y` will be likely to cause bugs. To alleviate this restriction, use [`codegen_expression`](@ref) with a suitable [`SymbolicGA.VariableInfo`] with function entries that contain specific calls to `:(\$(@arg <i>)).
+
+## Binding expansion
+
+References and functions are expanded in a fairly straightforward copy-paste manner, where references are replaced with their right-hand side and function calls with their bodies with their arguments interpolated. Simple checks are put in place to allow for self-referencing bindings for references, such as `x = x::T`, leading to a single expansion of such a pattern in the corresponding expression subtree.
+
+## Algebraic evaluation
+
+TODO
+
+See [`SymbolicGA.VariableInfo`](@ref) for more information regarding the expansion of such variables and functions.
+"""
+macro ga end
+
 macro ga(sig_ex, flatten, T, ex)
   isa(flatten, QuoteNode) || error("Expected QuoteNode symbol for `flatten` argument, got ", repr(flatten))
   flatten = flatten.value
@@ -9,6 +53,17 @@ end
 macro ga(sig_ex, T_or_flatten, ex) isa(T_or_flatten, QuoteNode) ? esc(:(@ga $sig_ex $T_or_flatten $DEFAULT_TYPE $ex)) : esc(:(@ga $sig_ex $(QuoteNode(DEFAULT_FLATTENING)) $T_or_flatten $ex)) end
 macro ga(sig_ex, ex) esc(:(@ga $sig_ex $nothing $ex)) end
 
+"""
+    VariableInfo(; refs = Dict{Symbol,Any}(), funcs = Dict{Symbol,Any}(), warn_override = true)
+
+Structure holding information about bindings which either act as references (simple substitutions) or as functions, which can be called with arguments.
+This allows a small domain-specific language to be used when constructing algebraic expressions.
+
+References are `lhs::Symbol => rhs` pairs where the left-hand side simply expands to the right-hand side during parsing. Right-hand sides which include `lhs` are supported, such that references of the form `x = x::Vector` are allowed, but will be expanded only once.
+Functions are `name::Symbol => body` pairs where `rhs` must refer to their arguments with `Expr(:argument, <literal::Int>)` expressions. Recursion is not supported and will lead to a `StackOverflowError`. See [`@arg`](@ref).
+
+Most built-in functions and symbols are implemented using this mechanism. If `warn_override` is set to true, overrides of such built-in functions will trigger a warning.
+"""
 struct VariableInfo
   refs::Dict{Symbol,Any}
   funcs::Dict{Symbol,Any}
@@ -38,6 +93,11 @@ function Base.merge!(x::VariableInfo, y::VariableInfo)
   x
 end
 
+"""
+    @arg <literal::Integer>
+
+Convenience macro to construct expressions of the form `Expr(:argument, i)` used within function definitions for [`SymbolicGA.VariableInfo`](@ref).
+"""
 macro arg(i)
   i > 0 || error("Argument slots must be positive integers.")
   QuoteNode(Expr(:argument, i))
@@ -108,12 +168,27 @@ function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo}
   ex = restructure(ex, sig)
 end
 
-function codegen_expression(sig_ex, ex; flatten::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing)
-  in(flatten, (:flatten, :nested)) || error("Expected :flatten or :nested value for flattening keyword argument, got $flatten")
-  flatten === :flatten && isnothing(T) && (T = :Tuple)
-  sig = extract_signature(sig_ex)
+"""
+    codegen_expression(sig, ex; flatten::Symbol = $(QuoteNode(DEFAULT_FLATTENING)), T = $DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing)
+
+Parse `ex` as an algebraic expression and generate a Julia expression which represents the corresponding computation. `sig` can be a [`SymbolicGA.Signature`](@ref) or a signature integer, tuple or tuple expression adhering to semantics of [`@ga`](@ref). See [`@ga`](@ref) for more information regarding the parsing and semantics applied to `ex`.
+
+## Parameters
+- `flatten` controls whether the components should be nested (`:nested`) or flattened (`:flattened`). In short, setting this option to `:flattened` always returns a single tuple of components, even multiple geometric entities are present in the output; while `:nested` will return a tuple of multiple elements if several geometric entities result from the computation.
+- `T` specifies what type to use when reconstructing geometric entities from tuple components with [`construct`](@ref). If set to `nothing` with a `:nested` mode (default), then an appropriate [`KVector`](@ref) will be used depending on which type of geometric entity is returned; if multiple entities are present, a tuple of `KVector`s will be returned. With a `:flattened` mode, `T` will be set to `:Tuple` if unspecified.
+- `varinfo` is a user-provided [`SymbolicGA.VariableInfo`](@ref) which controls what expansions are carried out on the raw Julia expression before conversion to an algebraic expression.
+
+"""
+function codegen_expression end
+
+codegen_expression(sig_ex, ex; flatten::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing) =
+  codegen_expression(extract_signature(sig_ex), ex; flatten, T, varinfo)
+
+function codegen_expression(sig::Signature, ex; flatten::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing)
+  in(flatten, (:flattened, :nested)) || error("Expected :flattened or :nested value for flattening keyword argument, got $flatten")
+  flatten === :flattened && isnothing(T) && (T = :Tuple)
   varinfo = merge!(builtin_varinfo(sig), @something(varinfo, VariableInfo()))
-  to_final_expr(generate_expression(sig, ex, varinfo), sig, flatten == :flatten, T)
+  to_final_expr(generate_expression(sig, ex, varinfo), sig, flatten == :flattened, T)
 end
 
 function extract_signature(ex)

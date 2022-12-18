@@ -12,4 +12,5 @@ ENV["JULIA_DEBUG"] = ""
     include("macro.jl")
     include("operators.jl")
     include("examples.jl")
+    include("doctests.jl")
 end;

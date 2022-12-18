@@ -159,16 +159,16 @@ end
   @test res === res2
 
   # The `1::e12` gets simplified to `e12`.
-  res = @ga 3 :flatten begin
+  res = @ga 3 :flattened begin
     (1::e1 * 1::e1 + 1::e12)::Multivector
   end
   @test res == (1, 1, 0, 0)
 
   # Preserve element types.
-  res = @ga 3 :flatten (1::e1 * 1::e1 + 1.0::e12)::Multivector
+  res = @ga 3 :flattened (1::e1 * 1::e1 + 1.0::e12)::Multivector
   @test res == (1, 1.0, 0, 0)
 
-  res = @ga 3 :flatten (1::e1 * 1::e1 + 2::e12)::Multivector
+  res = @ga 3 :flattened (1::e1 * 1::e1 + 2::e12)::Multivector
   @test res == (1, 2, 0, 0)
 
   res = @ga 3 ((x::Vector)')
