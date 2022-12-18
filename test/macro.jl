@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: extract_weights, input_expression, extract_expression, restructure, expand_variables, traverse, builtin_varinfo, argument_count, fill_argument_slots
+using SymbolicGA: extract_weights, input_expression, extract_expression, restructure, expand_variables, traverse, builtin_varinfo, argument_count, fill_argument_slots
 
 function traverse_collect(f, x, T = Expression)
   res = []

@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: restructure_sums, fill_kvector_components, Zero
+using SymbolicGA: restructure_sums, fill_kvector_components, Zero
 
 @testset "Passes" begin
   sig = Signature(3)

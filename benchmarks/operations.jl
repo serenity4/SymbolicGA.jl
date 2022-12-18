@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra
+using SymbolicGA
 using BenchmarkTools
 
 x = (1.0, 2.0, 3.0)

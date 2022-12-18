@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: postwalk, traverse, blade_left_complement, blade_right_complement, dimension
+using SymbolicGA: postwalk, traverse, blade_left_complement, blade_right_complement, dimension
 using Combinatorics: combinations
 
 all_blades(sig::Signature) = [blade(indices) for indices in combinations(1:dimension(sig))]

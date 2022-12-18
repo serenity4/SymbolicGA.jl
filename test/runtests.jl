@@ -1,10 +1,10 @@
-using LazyGeometricAlgebra, Test
-using LazyGeometricAlgebra: Expression, isexpr, postwalk, simplify!, simplified, isweighted, getcomponent, blade, factor, weighted, scalar, antiscalar, kvector, multivector, project, antigrade, antireverse, exterior_product, ⟑, ∧, KVector
+using SymbolicGA, Test
+using SymbolicGA: Expression, isexpr, postwalk, simplify!, simplified, isweighted, getcomponent, blade, factor, weighted, scalar, antiscalar, kvector, multivector, project, antigrade, antireverse, exterior_product, ⟑, ∧, KVector
 
-ENV["JULIA_DEBUG"] = "LazyGeometricAlgebra"
+ENV["JULIA_DEBUG"] = "SymbolicGA"
 ENV["JULIA_DEBUG"] = ""
 
-@testset "LazyGeometricAlgebra.jl" begin
+@testset "SymbolicGA.jl" begin
     include("signatures.jl")
     include("expressions.jl")
     include("passes.jl")

@@ -1,7 +1,7 @@
-using Documenter, LazyGeometricAlgebra
+using Documenter, SymbolicGA
 
 makedocs(;
-    modules=[LazyGeometricAlgebra],
+    modules=[SymbolicGA],
     format=Documenter.HTML(prettyurls = true),
     pages=[
         "Home" => "index.md",
@@ -10,11 +10,11 @@ makedocs(;
             "api.md"
         ,
     ],
-    repo="https://github.com/serenity4/LazyGeometricAlgebra.jl/blob/{commit}{path}#L{line}",
-    sitename="LazyGeometricAlgebra.jl",
+    repo="https://github.com/serenity4/SymbolicGA.jl/blob/{commit}{path}#L{line}",
+    sitename="SymbolicGA.jl",
     authors="serenity4 <cedric.bel@hotmail.fr>",
 )
 
 deploydocs(
-    repo = "github.com/serenity4/LazyGeometricAlgebra.jl.git",
+    repo = "github.com/serenity4/SymbolicGA.jl.git",
 )

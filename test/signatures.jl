@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: metric, dimension, is_degenerate
+using SymbolicGA: metric, dimension, is_degenerate
 
 @testset "Signature" begin
     @test Signature("+++") == Signature(3, 0)

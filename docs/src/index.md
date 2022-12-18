@@ -1,4 +1,4 @@
-# LazyGeometricAlgebra.jl
+# SymbolicGA.jl
 
 # Status
 

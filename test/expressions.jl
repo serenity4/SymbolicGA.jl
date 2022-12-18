@@ -1,4 +1,4 @@
-using LazyGeometricAlgebra: infer_grade, project!
+using SymbolicGA: infer_grade, project!
 
 sig = Signature(3, 1)
 

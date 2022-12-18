@@ -1,4 +1,4 @@
-module LazyGeometricAlgebra
+module SymbolicGA
 
 using Combinatorics
 

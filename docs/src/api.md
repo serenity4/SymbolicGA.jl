@@ -4,6 +4,6 @@
 ```
 
 ```@autodocs
-Modules = [LazyGeometricAlgebra]
+Modules = [SymbolicGA]
 Private = false
 ```
