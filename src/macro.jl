@@ -37,13 +37,13 @@ All statements prior to the last can define new variables or functions with the 
 
 References and functions are expanded in a fairly straightforward copy-paste manner, where references are replaced with their right-hand side and function calls with their bodies with their arguments interpolated. Simple checks are put in place to allow for self-referencing bindings for references, such as `x = x::T`, leading to a single expansion of such a pattern in the corresponding expression subtree.
 
+See [`SymbolicGA.VariableInfo`](@ref) for more information regarding the expansion of such variables and functions.
+
 # Algebraic evaluation
 
 Type annotations may either:
 - Specify what type of geometric entity an input should be considered as, where components are then picked off with `getcomponent`.
 - Request the projection of an intermediate expression over one or multiple grades.
-
-See [`SymbolicGA.VariableInfo`](@ref) for more information regarding the expansion of such variables and functions.
 """
 macro ga end
 
