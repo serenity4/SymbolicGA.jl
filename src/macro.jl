@@ -16,13 +16,13 @@ Supported syntax:
 
 See also: [`codegen_expression`](@ref).
 
-# Expression parsing
-
 `ex` can be a single statement or a block, and uses a domain-specific language to facilitate the construction of algebraic expressions.
 `ex` is logically divided into two sections: a definition section, which defines bindings, and a final algebraic expression, which will be the object of the evaluation. It is processed in three phases:
 - A definition phase, in which bindings are defined with one or several statements for use in the subsequent phase;
 - An expansion phase, where identified bindings in the final algebraic expression are expanded. The defined bindings include the ones priorly defined and a set of built-in bindings.
 - An evaluation phase, in which the core algebraic expression is simplified and translated into a Julia expression.
+
+# Expression parsing
 
 ## Binding definitions
 
@@ -37,9 +37,11 @@ All statements prior to the last can define new variables or functions with the 
 
 References and functions are expanded in a fairly straightforward copy-paste manner, where references are replaced with their right-hand side and function calls with their bodies with their arguments interpolated. Simple checks are put in place to allow for self-referencing bindings for references, such as `x = x::T`, leading to a single expansion of such a pattern in the corresponding expression subtree.
 
-## Algebraic evaluation
+# Algebraic evaluation
 
-TODO
+Type annotations may either:
+- Specify what type of geometric entity an input should be considered as, where components are then picked off with `getcomponent`.
+- Request the projection of an intermediate expression over one or multiple grades.
 
 See [`SymbolicGA.VariableInfo`](@ref) for more information regarding the expansion of such variables and functions.
 """
