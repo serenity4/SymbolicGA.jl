@@ -1,8 +1,15 @@
 using Documenter, SymbolicGA
 
+analytics_asset = Documenter.Writers.HTMLWriter.HTMLAsset(
+    :js,
+    "https://plausible.io/js/script.js",
+    false,
+    Dict(:defer => "", Symbol("data-domain") => "serenity4.github.io"),
+)
+
 makedocs(;
     modules = [SymbolicGA],
-    format = Documenter.HTML(prettyurls = true),
+    format = Documenter.HTML(prettyurls = true, assets = [analytics_asset]),
     pages = [
         "Home" => "index.md",
         "API" => "api.md",

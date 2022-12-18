@@ -62,6 +62,8 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :/ => :division,
     :division => :right_division,
     :antidivision => :right_antidivision,
+    :dual => :right_complement,
+    :inverse_dual => :left_complement,
   )
 
   funcs = Dict{Symbol,Any}(
@@ -89,13 +91,13 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :left_division => :(inverse($(@arg 1)) ⟑ $(@arg 2)),
     :right_division => :($(@arg 1) ⟑ inverse($(@arg 2))),
 
-    :geometric_antiproduct => :(left_complement(geometric_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
-    :exterior_antiproduct => :(left_complement(exterior_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
-    :interior_antiproduct => :(left_complement(interior_product(right_complement($(@arg 1)), right_complement($(@arg 2))))),
+    :geometric_antiproduct => :(inverse_dual(geometric_product(dual($(@arg 1)), dual($(@arg 2))))),
+    :exterior_antiproduct => :(inverse_dual(exterior_product(dual($(@arg 1)), dual($(@arg 2))))),
+    :interior_antiproduct => :(inverse_dual(interior_product(dual($(@arg 1)), dual($(@arg 2))))),
     :antiscalar_product => :(geometric_antiproduct($(@arg 1), antireverse($(@arg 1)))::e̅),
-    :antiinverse => :(left_complement(inverse(right_complement($(@arg 1))))),
-    :left_antidivision => :(left_complement(left_division(right_complement($(@arg 1)), right_complement($(@arg 2))))),
-    :right_antidivision => :(left_complement(right_division(right_complement($(@arg 1)), right_complement($(@arg 2))))),
+    :antiinverse => :(inverse_dual(inverse(dual($(@arg 1))))),
+    :left_antidivision => :(inverse_dual(left_division(dual($(@arg 1)), dual($(@arg 2))))),
+    :right_antidivision => :(inverse_dual(right_division(dual($(@arg 1)), dual($(@arg 2))))),
   )
 
   VariableInfo(; refs, funcs, warn_override)
