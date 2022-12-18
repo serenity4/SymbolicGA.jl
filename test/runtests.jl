@@ -1,5 +1,5 @@
 using SymbolicGA, Test
-using SymbolicGA: Expression, isexpr, postwalk, simplify!, simplified, isweighted, getcomponent, blade, factor, weighted, scalar, antiscalar, kvector, multivector, antigrade, antireverse, exterior_product, ⟑, ∧, KVector
+using SymbolicGA: Expression, isexpr, postwalk, simplify!, simplified, isweighted, getcomponent, blade, factor, weighted, scalar, antiscalar, kvector, multivector, antigrade, antireverse, exterior_product, ⟑, ∧
 
 ENV["JULIA_DEBUG"] = "SymbolicGA"
 ENV["JULIA_DEBUG"] = ""

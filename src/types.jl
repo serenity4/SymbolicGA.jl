@@ -49,10 +49,12 @@ Alias for `KVector{4,T,D,N}`
 """
 const Quadvector{T,D,N} = KVector{4,T,D,N}
 
-@forward KVector.elements (Base.iterate,)
+@forward KVector.elements (Base.iterate, Base.firstindex, Base.lastindex)
+
+Base.isapprox(x::KVector, y::KVector) = grade(x) == grade(y) && all(isapprox.(x, y))
 
 Base.getindex(kvec::KVector) = only(kvec.elements)
-Base.getindex(kvec::KVector, i::Integer) = kvec.elements[i]
+Base.getindex(kvec::KVector, indices) = kvec.elements[indices]
 
 Base.eltype(::Type{<:KVector{<:Any,T}}) where {T} = T
 Base.length(::Type{<:KVector{<:Any,<:Any,<:Any,N}}) where {N} = N
