@@ -116,6 +116,7 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :⩒ => :geometric_antiproduct,
     :exterior_product => :∧,
     :∨ => :exterior_antiproduct,
+    :* => :⟑,
     :geometric_product => :⟑,
     :○ => :interior_antiproduct,
     :⋅ => :●,
@@ -204,7 +205,7 @@ end
 
 const ADJOINT_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (:⟑, :∧, :●, :*, :+, :×, :-, :reverse, :antireverse, :left_complement, :right_complement, :exp))
+isreserved(op::Symbol) = in(op, (:⟑, :∧, :●, :+, :×, :-, :reverse, :antireverse, :left_complement, :right_complement, :exp))
 
 function extract_blade_from_annotation(t, sig::Signature)
   isa(t, Symbol) || return nothing

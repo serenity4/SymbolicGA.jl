@@ -5,9 +5,8 @@ mutable struct Expression
   grade::GradeInfo
   args::Vector{Any}
   function Expression(head::Symbol, args::AbstractVector; simplify = true, grade = nothing)
+    in(head, (:⟑, :+, :-, :factor, :exp, :inv, :blade, :kvector, :multivector, :reverse, :antireverse, :∧, :×, :●, :left_complement, :right_complement)) || throw(ArgumentError("Expression head $head is not allowed."))
     ex = new()
-    # Aliases.
-    head === :* && (head = :⟑)
     ex.head = head
     ex.args = args
     !isnothing(grade) && (ex.grade = grade)
@@ -497,7 +496,7 @@ antiscalar(sig::Signature) = blade(1:dimension(sig))
 blade(sig::Optional{Signature}, xs...) = simplified(sig, :blade, xs...)
 
 ⟑(x::Expression, args::Expression...) = Expression(:⟑, x, args...)
-Base.:(*)(x::Expression, args::Expression...) = Expression(:*, x, args...)
+Base.:(*)(x::Expression, args::Expression...) = Expression(:⟑, x, args...)
 Base.:(+)(x::Expression, args::Expression...) = Expression(:+, x, args...)
 Base.:(-)(x::Expression, args::Expression...) = Expression(:-, x, args...)
 ∧(x::Expression, y::Expression) = Expression(:∧, x, y)

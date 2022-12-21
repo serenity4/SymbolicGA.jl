@@ -100,7 +100,7 @@ sig = Signature(3, 1)
     @test (factor(:x) + factor(:y)) * (factor(:w) + factor(:z)) == factor(:((x + y) * (w + z)))
     @test (blade(1) + blade(3)) * (blade(2) + blade(4)) == Expression(:+, blade(1, 2), blade(1, 4), blade(3, 2), blade(3, 4); simplify = false)
     @test (factor(:x) + blade(1)) * (factor(:y) + blade(4)) == Expression(:+, factor(:(x * y)), factor(:x) * blade(4), blade(1) * factor(:y), blade(1, 4); simplify = false)
-    @test (factor(:x) + factor(:y)) * blade(1, 2) == Expression(:*, factor(:x) + factor(:y), blade(1, 2); simplify = false)
+    @test (factor(:x) + factor(:y)) * blade(1, 2) == Expression(:⟑, factor(:x) + factor(:y), blade(1, 2); simplify = false)
   end
 
   @testset "Projections" begin
