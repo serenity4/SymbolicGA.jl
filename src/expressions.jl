@@ -149,8 +149,19 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
           weight = isweightedblade(b) ? b.args[1] : factor(1)
           blade_weights[vecs] = haskey(blade_weights, vecs) ? blade_weights[vecs] + weight : weight
         end
+        for (vecs, weight) in blade_weights
+          fac = weight[1]
+          if Meta.isexpr(fac, :call) && fac.args[1] === :+
+            weight = simplify_addition(@view fac.args[2:end])
+            if weight == factor(0)
+              delete!(blade_weights, vecs)
+            else
+              blade_weights[vecs] = weight
+            end
+          end
+        end
         new_args = args[setdiff(eachindex(args), indices)]
-        append!(new_args, weight ⟑ blade(vecs) for (vecs, weight) in blade_weights)
+        append!(new_args, simplified(:⟑, weight, blade(vecs)) for (vecs, weight) in blade_weights)
         return simplified(:+, new_args)
       end
     end
@@ -311,6 +322,42 @@ function simplify_negations(fac)
     end
   end
   fac
+end
+
+function simplify_addition(args)
+  counter = 0
+  ids = Dict{Any,Int}()
+  id_counts = Dict{Int,Int}()
+  new_args = []
+  for arg in args
+    n = 1
+    obj = arg
+    if Meta.isexpr(arg, :call) && arg.args[1] === :*
+      xs = arg.args[2:end]
+      @assert length(xs) > 1
+      filter!(xs) do y
+        if isa(y, Int) || isa(y, Integer)
+          n *= y
+          return false
+        end
+        true
+      end
+      obj = length(xs) == 1 ? xs[1] : Set{Any}(xs)
+    end
+    id = get!(() -> (counter += 1), ids, obj)
+    id_counts[id] = something(get(id_counts, id, nothing), 0) + n
+  end
+  kept_ids = Int[]
+  for (x, id) in sort(collect(ids); by = last)
+    n = id_counts[id]
+    n == 0 && continue
+    isa(x, Set{Any}) && (x = Expr(:call, :*, x...))
+    n == 1 && push!(new_args, x)
+    n > 1 && push!(new_args, :($n * $x))
+  end
+  isempty(new_args) && return factor(0)
+  length(new_args) == 1 && return factor(new_args[1])
+  factor(Expr(:call, :+, new_args...))
 end
 
 function expected_nargs(head)

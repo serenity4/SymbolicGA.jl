@@ -57,7 +57,7 @@ sig = Signature(3, 1)
   @testset "Blade grouping over addition" begin
     x = weighted(blade(1, 3), :x)
     ex = x + x
-    @test ex == weighted(blade(1, 3), :(x + x))
+    @test ex == weighted(blade(1, 3), :(2x))
 
     ex = scalar(:x) + scalar(:y)
     @test ex == scalar(:(x + y))
@@ -81,6 +81,13 @@ sig = Signature(3, 1)
       @test factor(:x) + factor(1) == factor(:(x + 1))
       @test factor(2) + factor(3) == factor(5)
       @test factor(:x) + factor(3) + factor(:y) + factor(2) == factor(:(x + y + 5))
+
+      @test scalar(:x) - scalar(:x) == factor(0)
+      @test scalar(:x) + scalar(:x) == scalar(:(2x))
+      @test scalar(:x) + scalar(:y) == scalar(:(x + y))
+      @test scalar(:x) + scalar(:x) - scalar(:(2x)) == factor(0)
+      @test scalar(:(x * y)) - scalar(:(x * y)) == factor(0)
+      @test scalar(:(x * y)) + scalar(:(x * y)) ≠ factor(0)
     end
   end
 
