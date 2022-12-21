@@ -51,7 +51,11 @@ const Quadvector{T,D,N} = KVector{4,T,D,N}
 
 @forward KVector.elements (Base.iterate, Base.firstindex, Base.lastindex)
 
-Base.isapprox(x::KVector, y::KVector) = grade(x) == grade(y) && all(isapprox.(x, y))
+function Base.isapprox(x::KVector, y::KVector; atol::Real = 0, rtol::Real = Base.rtoldefault(eltype(x), eltype(y), atol))
+  nx, ny = sqrt(sum(x .* x)), sqrt(sum(y .* y))
+  atol = max(atol, rtol * max(nx, ny))
+  grade(x) == grade(y) && length(x) == length(y) && all(isapprox(xx, yy; atol, rtol) for (xx, yy) in zip(x, y))
+end
 Base.:(==)(x::KVector, y::KVector) = grade(x) == grade(y) && all(.==(x, y))
 
 Base.getindex(kvec::KVector) = only(kvec.elements)
