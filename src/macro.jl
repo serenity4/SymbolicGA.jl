@@ -122,6 +122,7 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :interior_product => :●,
     :⦿ => :scalar_product,
     :/ => :division,
+    :inv => :inverse,
     :division => :right_division,
     :antidivision => :right_antidivision,
     :dual => :right_complement,
@@ -148,7 +149,7 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :projected_geometric_norm => :(right_antidivision(bulk_norm($(@arg 1)), weight_norm($(@arg 1)))),
     :unitize => :(right_antidivision($(@arg 1), weight_norm($(@arg 1)))),
 
-    :scalar_inverse => :(inv($(@arg 1))::Scalar),
+    :scalar_inverse => :($inv($(@arg 1))::Scalar),
     :inverse => :(reverse($(@arg 1)) * scalar_inverse(scalar_product($(@arg 1)))),
     :left_division => :(inverse($(@arg 1)) ⟑ $(@arg 2)),
     :right_division => :($(@arg 1) ⟑ inverse($(@arg 2))),
@@ -203,7 +204,7 @@ end
 
 const ADJOINT_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (:⟑, :∧, :●, :*, :+, :×, :-, :reverse, :antireverse, :left_complement, :right_complement))
+isreserved(op::Symbol) = in(op, (:⟑, :∧, :●, :*, :+, :×, :-, :reverse, :antireverse, :left_complement, :right_complement, :exp))
 
 function extract_blade_from_annotation(t, sig::Signature)
   isa(t, Symbol) || return nothing
@@ -234,6 +235,7 @@ function extract_grade_from_annotation(t, sig::Signature)
   Meta.isexpr(t, :curly, 2) && t.args[1] === :KVector && return t.args[2]::Int
   Meta.isexpr(t, :annotate_projection) && t.args[1] === :+ && return Int[extract_grade_from_annotation(t, sig) for t in @view t.args[2:end]]
   Meta.isexpr(t, :curly) && t.args[1] === :Multivector && return @view t.args[2:end]
+  Meta.isexpr(t, :tuple) && return extract_grade_from_annotation.(t.args, sig)
   error("Unknown grade projection for algebraic element $t")
 end
 
@@ -252,7 +254,7 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
   ex = postwalk(ex) do ex
     if Meta.isexpr(ex, ADJOINT_SYMBOL)
       simplified(sig, :reverse, ex.args[1]::Expression)
-    elseif Meta.isexpr(ex, :call)
+    elseif Meta.isexpr(ex, :call) && isa(ex.args[1], Symbol)
       op = ex.args[1]::Symbol
       !isreserved(op) && return ex
       args = ex.args[2:end]
@@ -266,7 +268,8 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
       end
       g = extract_grade_from_annotation(T, sig)
       isa(ex, Expression) && return project!(ex, g)
-      input_expression(sig, ex, g)::Expression
+      isa(g, Int) && return input_expression(sig, ex, g)::Expression
+      input_expression(sig, ex, g; flattened = !Meta.isexpr(T, (:tuple, :curly)))::Expression
     else
       ex
     end
@@ -371,7 +374,7 @@ function define_argument_slots(ex, argnames)
 end
 
 function expand_function_call(funcs, ex)
-  !Meta.isexpr(ex, :call) && return nothing
+  Meta.isexpr(ex, :call) && isa(ex.args[1], Symbol) || return nothing
   f::Symbol, args... = ex.args
   func = get(funcs, f, nothing)
   isnothing(func) && return nothing
@@ -405,21 +408,39 @@ function expand_reference(refs, ex)
   ex => ref
 end
 
-function extract_weights(sig::Signature, ex, g::Int, offset::Int)
+function extract_weights(sig::Signature, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
   n = nelements(sig, g)
-  n == 1 && return [:($getcomponent($ex))]
-  [:($getcomponent($ex, $(i + offset))) for i in 1:n]
+  weights = Any[]
+  for i in 1:n
+    push!(weights, extract_component(ex, i; j, offset, isscalar = in(g, (0, dimension(sig)))))
+  end
+  weights
 end
 
-function input_expression(sig::Signature, ex, g::Int, offset::Int = 0, isscalar::Bool = true)
-  if g in (0, dimension(sig))
-    ex = isscalar ? :($getcomponent($ex)) : :($getcomponent($ex, $(1 + offset)))
-    return g == 0 ? scalar(ex) : antiscalar(sig, ex)
-  end
-  simplified(sig, :+, Any[factor(w) * blade for (blade, w) in zip(map(blade, combinations(1:dimension(sig), g)), extract_weights(sig, ex, g, offset))])
+function extract_component(ex, i::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing, isscalar::Bool = false)
+  isscalar && isnothing(offset) && isnothing(j) && return :($getcomponent($ex))
+  !isnothing(j) && return :($getcomponent($ex, $j, $i))
+  :($getcomponent($ex, $(i + something(offset, 0))))
 end
-function input_expression(sig::Signature, ex, g, offset::Int = 0)
-  simplified(sig, :+, Any[input_expression(sig, ex, g′, n′, false) for (g′, n′) in zip(g, [0; cumsum(nelements(sig, g′) for g′ in g[begin:(end - 1)])])])
+
+function input_expression(sig::Signature, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
+  blades = map(blade, combinations(1:dimension(sig), g))
+  weights = extract_weights(sig, ex, g; j, offset)
+  simplified(sig, :+, Any[factor(w) * blade for (blade, w) in zip(blades, weights)])
+end
+
+function input_expression(sig::Signature, ex, gs::AbstractVector; flattened::Bool = false)
+  args = Any[]
+  offset = 0
+  for (j, g) in enumerate(gs)
+    if flattened
+      push!(args, input_expression(sig, ex, g; offset))
+      offset += nelements(sig, g)
+    else
+      push!(args, input_expression(sig, ex, g; j))
+    end
+  end
+  simplified(sig, :+, args)
 end
 
 function walk(ex::Expr, inner, outer)

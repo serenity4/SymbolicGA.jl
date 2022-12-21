@@ -107,7 +107,7 @@ end
   end
 
   sig = Signature(1, 1, 1)
-  ws = extract_weights(sig, :x, 1, 0)
+  ws = extract_weights(sig, :x, 1; offset = 0)
   @test ws == [:($getcomponent(x, $i)) for i in 1:3]
   ex = input_expression(sig, :x, 2)
   @test isexpr(ex, :+, 3)
@@ -188,7 +188,9 @@ end
   @test (@ga 3 Tuple (x::1 × y::1)::2) == (@ga 3 Tuple (x::1 ∧ y::1))
 
   z = (x..., y...)
-  @test (@ga 3 𝟏 ∧ z::(1 + 2)) == (@ga 3 𝟏 ∧ z::Multivector{1, 2}) == (@ga 3 𝟏 ∧ (x::1 + y::2))
+  z_nested = (x, y)
+  @test (@ga 3 𝟏 ∧ z::(1 + 2)) == (@ga 3 𝟏 ∧ z_nested::(1, 2)) == (@ga 3 𝟏 ∧ z_nested::Multivector{1, 2}) == (@ga 3 𝟏 ∧ (x::1 + y::2))
+  @test (@ga 2 (1, 2, 3)::(0 + 1)) == (@ga 2 ((1,), (2, 3))::(0, 1)) == (KVector{0,2}(1), KVector{1,2}(2, 3))
 
   z2 = (3, z..., 2)
   @test (@ga 3 𝟏 ∧ z2::Multivector) == (@ga 3 𝟏 ∧ (3::e + x::1 + y::2 + 2::e̅))

@@ -16,6 +16,9 @@ makedocs(;
     ),
     pages = [
         "Home" => "index.md",
+        "Explanation" => [
+            "Geometric Algebra" => "explanation/geometric_algebra.md",
+        ],
         "Reference" => [
             "API" => "reference/api.md",
         ],

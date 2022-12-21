@@ -203,6 +203,15 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     return weighted(simplified(sig, :-, simplified(sig, :⟑, a, b), simplified(sig, :⟑, b, a)), 0.5)
   end
 
+  if head === :exp
+    # Find a closed form for the exponentiation, if available.
+    a = args[1]::Expression
+    (isblade(a) || isweightedblade(a)) && return expand_exponential(sig::Signature, a)
+    # return expand_exponential(sig::Signature, a)
+    isexpr(a, :+) && return simplified(sig, :⟑, simplified.(sig, :exp, a)...)
+    throw(ArgumentError("Exponentiation is not supported for non-blade elements."))
+  end
+
   ex.grade = infer_grade(head, args)::GradeInfo
   ex.args = args
 
@@ -296,7 +305,7 @@ function simplify_negations(fac)
 end
 
 function expected_nargs(head)
-  in(head, (:factor, :inverse, :reverse, :antireverse, :left_complement, :right_complement)) && return 1
+  in(head, (:factor, :inverse, :reverse, :antireverse, :left_complement, :right_complement, :exp)) && return 1
   in(head, (:●, :×)) && return 2
   nothing
 end
@@ -393,6 +402,43 @@ function propagate_reverse(reverse_op, ex::Expression, sig::Optional{Signature})
   end
   simplified(sig, ex.head, res)
 end
+
+function expand_exponential(sig::Signature, b::Expression)
+  vs = basis_vectors(b)
+  is_degenerate(sig) && any(iszero(metric(sig, v)) for v in vs) && return simplified(:+, scalar(1), b)
+  b² = simplified(sig, :⟑, b, b)
+  @assert isscalar(b²)
+  α² = isweightedblade(b²) ? b²[1][1] : 1
+  α = scalar_sqrt(scalar_abs(α²))
+  # The sign may not be deducible from α² directly, so we compute it manually given metric simplifications and blade permutations.
+  is_negative = isodd(count(metric(sig, v) == -1 for v in vs)) ⊻ iseven(length(vs))
+  # Negative square: cos(α) + A * sin(α) / α
+  # Positive square: cosh(α) + A * sinh(α) / α
+  (s, c) = is_negative ? (scalar_sin, scalar_cos) : (scalar_sinh, scalar_cosh)
+  simplified(sig, :+, scalar(c(α)), simplified(sig, :⟑, scalar(scalar_nan_to_zero(scalar_divide(s(α), α))), b))
+end
+
+scalar_exponential(x::Number) = exp(x)
+scalar_exponential(x) = :($exp($x))
+scalar_multiply(x::Number, y::Number) = x * y
+scalar_multiply(x, y) = :($x * $y)
+scalar_divide(x, y) = scalar_multiply(x, scalar_inverse(y))
+scalar_nan_to_zero(x::Number) = isnan(x) ? 0 : x
+scalar_nan_to_zero(x) = :($isnan($x) ? 0 : $x)
+scalar_inverse(x::Number) = inv(x)
+scalar_inverse(x) = :($inv($x))
+scalar_cos(x::Number) = cos(x)
+scalar_cos(x) = :($cos($x))
+scalar_sin(x::Number) = sin(x)
+scalar_sin(x) = :($sin($x))
+scalar_cosh(x::Number) = cosh(x)
+scalar_cosh(x) = :($cosh($x))
+scalar_sinh(x::Number) = sinh(x)
+scalar_sinh(x) = :($sinh($x))
+scalar_sqrt(x::Number) = sqrt(x)
+scalar_sqrt(x) = :($sqrt($x))
+scalar_abs(x::Number) = abs(x)
+scalar_abs(x) = :($abs($x))
 
 # Basic interfaces.
 
@@ -493,7 +539,8 @@ end
 function print_factor(io, ex)
   Meta.isexpr(ex, :call) && in(ex.args[1], (:*, :+)) && return print(io, join((sprint(print_factor, arg) for arg in @view ex.args[2:end]), " $(ex.args[1]) "))
   Meta.isexpr(ex, :call, 3) && ex.args[1] === getcomponent && return print(io, Expr(:ref, ex.args[2:3]...))
-  Meta.isexpr(ex, :call, 2) && ex.args[1] === getcomponent && return print(io, ex.args[2])
+  Meta.isexpr(ex, :call, 2) && ex.args[1] === getcomponent && isa(ex.args[2], Number) && return print(io, ex.args[2])
+  Meta.isexpr(ex, :call, 2) && ex.args[1] === getcomponent && return print(io, Expr(:ref, ex.args[2]))
   print(io, ex)
 end
 

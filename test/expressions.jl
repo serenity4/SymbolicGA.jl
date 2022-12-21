@@ -135,4 +135,19 @@ sig = Signature(3, 1)
     @test simplified(sig, :×, blade(1), blade(2)) == weighted(blade(1, 2), 0.5) + weighted(blade(1, 2), 0.5)
     @test simplified(sig, :∧, blade(1), blade(2)) == blade(1, 2)
   end
+
+  @testset "Exponentiation" begin
+    sig = Signature(3, 0, 1)
+    b = blade(1, 2, 4)
+    ex = simplified(sig, :exp, b)
+    @test ex == simplified(:+, scalar(1), b)
+
+    sig = Signature(3)
+    for α in (1, 3.2)
+      b = weighted(blade(1, 2), α)
+      ex = simplified(sig, :exp, b)
+      @test grade(ex) == [0, 2]
+      @test ex == simplified(:+, scalar(cos(α)), simplified(:⟑, scalar(sin(α) / α), b))
+    end
+  end
 end;
