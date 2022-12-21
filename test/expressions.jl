@@ -54,16 +54,23 @@ sig = Signature(3, 1)
     @test blade(1, 2) * blade(3) == blade(1, 2, 3)
   end
 
-  @testset "Blade grouping over addition" begin
-    x = weighted(blade(1, 3), :x)
-    ex = x + x
-    @test ex == weighted(blade(1, 3), :(2x))
+  @testset "Simplification of null elements in addition" begin
+    @test factor(1) + factor(0) == Expression(:factor, 1; simplify = false)
+    @test blade(1) + factor(0) == Expression(:blade, 1; simplify = false)
+  end
 
-    ex = scalar(:x) + scalar(:y)
-    @test ex == scalar(:(x + y))
+  @testset "Disassociation of products and sums" begin
+    @test factor(1) * (factor(:x) * factor(:y)) == factor(:(x * y))
+    @test factor(:z) * (factor(:x) * factor(:y)) == factor(:(z * x * y))
+    @test factor(1) + (factor(:x) + factor(:y)) == factor(:(x + y + 1))
+    @test factor(1) + (factor(2) + factor(0)) == factor(3)
+  end
 
-    ex = weighted(blade(1), :x) + weighted(blade(2, 3), :y) + weighted(blade(1), :z)
-    @test ex == weighted(blade(2, 3), :y) + weighted(blade(1), :(x + z))
+  @testset "Distribution of products" begin
+    @test (factor(:x) + factor(:y)) * (factor(:w) + factor(:z)) == factor(:((x + y) * (w + z)))
+    @test (blade(1) + blade(3)) * (blade(2) + blade(4)) == Expression(:+, blade(1, 2), blade(1, 4), blade(3, 2), blade(3, 4); simplify = false)
+    @test (factor(:x) + blade(1)) * (factor(:y) + blade(4)) == Expression(:+, factor(:(x * y)), factor(:x) * blade(4), blade(1) * factor(:y), blade(1, 4); simplify = false)
+    @test (factor(:x) + factor(:y)) * blade(1, 2) == Expression(:⟑, factor(:x) + factor(:y), blade(1, 2); simplify = false)
   end
 
   @testset "Simplification and canonicalization of factors" begin
@@ -88,26 +95,20 @@ sig = Signature(3, 1)
       @test scalar(:x) + scalar(:x) - scalar(:(2x)) == factor(0)
       @test scalar(:(x * y)) - scalar(:(x * y)) == factor(0)
       @test scalar(:(x * y)) + scalar(:(x * y)) ≠ factor(0)
+      @test scalar(:x) - scalar(:(2x)) == scalar(:(-1 * x))
     end
   end
 
-  @testset "Simplification of null elements in addition" begin
-    @test factor(1) + factor(0) == Expression(:factor, 1; simplify = false)
-    @test blade(1) + factor(0) == Expression(:blade, 1; simplify = false)
-  end
+  @testset "Blade grouping over addition" begin
+    x = weighted(blade(1, 3), :x)
+    ex = x + x
+    @test ex == weighted(blade(1, 3), :(2x))
 
-  @testset "Disassociation of products and sums" begin
-    @test factor(1) * (factor(:x) * factor(:y)) == factor(:(x * y))
-    @test factor(:z) * (factor(:x) * factor(:y)) == factor(:(z * x * y))
-    @test factor(1) + (factor(:x) + factor(:y)) == factor(:(x + y + 1))
-    @test factor(1) + (factor(2) + factor(0)) == factor(3)
-  end
+    ex = scalar(:x) + scalar(:y)
+    @test ex == scalar(:(x + y))
 
-  @testset "Distribution of products" begin
-    @test (factor(:x) + factor(:y)) * (factor(:w) + factor(:z)) == factor(:((x + y) * (w + z)))
-    @test (blade(1) + blade(3)) * (blade(2) + blade(4)) == Expression(:+, blade(1, 2), blade(1, 4), blade(3, 2), blade(3, 4); simplify = false)
-    @test (factor(:x) + blade(1)) * (factor(:y) + blade(4)) == Expression(:+, factor(:(x * y)), factor(:x) * blade(4), blade(1) * factor(:y), blade(1, 4); simplify = false)
-    @test (factor(:x) + factor(:y)) * blade(1, 2) == Expression(:⟑, factor(:x) + factor(:y), blade(1, 2); simplify = false)
+    ex = weighted(blade(1), :x) + weighted(blade(2, 3), :y) + weighted(blade(1), :z)
+    @test ex == weighted(blade(2, 3), :y) + weighted(blade(1), :(x + z))
   end
 
   @testset "Projections" begin

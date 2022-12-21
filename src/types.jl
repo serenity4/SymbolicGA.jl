@@ -52,6 +52,7 @@ const Quadvector{T,D,N} = KVector{4,T,D,N}
 @forward KVector.elements (Base.iterate, Base.firstindex, Base.lastindex)
 
 Base.isapprox(x::KVector, y::KVector) = grade(x) == grade(y) && all(isapprox.(x, y))
+Base.:(==)(x::KVector, y::KVector) = grade(x) == grade(y) && all(.==(x, y))
 
 Base.getindex(kvec::KVector) = only(kvec.elements)
 Base.getindex(kvec::KVector, indices) = kvec.elements[indices]

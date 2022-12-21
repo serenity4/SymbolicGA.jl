@@ -347,13 +347,15 @@ function simplify_addition(args)
     id = get!(() -> (counter += 1), ids, obj)
     id_counts[id] = something(get(id_counts, id, nothing), 0) + n
   end
-  kept_ids = Int[]
-  for (x, id) in sort(collect(ids); by = last)
+  for (x, id) in sort!(collect(ids); by = last)
     n = id_counts[id]
     n == 0 && continue
     isa(x, Set{Any}) && (x = Expr(:call, :*, x...))
-    n == 1 && push!(new_args, x)
-    n > 1 && push!(new_args, :($n * $x))
+    if n == 1
+      push!(new_args, x)
+    else
+      push!(new_args, :($n * $x))
+    end
   end
   isempty(new_args) && return factor(0)
   length(new_args) == 1 && return factor(new_args[1])
