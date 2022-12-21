@@ -5,7 +5,7 @@ mutable struct Expression
   grade::GradeInfo
   args::Vector{Any}
   function Expression(head::Symbol, args::AbstractVector; simplify = true, grade = nothing)
-    in(head, (:⟑, :+, :-, :factor, :exp, :inv, :blade, :kvector, :multivector, :reverse, :antireverse, :∧, :×, :●, :left_complement, :right_complement)) || throw(ArgumentError("Expression head $head is not allowed."))
+    in(head, (:⟑, :+, :-, :factor, :exp, :inverse, :blade, :kvector, :multivector, :reverse, :antireverse, :∧, :×, :●, :left_complement, :right_complement)) || throw(ArgumentError("Expression head $head is not allowed."))
     ex = new()
     ex.head = head
     ex.args = args
@@ -211,6 +211,16 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     throw(ArgumentError("Exponentiation is not supported for non-blade elements."))
   end
 
+  if head === :inverse
+    a = args[1]::Expression
+    isexpr(a, :factor) && return factor(scalar_inverse(a[1]))
+    isweightedblade(a, 0) && return scalar(simplified(:inverse, a[1]::Expression))
+    isblade(a, 0) && return a
+    sc = simplified(sig, :⟑, simplified(:reverse, a), a)
+    isscalar(sc) || error("`reverse(A) ⟑ A` is not a scalar, suggesting that A is not a versor. Inversion is only supported for versors at the moment.")
+    return simplified(:⟑, simplified(:reverse, a), simplified(:inverse, sc))
+  end
+
   ex.grade = infer_grade(head, args)::GradeInfo
   ex.args = args
 
@@ -313,7 +323,6 @@ function infer_grade(head::Symbol, args)
   head === :factor && return 0
   head === :blade && return count(isodd, map(x -> count(==(x), args), unique(args)))
   if head === :⟑
-    # Fast path for frequently encountered expressions.
     @assert length(args) == 2 && isexpr(args[1], :factor)
     return grade(args[2]::Expression)
   end

@@ -150,8 +150,6 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :projected_geometric_norm => :(right_antidivision(bulk_norm($(@arg 1)), weight_norm($(@arg 1)))),
     :unitize => :(right_antidivision($(@arg 1), weight_norm($(@arg 1)))),
 
-    :scalar_inverse => :($inv($(@arg 1))::Scalar),
-    :inverse => :(reverse($(@arg 1)) * scalar_inverse(scalar_product($(@arg 1)))),
     :left_division => :(inverse($(@arg 1)) ⟑ $(@arg 2)),
     :right_division => :($(@arg 1) ⟑ inverse($(@arg 2))),
 
@@ -205,7 +203,7 @@ end
 
 const ADJOINT_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (:⟑, :∧, :●, :+, :×, :-, :reverse, :antireverse, :left_complement, :right_complement, :exp))
+isreserved(op::Symbol) = in(op, (:⟑, :∧, :●, :+, :×, :-, :inverse, :reverse, :antireverse, :left_complement, :right_complement, :exp))
 
 function extract_blade_from_annotation(t, sig::Signature)
   isa(t, Symbol) || return nothing

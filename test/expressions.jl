@@ -136,6 +136,18 @@ sig = Signature(3, 1)
     @test simplified(sig, :∧, blade(1), blade(2)) == blade(1, 2)
   end
 
+  @testset "Inversion" begin
+    @test simplified(:inverse, factor(2.0)) == factor(0.5)
+    @test simplified(:inverse, factor(:x)) == factor(:($inv(x)))
+    @test simplified(sig, :inverse, scalar(2.0)) == scalar(0.5)
+    @test simplified(sig, :inverse, blade(1, 2)) == weighted(blade(1, 2), -1)
+    @test simplified(sig, :inverse, weighted(blade(1, 2), 5.0)) == weighted(blade(1, 2), -0.2)
+    versor = simplified(:+, scalar(2.0), weighted(blade(1, 2), 5.0))
+    @test simplified(sig, :⟑, versor, simplified(sig, :inverse, versor)) == scalar(1.0)
+    mv = simplified(:+, scalar(2.0), weighted(blade(3), 1.2), weighted(blade(1, 2), 5.0))
+    @test_throws "only supported for versors" simplified(sig, :⟑, mv, simplified(sig, :inverse, mv)) == scalar(1.0)
+  end
+
   @testset "Exponentiation" begin
     sig = Signature(3, 0, 1)
     b = blade(1, 2, 4)
