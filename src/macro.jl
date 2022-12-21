@@ -425,7 +425,7 @@ end
 function input_expression(sig::Signature, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
   blades = map(blade, combinations(1:dimension(sig), g))
   weights = extract_weights(sig, ex, g; j, offset)
-  simplified(sig, :+, Any[factor(w) * blade for (blade, w) in zip(blades, weights)])
+  simplified(sig, :+, Any[simplified(:⟑, factor(w), blade) for (blade, w) in zip(blades, weights)])
 end
 
 function input_expression(sig::Signature, ex, gs::AbstractVector; flattened::Bool = false)

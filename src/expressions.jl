@@ -86,8 +86,12 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   end
 
   # Remove unit elements for multiplication and addition.
-  fac = remove_unit_elements!(args, head)
-  !isnothing(fac) && return scalar(fac)
+  did_remove = remove_unit_elements!(args, head)
+  if did_remove
+    head === :⟑ && isempty(args) && return scalar(1)
+    head === :+ && isempty(args) && return scalar(0)
+    return simplified(sig, head, args)
+  end
 
   if in(head, (:⟑, :+))
     length(args) == 1 && return args[1]
@@ -239,14 +243,14 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
 end
 
 function remove_unit_elements!(args, head)
+  n = length(args)
   if head === :⟑
     filter!(x -> !isexpr(x, :factor) || x[1] !== 1, args)
-    isempty(args) && return 1
   elseif head === :+
     filter!(x -> !isexpr(x, :factor) || x[1] !== 0, args)
-    isempty(args) && return 0
   end
-  nothing
+  did_remove = n > length(args)
+  did_remove
 end
 
 function collapse_factors(f::F, args) where {F<:Function}
@@ -313,12 +317,14 @@ end
 
 function simplify_negations(fac)
   if Meta.isexpr(fac, :call) && fac.args[1] === :*
-    n = count(x -> x == -1, fac.args)
+    head, args... = fac.args
+    n = count(x -> x == -1, args)
     if n > 1
-      sc_args = filter(x -> x != -1, fac.args)
-      isodd(n) && insert!(sc_args, 2, -1)
-      length(sc_args) == 1 && return 1
-      return Expr(:call, sc_args...)
+      filter!(≠(-1), args)
+      isodd(n) && pushfirst!(args, -1)
+      isempty(args) && return 1
+      length(args) == 1 && return args[1]
+      return Expr(:call, head, args...)
     end
   end
   fac
@@ -342,19 +348,22 @@ function simplify_addition(args)
         end
         true
       end
-      obj = length(xs) == 1 ? xs[1] : Set{Any}(xs)
+      # Extract the object after extraction of integer factors.
+      # Make sure that multiple arguments are stored such that ordering is not important,
+      # and other orderings should give the same ID.
+      obj = isempty(xs) ? 1 : length(xs) == 1 ? xs[1] : sort!(xs; by = hash)
     end
     id = get!(() -> (counter += 1), ids, obj)
     id_counts[id] = something(get(id_counts, id, nothing), 0) + n
   end
-  for (x, id) in sort!(collect(ids); by = last)
+  for (x, id) in sort(collect(ids); by = last)
     n = id_counts[id]
     n == 0 && continue
-    isa(x, Set{Any}) && (x = Expr(:call, :*, x...))
+    isa(x, Vector{Any}) && (x = Expr(:call, :*, x...))
     if n == 1
       push!(new_args, x)
     else
-      push!(new_args, :($n * $x))
+      push!(new_args, scalar_multiply(n, x))
     end
   end
   isempty(new_args) && return factor(0)

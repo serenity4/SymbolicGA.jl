@@ -82,3 +82,29 @@ end
   # The above operation is equivalent to an inversion through the optical center, as the original point is exactly at a distance of one focal length.
   @test (@pga3 unitize(−D::Vector ⩒ point((1.2, 1, 2)) ⩒ antireverse(D::Vector))) == KVector{1,4}(1.2, 1, 0, -1)
 end;
+
+@testset "3D rotations" begin
+  a = (1.0, 0.0, 0.0)
+  b = (0.0, 1.0, 0.0)
+  x = (1.0, 1.0, 0.0)
+  α = π / 4
+
+  # Define a plane for the rotation.
+  Π = @ga 3 a::Vector ∧ b::Vector
+
+  # Define rotation bivector.
+  ϕ = @ga 3 α::Scalar * Π::Bivector
+
+  # Define rotation generator.
+  Ω = @ga 3 exp(-(ϕ::Bivector) / 2::Scalar)
+  @test grade.(Ω) == (0, 2)
+  @test all(Ω .≈ @ga 3 cos(Base.:*(0.5, α))::Scalar - Π::Bivector * sin(Base.:*(0.5, α))::Scalar)
+  @test (@ga 3 Ω::(Scalar, Bivector) ⟑ inverse(Ω::(Scalar, Bivector))) == KVector{0,3}(1.0)
+
+  # TODO: The trivector might always be null by construction, simplifications should therefore elide it in the final result.
+  x′, _ = @ga 3 begin
+    Ω::(Scalar, Bivector)
+    Ω ⟑ x::Vector ⟑ inverse(Ω)
+  end
+  @test_broken x′ == KVector{1,3}(-1.0, 1.0, 0.0)
+end
