@@ -252,12 +252,12 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
 
   ex = postwalk(ex) do ex
     if Meta.isexpr(ex, ADJOINT_SYMBOL)
-      simplified(sig, :reverse, ex.args[1]::Expression)
+      simplified(sig, REVERSE, ex.args[1]::Expression)
     elseif Meta.isexpr(ex, :call) && isa(ex.args[1], Symbol)
       op = ex.args[1]::Symbol
       !isreserved(op) && return ex
       args = ex.args[2:end]
-      simplified(sig, op, args)
+      simplified(sig, Head(op), args)
     elseif Meta.isexpr(ex, :(::))
       ex, T = ex.args
       b = extract_blade_from_annotation(T, sig)
@@ -425,7 +425,7 @@ end
 function input_expression(sig::Signature, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
   blades = map(blade, combinations(1:dimension(sig), g))
   weights = extract_weights(sig, ex, g; j, offset)
-  simplified(sig, :+, Any[simplified(:⟑, factor(w), blade) for (blade, w) in zip(blades, weights)])
+  simplified(sig, ADDITION, Any[simplified(GEOMETRIC_PRODUCT, factor(w), blade) for (blade, w) in zip(blades, weights)])
 end
 
 function input_expression(sig::Signature, ex, gs::AbstractVector; flattened::Bool = false)
@@ -439,7 +439,7 @@ function input_expression(sig::Signature, ex, gs::AbstractVector; flattened::Boo
       push!(args, input_expression(sig, ex, g; j))
     end
   end
-  simplified(sig, :+, args)
+  simplified(sig, ADDITION, args)
 end
 
 function walk(ex::Expr, inner, outer)
@@ -477,7 +477,7 @@ reconstructed_type(T::Nothing, sig::Signature, ex) = :($KVector{$(ex.grade::Int)
 reconstructed_type(T, sig::Signature, ex) = T
 
 function to_expr(ex, sig::Optional{Signature} = nothing, flatten::Bool = false, T = nothing)
-  if isexpr(ex, :multivector)
+  if isexpr(ex, MULTIVECTOR)
     if flatten
       @assert !isnothing(T)
       construction_exs = to_final_expr.(ex.args, sig::Signature, flatten, T)
@@ -487,12 +487,12 @@ function to_expr(ex, sig::Optional{Signature} = nothing, flatten::Bool = false, 
       return Expr(:tuple, to_final_expr.(ex, sig::Signature, flatten, Ref(T))...)
     end
   end
-  isexpr(ex, :factor) && return to_final_expr(ex[1])
-  isexpr(ex, :kvector) && return :($construct($(reconstructed_type(T, sig::Signature, ex)), $(Expr(:tuple, to_final_expr.(ex.args)...))))
-  isexpr(ex, :blade) && return 1
-  if isexpr(ex, :⟑)
+  isexpr(ex, FACTOR) && return to_final_expr(ex[1])
+  isexpr(ex, KVECTOR) && return :($construct($(reconstructed_type(T, sig::Signature, ex)), $(Expr(:tuple, to_final_expr.(ex.args)...))))
+  isexpr(ex, BLADE) && return 1
+  if isexpr(ex, GEOMETRIC_PRODUCT)
     @assert length(ex) == 2
-    @assert isexpr(ex[2], :blade)
+    @assert isexpr(ex[2], BLADE)
     return to_final_expr(ex[1]::Expression)
   end
   ex === Zero() && return 0

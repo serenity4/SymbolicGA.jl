@@ -4,10 +4,10 @@ sig = Signature(3, 1)
 
 @testset "Expressions" begin
   @testset "Expression basics" begin
-    @test isexpr(factor(0), :factor, 1)
-    @test !isexpr(blade(1, 2), :blade, 1)
-    @test isexpr(blade(1, 2), :blade, 2)
-    @test isexpr(blade(1, 2), (:factor, :blade))
+    @test isexpr(factor(0), FACTOR, 1)
+    @test !isexpr(blade(1, 2), BLADE, 1)
+    @test isexpr(blade(1, 2), BLADE, 2)
+    @test isexpr(blade(1, 2), (FACTOR, BLADE))
 
     ex = blade(1, 2)
     ex2 = postwalk(x -> isa(x, Int) ? x + 1 : x, ex)
@@ -15,15 +15,15 @@ sig = Signature(3, 1)
   end
 
   @testset "Grade inference" begin
-    @test infer_grade(:factor, 0) == 0
-    @test infer_grade(:blade, [1, 2, 3]) == 3
-    @test infer_grade(:blade, [1, 2, 3, 3]) == 2
-    @test infer_grade(:blade, [1, 2, 3, 3, 3]) == 3
-    @test infer_grade(:blade, [1, 1, 2, 2, 3, 3, 3]) == 1
-    @test infer_grade(:blade, [1, 2, 3, 1, 2, 4, 1, 2]) == 4
-    @test infer_grade(:kvector, [blade(1, 2), blade(2, 3)]) == 2
-    @test infer_grade(:multivector, [blade(1, 2), blade(2, 3)]) == 2
-    @test infer_grade(:multivector, [kvector(blade(1, 2), blade(2, 3)), kvector(blade(1))]) == [1, 2]
+    @test infer_grade(FACTOR, 0) == 0
+    @test infer_grade(BLADE, [1, 2, 3]) == 3
+    @test infer_grade(BLADE, [1, 2, 3, 3]) == 2
+    @test infer_grade(BLADE, [1, 2, 3, 3, 3]) == 3
+    @test infer_grade(BLADE, [1, 1, 2, 2, 3, 3, 3]) == 1
+    @test infer_grade(BLADE, [1, 2, 3, 1, 2, 4, 1, 2]) == 4
+    @test infer_grade(KVECTOR, [blade(1, 2), blade(2, 3)]) == 2
+    @test infer_grade(MULTIVECTOR, [blade(1, 2), blade(2, 3)]) == 2
+    @test infer_grade(MULTIVECTOR, [kvector(blade(1, 2), blade(2, 3)), kvector(blade(1))]) == [1, 2]
 
     ex = blade(1, 2)
     @test grade(ex) == 2
@@ -55,8 +55,8 @@ sig = Signature(3, 1)
   end
 
   @testset "Simplification of null elements in addition" begin
-    @test factor(1) + factor(0) == Expression(:factor, 1; simplify = false)
-    @test blade(1) + factor(0) == Expression(:blade, 1; simplify = false)
+    @test factor(1) + factor(0) == Expression(FACTOR, 1; simplify = false)
+    @test blade(1) + factor(0) == Expression(BLADE, 1; simplify = false)
   end
 
   @testset "Disassociation of products and sums" begin
@@ -68,17 +68,17 @@ sig = Signature(3, 1)
 
   @testset "Distribution of products" begin
     @test (factor(:x) + factor(:y)) * (factor(:w) + factor(:z)) == factor(:((x + y) * (w + z)))
-    @test (blade(1) + blade(3)) * (blade(2) + blade(4)) == Expression(:+, blade(1, 2), blade(1, 4), blade(3, 2), blade(3, 4); simplify = false)
-    @test (factor(:x) + blade(1)) * (factor(:y) + blade(4)) == Expression(:+, factor(:(x * y)), factor(:x) * blade(4), blade(1) * factor(:y), blade(1, 4); simplify = false)
-    @test (factor(:x) + factor(:y)) * blade(1, 2) == Expression(:⟑, factor(:x) + factor(:y), blade(1, 2); simplify = false)
+    @test (blade(1) + blade(3)) * (blade(2) + blade(4)) == Expression(ADDITION, blade(1, 2), blade(1, 4), blade(3, 2), blade(3, 4); simplify = false)
+    @test (factor(:x) + blade(1)) * (factor(:y) + blade(4)) == Expression(ADDITION, factor(:(x * y)), factor(:x) * blade(4), blade(1) * factor(:y), blade(1, 4); simplify = false)
+    @test (factor(:x) + factor(:y)) * blade(1, 2) == Expression(GEOMETRIC_PRODUCT, factor(:x) + factor(:y), blade(1, 2); simplify = false)
   end
 
   @testset "Simplification and canonicalization of factors" begin
-    @test blade(1, 2) * factor(3) == Expression(:⟑, factor(3), blade(1, 2); simplify = false)
-    @test blade(1, 2) * factor(3) * factor(5) == Expression(:⟑, factor(15), blade(1, 2); simplify = false)
-    @test blade(1, 2) * factor(:x) * factor(:(y[1])) == Expression(:⟑, factor(:(x * y[1])), blade(1, 2); simplify = false)
-    @test factor(1) * blade(1, 2) * factor(3) == Expression(:⟑, factor(3), blade(1, 2); simplify = false)
-    # @test blade(1, 2) * factor(0) == Expression(:⟑, factor(0), blade(1, 2); simplify = false)
+    @test blade(1, 2) * factor(3) == Expression(GEOMETRIC_PRODUCT, factor(3), blade(1, 2); simplify = false)
+    @test blade(1, 2) * factor(3) * factor(5) == Expression(GEOMETRIC_PRODUCT, factor(15), blade(1, 2); simplify = false)
+    @test blade(1, 2) * factor(:x) * factor(:(y[1])) == Expression(GEOMETRIC_PRODUCT, factor(:(x * y[1])), blade(1, 2); simplify = false)
+    @test factor(1) * blade(1, 2) * factor(3) == Expression(GEOMETRIC_PRODUCT, factor(3), blade(1, 2); simplify = false)
+    # @test blade(1, 2) * factor(0) == Expression(GEOMETRIC_PRODUCT, factor(0), blade(1, 2); simplify = false)
     @test blade(1, 2) * factor(0) == factor(0)
     @test factor(:(-1 * -1)) == factor(1)
     @test factor(:(-1 * -1)) * blade(1, 2) == blade(1, 2)
@@ -139,35 +139,35 @@ sig = Signature(3, 1)
   end
 
   @testset "Common operators" begin
-    @test simplified(sig, :●, blade(1), blade(1, 2)) == blade(2)
-    @test simplified(sig, :×, blade(1), blade(2)) == weighted(blade(1, 2), 0.5) + weighted(blade(1, 2), 0.5)
-    @test simplified(sig, :∧, blade(1), blade(2)) == blade(1, 2)
+    @test simplified(sig, INTERIOR_PRODUCT, blade(1), blade(1, 2)) == blade(2)
+    @test simplified(sig, COMMUTATOR_PRODUCT, blade(1), blade(2)) == weighted(blade(1, 2), 0.5) + weighted(blade(1, 2), 0.5)
+    @test simplified(sig, EXTERIOR_PRODUCT, blade(1), blade(2)) == blade(1, 2)
   end
 
   @testset "Inversion" begin
-    @test simplified(:inverse, factor(2.0)) == factor(0.5)
-    @test simplified(:inverse, factor(:x)) == factor(:($inv(x)))
-    @test simplified(sig, :inverse, scalar(2.0)) == scalar(0.5)
-    @test simplified(sig, :inverse, blade(1, 2)) == weighted(blade(1, 2), -1)
-    @test simplified(sig, :inverse, weighted(blade(1, 2), 5.0)) == weighted(blade(1, 2), -0.2)
-    versor = simplified(:+, scalar(2.0), weighted(blade(1, 2), 5.0))
-    @test simplified(sig, :⟑, versor, simplified(sig, :inverse, versor)) == scalar(1.0)
-    mv = simplified(:+, scalar(2.0), weighted(blade(3), 1.2), weighted(blade(1, 2), 5.0))
-    @test_throws "only supported for versors" simplified(sig, :⟑, mv, simplified(sig, :inverse, mv)) == scalar(1.0)
+    @test simplified(INVERSE, factor(2.0)) == factor(0.5)
+    @test simplified(INVERSE, factor(:x)) == factor(:($inv(x)))
+    @test simplified(sig, INVERSE, scalar(2.0)) == scalar(0.5)
+    @test simplified(sig, INVERSE, blade(1, 2)) == weighted(blade(1, 2), -1)
+    @test simplified(sig, INVERSE, weighted(blade(1, 2), 5.0)) == weighted(blade(1, 2), -0.2)
+    versor = simplified(ADDITION, scalar(2.0), weighted(blade(1, 2), 5.0))
+    @test simplified(sig, GEOMETRIC_PRODUCT, versor, simplified(sig, INVERSE, versor)) == scalar(1.0)
+    mv = simplified(ADDITION, scalar(2.0), weighted(blade(3), 1.2), weighted(blade(1, 2), 5.0))
+    @test_throws "only supported for versors" simplified(sig, GEOMETRIC_PRODUCT, mv, simplified(sig, INVERSE, mv)) == scalar(1.0)
   end
 
   @testset "Exponentiation" begin
     sig = Signature(3, 0, 1)
     b = blade(1, 2, 4)
-    ex = simplified(sig, :exp, b)
-    @test ex == simplified(:+, scalar(1), b)
+    ex = simplified(sig, EXPONENTIAL, b)
+    @test ex == simplified(ADDITION, scalar(1), b)
 
     sig = Signature(3)
     for α in (1, 3.2)
       b = weighted(blade(1, 2), α)
-      ex = simplified(sig, :exp, b)
+      ex = simplified(sig, EXPONENTIAL, b)
       @test grade(ex) == [0, 2]
-      @test ex == simplified(:+, scalar(cos(α)), simplified(:⟑, scalar(sin(α) / α), b))
+      @test ex == simplified(ADDITION, scalar(cos(α)), simplified(GEOMETRIC_PRODUCT, scalar(sin(α) / α), b))
     end
   end
 end;

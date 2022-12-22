@@ -110,13 +110,13 @@ end
   ws = extract_weights(sig, :x, 1; offset = 0)
   @test ws == [:($getcomponent(x, $i)) for i in 1:3]
   ex = input_expression(sig, :x, 2)
-  @test isexpr(ex, :+, 3)
+  @test isexpr(ex, ADDITION, 3)
   @test ex[1] == factor(first(ws)) * blade(1, 2)
 
   ex = extract_expression(:((x::Vector * y::Bivector)::Trivector), sig, builtin_varinfo(sig))
   ex2 = restructure(ex, sig)
-  @test isexpr(ex2, :kvector, 1)
-  @test isweighted(ex2[1]) && isexpr(ex2[1][2], :blade)
+  @test isexpr(ex2, KVECTOR, 1)
+  @test isweighted(ex2[1]) && isexpr(ex2[1][2], BLADE)
   @test isa(string(ex2), String)
 
   ex = @macroexpand @ga (2, 1) Tuple x::Vector ∧ y::Vector + x::Vector * z::Antiscalar

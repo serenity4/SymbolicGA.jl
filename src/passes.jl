@@ -11,7 +11,7 @@ function restructure_sums(ex::Expression, sig::Signature)
     isone(nelements(sig, ex.grade::Int)) && return kvector(ex)
     terms = [ex]
   else
-    @assert isexpr(ex, :+) "Expected addition expression, got expression type $(ex.head)"
+    @assert isexpr(ex, ADDITION) "Expected addition expression, got expression type $(ex.head)"
     terms = ex.args
   end
 
@@ -39,7 +39,7 @@ Base.show(io::IO, ::Zero) = print(io, '𝟎')
 
 function fill_kvector_components(ex::Expression, s::Signature)
   postwalk(ex) do ex
-    isexpr(ex, :kvector) || return ex
+    isexpr(ex, KVECTOR) || return ex
     g = grade(ex)
     i = 1
     ex = kvector(sort(ex.args, by = basis_vectors, lt = lt_basis_order))
