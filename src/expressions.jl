@@ -47,60 +47,136 @@ function Head(head::Symbol)
   error("Head '$head' is unknown")
 end
 
+primitive type ID 64 end
+
+ID(val::UInt64) = reinterpret(ID, val)
+ID(val::Integer) = ID(UInt64(val))
+
+mutable struct IDCounter
+  val::UInt64
+end
+
+next!(counter::IDCounter) = ID(counter.val += 1)
+IDCounter() = IDCounter(0)
+
+struct ExpressionSpec
+  head::Head
+  args::Vector{Any}
+end
+
+Base.:(==)(x::ExpressionSpec, y::ExpressionSpec) = x.head == y.head && x.args == y.args
+Base.hash(spec::ExpressionSpec, h::UInt) = hash(hash(spec.head) + hash(spec.args), h)
+
+ExpressionSpec(head::Head, args::AbstractVector) = ExpressionSpec(head, convert(Vector{Any}, args))
+ExpressionSpec(head::Head, args...) = ExpressionSpec(head, collect(Any, args))
+
 mutable struct Expression
   head::Head
   grade::GradeInfo
-  args::Vector{Any}
-  function Expression(head::Head, args::AbstractVector; simplify = true, grade = nothing)
+  args::Vector{Union{Expression,ID}}
+  cache
+  function Expression(head::Head, args::AbstractVector, cache; simplify = true, grade = nothing)
     ex = new()
     ex.head = head
     ex.args = args
+    ex.cache = cache::ExpressionCache
     !isnothing(grade) && (ex.grade = grade)
     !simplify && return ex
-    simplify!(ex, nothing)
+    simplify!(ex)::Expression
   end
-  Expression(head::Head, args...; simplify = true, grade = nothing) = Expression(head, collect(Any, args); simplify, grade)
 end
-# Can mutate arguments.
-simplified(sig, head::Head, args...) = simplify!(Expression(head, args...; simplify = false), sig)
-simplified(head::Head, args...) = simplified(nothing, head, args...)
 
-function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
-  (; head, args) = ex
+struct ExpressionCache
+  sig::Signature
+  counter::IDCounter
+  primitive_ids::Dict{Any,ID}
+  primitives::Dict{ID,Any}
+  substitutions::Dict{ExpressionSpec,Expression}
+end
+
+Base.broadcastable(cache::ExpressionCache) = Ref(cache)
+
+ExpressionCache(sig::Signature) = ExpressionCache(sig, IDCounter(), Dict(), Dict(), Dict())
+
+is_expression_caching_enabled() = true
+
+Base.getproperty(ex::Expression, field::Symbol) = field === :cache ? getfield(ex, field)::ExpressionCache : getfield(ex, field)
+
+Expression(head::Head, ex::Expression) = Expression(ex.cache, head)
+Expression(cache::ExpressionCache, head::Head, args...) = Expression(cache, ExpressionSpec(head, args...))
+function Expression(cache::ExpressionCache, spec::ExpressionSpec)
+  haskey(cache.substitutions, spec) && is_expression_caching_enabled() && return cache.substitutions[spec]
+  ex = build_expression!(cache, spec)
+end
+
+function build_expression!(cache::ExpressionCache, spec::ExpressionSpec)
+  (; head, args) = spec
+  for (i, arg) in enumerate(args)
+    isa(arg, Expression) && continue
+    isa(arg, ID) && continue
+    id = get!(() -> next!(cache.counter), cache.primitive_ids, arg)
+    args[i] = id
+    cache.primitives[id] = arg
+  end
+  ex = Expression(head, args, cache)
+  is_expression_caching_enabled() && (cache.substitutions[spec] = ex)
+  ex
+end
+
+dereference(cache::ExpressionCache, primitive_id::ID) = cache.primitives[primitive_id]
+dereference(cache::ExpressionCache, x) = x
+function dereference(ex::Expression)
+  @assert length(ex) == 1
+  dereference(ex.cache, ex[1]::ID)
+end
+
+substitute!(ex::Expression, head::Head, args...) = substitute!(ex, ExpressionSpec(head, args...))
+substitute!(ex::Expression, spec::ExpressionSpec) = substitute!(ex, Expression(ex.cache, spec))
+
+function substitute!(ex::Expression, other::Expression)
+  ex.head = other.head
+  ex.args = other.args
+  ex.grade = other.grade
+  ex
+end
+
+function simplify!(ex::Expression)
+  (; head, args, cache) = ex
+  (; sig) = cache
+
   # Simplify nested factor expressions.
-  head === FACTOR && isexpr(args[1], FACTOR) && return simplify!(args[1]::Expression, sig)
+  head === FACTOR && isexpr(args[1], FACTOR) && return args[1]
 
   # Apply left and right complements.
   if head in (LEFT_COMPLEMENT, RIGHT_COMPLEMENT)
-    isweightedblade(args[1]) && return weighted(simplified(sig, head, args[1][2]), args[1][1])
-    args[1] == factor(0) && return args[1]
+    isweightedblade(args[1]) && return substitute!(ex, weighted(Expression(cache, head, args[1][2]), args[1][1]))
+    args[1] == factor(cache, 0) && return args[1]
   end
-  head === LEFT_COMPLEMENT && isblade(args[1]) && return blade_left_complement(sig::Signature, args[1])
-  head === RIGHT_COMPLEMENT && isblade(args[1]) && return blade_right_complement(sig::Signature, args[1])
+  head === LEFT_COMPLEMENT && isblade(args[1]) && return blade_left_complement(args[1])
+  head === RIGHT_COMPLEMENT && isblade(args[1]) && return blade_right_complement(args[1])
 
   if head === BLADE
     # Sort basis vectors.
-    if !issorted(args)
-      perm = sortperm(args)
+    if !issorted(args; by = x -> dereference(cache, x))
+      perm = sortperm(args, by = x -> dereference(cache, x))
       fac = isodd(parity(perm)) ? -1 : 1
-      return simplified(sig, GEOMETRIC_PRODUCT, simplified(sig, FACTOR, fac), simplified(sig, BLADE, args[perm]))
+      return substitute!(ex, weighted(Expression(cache, BLADE, args[perm]), fac))
     end
 
     # Apply metric.
     if !allunique(args)
-      sig::Signature
       last = nothing
       fac = 1
       i = 1
       while length(args) ≥ 2
         i > lastindex(args) && break
-        new = args[i]
+        new = dereference(cache, args[i])
         if !isnothing(last)
           if new == last
             m = metric(sig, last)
-            iszero(m) && return scalar(0)
+            iszero(m) && return substitute!(ex, scalar(cache, 0))
             fac *= m
-            length(args) == 2 && return scalar(fac)
+            length(args) == 2 && return substitute!(ex, scalar(cache, fac))
             deleteat!(args, i)
             deleteat!(args, i - 1)
             i = max(i - 2, 1)
@@ -113,37 +189,37 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
         end
         i += 1
       end
-      return weighted(simplified(sig, BLADE, args), fac)
+      return substitute!(ex, weighted(Expression(cache, BLADE, args), fac))
     end
   end
 
   if head === SUBTRACTION
     # Simplify unary minus operator to a multiplication with -1.
-    length(args) == 1 && return weighted(args[1], -1)
+    length(args) == 1 && return substitute!(ex, weighted(args[1], -1))
     # Transform binary minus expression into an addition.
     @assert length(args) == 2
-    return simplified(sig, ADDITION, args[1], -args[2])
+    return subtitute!(ex, ADDITION, args[1], -args[2])
   end
 
   # Simplify whole expression to zero if a product term is zero.
-  if head === GEOMETRIC_PRODUCT && any(isexpr(x, FACTOR) && x[1] == 0 for x in args)
+  if head === GEOMETRIC_PRODUCT && any(isexpr(x, FACTOR) && dereference(x) == 0 for x in args)
     any(!isexpr(x, FACTOR) && !isexpr(x, BLADE, 0) for x in args) && @debug "Non-factor expression annihilated by a zero multiplication term" args
-    return factor(0)
+    return substitute!(ex, factor(cache, 0))
   end
 
   # Remove unit elements for multiplication and addition.
   did_remove = remove_unit_elements!(args, head)
   if did_remove
-    head === GEOMETRIC_PRODUCT && isempty(args) && return scalar(1)
-    head === ADDITION && isempty(args) && return scalar(0)
-    return simplified(sig, head, args)
+    head === GEOMETRIC_PRODUCT && isempty(args) && return substitute!(ex, scalar(cache, 1))
+    head === ADDITION && isempty(args) && return substitute!(ex, scalar(cache, 0))
+    return substitute!(ex, head, args)
   end
 
   if in(head, (GEOMETRIC_PRODUCT, ADDITION))
-    length(args) == 1 && return args[1]
+    length(args) == 1 && return substitute!(ex, args[1]::Expression)
 
     # Disassociate ⟑ and +.
-    any(isexpr(head), args) && return disassociate1(args, head, sig)
+    any(isexpr(head), args) && return substitute!(ex, disassociate1(args, head))
   end
 
   if head === GEOMETRIC_PRODUCT
@@ -152,16 +228,16 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     if nf ≥ 2
       # Collapse all factors into one at the front.
       factors, nonfactors = filter(isexpr(FACTOR), args), filter(!isexpr(FACTOR), args)
-      fac = collapse_factors(*, factors)
-      length(args) == nf && return fac
-      return simplified(sig, GEOMETRIC_PRODUCT, Any[fac; nonfactors])
+      fac = collapse_factors(cache, *, factors)
+      length(args) == nf && return substitute!(ex, fac)
+      return substitute!(ex, GEOMETRIC_PRODUCT, Any[fac; nonfactors])
     elseif nf == 1 && !isexpr(args[1], FACTOR)
       # Put the factor at the front.
       i = findfirst(isexpr(FACTOR), args)
       fac = args[i]::Expression
       deleteat!(args, i)
       pushfirst!(args, fac)
-      return simplified(sig, GEOMETRIC_PRODUCT, args)
+      return substitute!(ex, GEOMETRIC_PRODUCT, args)
     end
 
     # Collapse all bases and blades into a single blade.
@@ -173,19 +249,19 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
         x = args[i]
         isexpr(x, BLADE) || continue
         for arg in reverse(x.args)
-          pushfirst!(blade_args, arg::Int)
+          pushfirst!(blade_args, dereference(cache, arg)::Int)
         end
         deleteat!(args, i)
       end
-      ex = blade(sig, blade_args)
+      blade_ex = blade(cache, blade_args)
       # Return the blade if all the terms were collapsed.
-      nb == n && return ex
-      return simplified(sig, GEOMETRIC_PRODUCT, Any[args; ex])
+      nb == n && return substitute!(ex, blade_ex)
+      return subsitute!(ex, GEOMETRIC_PRODUCT, Any[args; blade_ex])
     end
   end
 
   # Simplify addition of factors.
-  head === ADDITION && all(isexpr(FACTOR), args) && return collapse_factors(+, args)
+  head === ADDITION && all(isexpr(FACTOR), args) && return substitute!(ex, collapse_factors(cache, +, args))
 
   # Group blade components over addition.
   if head === ADDITION
@@ -196,14 +272,14 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
         blade_weights = Dict{Vector{Int},Expression}()
         for b in blades
           vecs = basis_vectors(b)
-          weight = isweightedblade(b) ? b.args[1] : factor(1)
+          weight = isweightedblade(b) ? b.args[1] : factor(cache, 1)
           blade_weights[vecs] = haskey(blade_weights, vecs) ? blade_weights[vecs] + weight : weight
         end
         for (vecs, weight) in blade_weights
-          fac = weight[1]
+          fac = dereference(weight)
           if Meta.isexpr(fac, :call) && fac.args[1] === :+
-            weight = simplify_addition(@view fac.args[2:end])
-            if weight == factor(0)
+            weight = simplify_addition(cache, @view fac.args[2:end])
+            if weight == factor(cache, 0)
               delete!(blade_weights, vecs)
             else
               blade_weights[vecs] = weight
@@ -211,31 +287,35 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
           end
         end
         new_args = args[setdiff(eachindex(args), indices)]
-        append!(new_args, simplified(GEOMETRIC_PRODUCT, weight, blade(vecs)) for (vecs, weight) in blade_weights)
-        return simplified(ADDITION, new_args)
+        append!(new_args, Expression(cache, GEOMETRIC_PRODUCT, weight, blade(cache, vecs)) for (vecs, weight) in blade_weights)
+        return substitute!(ex, ADDITION, new_args)
       end
     end
   end
 
 
   # Simplify -1 factors.
-  head === FACTOR && (args[1] = simplify_negations(args[1]))
+  if head === FACTOR
+    fac = dereference(ex)
+    new_fac = simplify_negations(fac)
+    fac !== new_fac && return substitute!(ex, factor(cache, new_fac))
+  end
 
   # Check that arguments make sense.
   n = expected_nargs(head)
   !isnothing(n) && @assert length(args) == n "Expected $n arguments for expression $head, $n were provided\nArguments: $args"
   @assert !isempty(args) || head === BLADE
-  head === BLADE && @assert all(isa(i, Int) for i in args)
+  head === BLADE && @assert all(isa(dereference(cache, i), Int) for i in args)
   head === FACTOR && @assert !isa(args[1], Expression) "`Expression` argument detected in FACTOR expression: $(args[1])"
 
   # Propagate complements over addition.
-  head in (LEFT_COMPLEMENT, RIGHT_COMPLEMENT) && isexpr(args[1], ADDITION) && return simplified(sig, ADDITION, simplified.(sig, head, args[1]))
+  head in (LEFT_COMPLEMENT, RIGHT_COMPLEMENT) && isexpr(args[1], ADDITION) && return substitute!(ex, ADDITION, Expression.(cache, head, args[1]))
 
   # Distribute products over addition.
-  head in (GEOMETRIC_PRODUCT, EXTERIOR_PRODUCT, INTERIOR_PRODUCT, COMMUTATOR_PRODUCT) && any(isexpr(arg, ADDITION) for arg in args) && return distribute1(args, head, sig)
+  head in (GEOMETRIC_PRODUCT, EXTERIOR_PRODUCT, INTERIOR_PRODUCT, COMMUTATOR_PRODUCT) && any(isexpr(arg, ADDITION) for arg in args) && return substitute!(ex, distribute1(args, head))
 
   # Eagerly apply reversions.
-  head in (REVERSE, ANTIREVERSE) && return apply_reverse_operators(ex, sig)
+  head in (REVERSE, ANTIREVERSE) && return substitute!(ex, apply_reverse_operators(ex))
 
   # Expand common operators.
   # ========================
@@ -243,7 +323,7 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
   # The exterior product is associative, no issues there.
   if head === EXTERIOR_PRODUCT
     n = sum(x -> grade(x::Expression)::Int, args)
-    return project!(simplified(sig, GEOMETRIC_PRODUCT, args), n)
+    return substitute!(ex, project!(Expression(cache, GEOMETRIC_PRODUCT, args), n))
   end
 
   if head === INTERIOR_PRODUCT
@@ -252,38 +332,37 @@ function simplify!(ex::Expression, sig::Optional{Signature} = nothing)
     r, s = grade(args[1]::Expression)::Int, grade(args[2]::Expression)::Int
     if (iszero(r) || iszero(s))
       (!iszero(r) || !iszero(s)) && @debug "Non-scalar expression annihilated in inner product with a scalar"
-      return scalar(0)
+      return scalar(cache, 0)
     end
-    return project!(simplified(sig, GEOMETRIC_PRODUCT, args), abs(r - s))
+    return substitute!(ex, project!(Expression(cache, GEOMETRIC_PRODUCT, args), abs(r - s)))
   end
 
   if head === COMMUTATOR_PRODUCT
     # The commutator product must have only two operands, as no associativity law is available to derive a canonical binarization.
     a, b = args[1]::Expression, args[2]::Expression
-    return weighted(simplified(sig, SUBTRACTION, simplified(sig, GEOMETRIC_PRODUCT, a, b), simplified(sig, GEOMETRIC_PRODUCT, b, a)), 0.5)
+    return substitute!(ex, weighted(Expression(cache, SUBTRACTION, Expression(cache, GEOMETRIC_PRODUCT, a, b), Expression(cache, GEOMETRIC_PRODUCT, b, a)), 0.5))
   end
 
   if head === EXPONENTIAL
     # Find a closed form for the exponentiation, if available.
     a = args[1]::Expression
-    (isblade(a) || isweightedblade(a)) && return expand_exponential(sig::Signature, a)
+    (isblade(a) || isweightedblade(a)) && return substitute!(ex, expand_exponential(a))
     # return expand_exponential(sig::Signature, a)
-    isexpr(a, ADDITION) && return simplified(sig, GEOMETRIC_PRODUCT, simplified.(sig, EXPONENTIAL, a)...)
+    isexpr(a, ADDITION) && return substitute!(ex, GEOMETRIC_PRODUCT, Expression.(cache, EXPONENTIAL, a)...)
     throw(ArgumentError("Exponentiation is not supported for non-blade elements."))
   end
 
   if head === INVERSE
     a = args[1]::Expression
-    isexpr(a, FACTOR) && return factor(scalar_inverse(a[1]))
-    isweightedblade(a, 0) && return scalar(simplified(INVERSE, a[1]::Expression))
+    isexpr(a, FACTOR) && return substitute!(ex, factor(cache, scalar_inverse(dereference(a))))
+    isweightedblade(a, 0) && return substitute!(ex, scalar(cache, Expression(cache, INVERSE, a[1]::Expression)))
     isblade(a, 0) && return a
-    sc = simplified(sig, GEOMETRIC_PRODUCT, simplified(REVERSE, a), a)
+    sc = Expression(cache, GEOMETRIC_PRODUCT, Expression(cache, REVERSE, a), a)
     isscalar(sc) || error("`reverse(A) ⟑ A` is not a scalar, suggesting that A is not a versor. Inversion is only supported for versors at the moment.")
-    return simplified(GEOMETRIC_PRODUCT, simplified(REVERSE, a), simplified(INVERSE, sc))
+    return substitute!(ex, GEOMETRIC_PRODUCT, Expression(cache, REVERSE, a), Expression(cache, INVERSE, sc))
   end
 
-  ex.grade = infer_grade(head, args)::GradeInfo
-  ex.args = args
+  ex.grade = infer_grade(cache, head, args)::GradeInfo
 
   ex
 end
@@ -291,15 +370,15 @@ end
 function remove_unit_elements!(args, head)
   n = length(args)
   if head === GEOMETRIC_PRODUCT
-    filter!(x -> !isexpr(x, FACTOR) || x[1] !== 1, args)
+    filter!(x -> !isexpr(x, FACTOR) || dereference(x) !== 1, args)
   elseif head === ADDITION
-    filter!(x -> !isexpr(x, FACTOR) || x[1] !== 0, args)
+    filter!(x -> !isexpr(x, FACTOR) || dereference(x) !== 0, args)
   end
   did_remove = n > length(args)
   did_remove
 end
 
-function collapse_factors(f::F, args) where {F<:Function}
+function collapse_factors(cache, f::F, args) where {F<:Function}
   @assert f === (*) || f === (+)
   unit = f === (*) ? one : zero
   isunit = f === (*) ? isone : iszero
@@ -307,9 +386,9 @@ function collapse_factors(f::F, args) where {F<:Function}
   value = unit(Int64)
   for fac in args
     if isopaquefactor(fac)
-      push!(opaque_factors, fac.args[1])
+      push!(opaque_factors, dereference(fac))
     else
-      value = f(value, fac.args[1])
+      value = f(value, dereference(fac))
     end
   end
 
@@ -323,17 +402,18 @@ function collapse_factors(f::F, args) where {F<:Function}
       end
     end
     !isunit(value) && push!(flattened_factors, value)
-    length(flattened_factors) == 1 && return factor(flattened_factors[1])
+    length(flattened_factors) == 1 && return factor(cache, flattened_factors[1])
 
     ex = Expr(:call)
     ex.args = flattened_factors
     pushfirst!(ex.args, Symbol(f))
-    return factor(ex)
+    return factor(cache, ex)
   end
-  return factor(value)
+  return factor(cache, value)
 end
 
-function disassociate1(args, op::Head, sig::Optional{Signature})
+function disassociate1(args, op::Head)
+  (; cache) = args[1]::Expression
   new_args = []
   for arg in args
     if isexpr(arg, op)
@@ -342,23 +422,24 @@ function disassociate1(args, op::Head, sig::Optional{Signature})
       push!(new_args, arg)
     end
   end
-  simplified(sig, op, new_args)
+  simplified(cache, op, new_args)
 end
 
-function distribute1(args, op::Head, sig::Optional{Signature})
+function distribute1(args, op::Head)
   x, ys = args[1], @view args[2:end]
+  (; cache) = x
   base = isexpr(x, ADDITION) ? x.args : [x]
   for y in ys
     new_base = []
     yterms = isexpr(y, ADDITION) ? y.args : (y,)
     for xterm in base
       for yterm in yterms
-        push!(new_base, simplified(sig, op, xterm, yterm))
+        push!(new_base, Expression(cache, op, xterm, yterm))
       end
     end
     base = new_base
   end
-  simplified(sig, ADDITION, base)
+  Expression(cache, ADDITION, base)
 end
 
 function simplify_negations(fac)
@@ -376,7 +457,7 @@ function simplify_negations(fac)
   fac
 end
 
-function simplify_addition(args)
+function simplify_addition(cache, args)
   counter = 0
   ids = Dict{Any,Int}()
   id_counts = Dict{Int,Int}()
@@ -412,8 +493,8 @@ function simplify_addition(args)
       push!(new_args, scalar_multiply(n, x))
     end
   end
-  isempty(new_args) && return factor(0)
-  length(new_args) == 1 && return factor(new_args[1])
+  isempty(new_args) && return factor(cache, 0)
+  length(new_args) == 1 && return factor(cache, new_args[1])
   factor(Expr(:call, :+, new_args...))
 end
 
@@ -423,9 +504,9 @@ function expected_nargs(head)
   nothing
 end
 
-function infer_grade(head::Head, args)
+function infer_grade(cache, head::Head, args)
   head === FACTOR && return 0
-  head === BLADE && return count(isodd, map(x -> count(==(x), args), unique(args)))
+  head === BLADE && return count(x -> isodd(dereference(cache, x)), map(x -> count(==(x), args), unique(args)))
   if head === GEOMETRIC_PRODUCT
     @assert length(args) == 2 && isexpr(args[1], FACTOR)
     return grade(args[2]::Expression)
@@ -455,20 +536,23 @@ end
 
 # Empirical formula.
 # If anyone has a better one, please let me know.
-blade_right_complement(sig::Signature, b::Expression) = blade(sig, reverse!(setdiff(1:dimension(sig), b.args))) * factor((-1)^(
+function blade_right_complement(b::Expression)
+  (; sig) = b.cache
+  blade(b.cache, reverse!(setdiff(1:dimension(sig), b.args))) * factor(b.cache, (-1)^(
   isodd(sum(b; init = 0)) +
   (dimension(sig) ÷ 2) % 2 +
   isodd(dimension(sig)) & isodd(length(b))
 ))
+end
 
 # Exact formula derived from the right complement.
-blade_left_complement(sig::Signature, b::Expression) = factor((-1)^(grade(b) * antigrade(sig, b))) * blade_right_complement(sig, b)
+blade_left_complement(b::Expression) = factor(b.cache, (-1)^(grade(b) * antigrade(b.cache.sig, b))) * blade_right_complement(b)
 
 function project!(ex, g, level = 0)
   isa(ex, Expression) || return ex
   if all(isempty(intersect(g, g′)) for g′ in grade(ex))
     iszero(level) && @debug "Non-scalar expression annihilated in projection into grade(s) $g" ex
-    return factor(0)
+    return factor(ex.cache, 0)
   end
   if isexpr(ex, ADDITION)
     for (i, x) in enumerate(ex)
@@ -479,20 +563,21 @@ function project!(ex, g, level = 0)
   ex
 end
 
-function apply_reverse_operators(ex::Expression, sig::Optional{Signature})
+function apply_reverse_operators(ex::Expression)
+  (; cache) = ex
+  (; sig) = cache
   orgex = ex
   prewalk(ex) do ex
     isexpr(ex, (REVERSE, ANTIREVERSE)) || return ex
     reverse_op = ex.head
     anti = reverse_op === ANTIREVERSE
-    anti && sig::Signature
     ex = ex[1]
     @assert isa(ex, Expression) "`Expression` argument expected for `$reverse_op`."
     # Distribute over addition.
-    isexpr(ex, (ADDITION, KVECTOR, MULTIVECTOR)) && return simplified(sig, ex.head, anti ? antireverse.(sig, ex) : reverse.(ex))
+    isexpr(ex, (ADDITION, KVECTOR, MULTIVECTOR)) && return Expression(cache, ex.head, anti ? antireverse.(ex) : reverse.(ex))
     !anti && in(ex.grade, (0, 1)) && return ex
     anti && in(antigrade(sig, ex.grade), (0, 1)) && return ex
-    isexpr(ex, GEOMETRIC_PRODUCT) && return propagate_reverse(reverse_op, ex, sig)
+    isexpr(ex, GEOMETRIC_PRODUCT) && return propagate_reverse(reverse_op, ex)
     @assert isexpr(ex, BLADE) "Unexpected operator $(ex.head) encountered when applying $reverse_op operators."
     n = anti ? antigrade(sig, ex)::Int : grade(ex)::Int
     fac = (-1)^(n * (n - 1) ÷ 2)
@@ -503,31 +588,34 @@ end
 # grade(x) + antigrade(x) == dimension(sig)
 antigrade(sig::Signature, g::Int) = dimension(sig) - g
 antigrade(sig::Signature, g::Vector{Int}) = antigrade.(sig, g)
-antigrade(sig::Signature, ex::Expression) = antigrade(sig, ex.grade)
+antigrade(ex::Expression) = antigrade(ex.cache.sig, ex.grade)
 
-function propagate_reverse(reverse_op, ex::Expression, sig::Optional{Signature})
+function propagate_reverse(reverse_op, ex::Expression)
+  (; cache) = ex
   res = Any[]
   for arg in ex
     arg::Expression
-    skip = isexpr(arg, FACTOR) || reverse_op === REVERSE ? in(arg.grade, (0, 1)) : in(antigrade(sig, arg.grade), (0, 1))
-    skip ? push!(res, arg) : push!(res, simplified(sig, reverse_op, arg))
+    skip = isexpr(arg, FACTOR) || reverse_op === REVERSE ? in(arg.grade, (0, 1)) : in(antigrade(cache.sig, arg.grade), (0, 1))
+    skip ? push!(res, arg) : push!(res, Expression(cache, reverse_op, arg))
   end
-  simplified(sig, ex.head, res)
+  Expression(cache, ex.head, res)
 end
 
-function expand_exponential(sig::Signature, b::Expression)
+function expand_exponential(b::Expression)
+  (; cache) = b
+  (; sig) = cache
   vs = basis_vectors(b)
-  is_degenerate(sig) && any(iszero(metric(sig, v)) for v in vs) && return simplified(ADDITION, scalar(1), b)
-  b² = simplified(sig, GEOMETRIC_PRODUCT, b, b)
+  is_degenerate(sig) && any(iszero(metric(sig, v)) for v in vs) && return Expression(cache, ADDITION, scalar(cache, 1), b)
+  b² = Expression(cache, GEOMETRIC_PRODUCT, b, b)
   @assert isscalar(b²)
-  α² = isweightedblade(b²) ? b²[1][1] : 1
+  α² = isweightedblade(b²) ? dereference(b²[1]) : 1
   α = scalar_sqrt(scalar_abs(α²))
   # The sign may not be deducible from α² directly, so we compute it manually given metric simplifications and blade permutations.
   is_negative = isodd(count(metric(sig, v) == -1 for v in vs)) ⊻ iseven(length(vs))
   # Negative square: cos(α) + A * sin(α) / α
   # Positive square: cosh(α) + A * sinh(α) / α
   (s, c) = is_negative ? (scalar_sin, scalar_cos) : (scalar_sinh, scalar_cosh)
-  simplified(sig, ADDITION, scalar(c(α)), simplified(sig, GEOMETRIC_PRODUCT, scalar(scalar_nan_to_zero(scalar_divide(s(α), α))), b))
+  Expression(cache, ADDITION, scalar(cache, c(α)), Expression(cache, GEOMETRIC_PRODUCT, scalar(cache, scalar_nan_to_zero(scalar_divide(s(α), α))), b))
 end
 
 scalar_exponential(x::Number) = exp(x)
@@ -574,11 +662,11 @@ isblade(ex, n = nothing) = isexpr(ex, BLADE) && (isnothing(n) || n == length(ex)
 isscalar(ex::Expression) = isblade(ex, 0) || isweightedblade(ex, 0)
 isweighted(ex) = isexpr(ex, GEOMETRIC_PRODUCT, 2) && isexpr(ex[1]::Expression, FACTOR)
 isweightedblade(ex, n = nothing) = isweighted(ex) && isblade(ex[2]::Expression, n)
-isopaquefactor(ex) = isexpr(ex, FACTOR) && isa(ex[1], Union{Symbol, Expr, QuoteNode})
+isopaquefactor(ex) = isexpr(ex, FACTOR) && isa(dereference(ex), Union{Symbol, Expr, QuoteNode})
 
 function basis_vectors(ex::Expression)
   isweightedblade(ex) && return basis_vectors(ex[2]::Expression)
-  isexpr(ex, BLADE) && return collect(Int, ex.args)
+  isexpr(ex, BLADE) && return collect(Int, dereference(ex.cache, i) for i in ex.args)
   error("Expected blade or weighted blade expression, got $ex")
 end
 
@@ -593,32 +681,29 @@ end
 
 # Helper functions.
 
-factor(x) = Expression(FACTOR, x)
-weighted(x, fac) = Expression(GEOMETRIC_PRODUCT, factor(fac), x)
-scalar(fac) = factor(fac) * blade()
-blade(xs...) = Expression(BLADE, xs...)
-kvector(args::AbstractVector) = Expression(KVECTOR, args)
+factor(cache::ExpressionCache, x) = Expression(cache, FACTOR, x)
+weighted(x::Expression, fac) = Expression(x.cache, GEOMETRIC_PRODUCT, factor(x.cache, fac), x)
+scalar(cache::ExpressionCache, fac) = factor(cache, fac) * blade(cache)
+blade(cache::ExpressionCache, xs...) = Expression(cache, BLADE, xs...)
+kvector(args::AbstractVector) = Expression((args[1]::Expression).cache, KVECTOR, args)
 kvector(xs...) = kvector(collect(Any, xs))
-multivector(args::AbstractVector) = Expression(MULTIVECTOR, args)
+multivector(args::AbstractVector) = Expression((args[1]::Expression).cache, MULTIVECTOR, args)
 multivector(xs...) = multivector(collect(Any, xs))
 Base.reverse(ex::Expression) = Expression(REVERSE, ex)
-antireverse(sig::Signature, ex::Expression) = simplified(sig, ANTIREVERSE, ex)
-antiscalar(sig::Signature, fac) = factor(fac) * antiscalar(sig)
-antiscalar(sig::Signature) = blade(1:dimension(sig))
+antireverse(ex::Expression) = Expression(ANTIREVERSE, ex)
+antiscalar(cache::ExpressionCache, fac) = factor(cache, fac) * antiscalar(cache)
+antiscalar(cache::ExpressionCache) = blade(cache, 1:dimension(cache.sig))
 
-blade(sig::Optional{Signature}, xs...) = simplified(sig, BLADE, xs...)
-
-⟑(x::Expression, args::Expression...) = Expression(GEOMETRIC_PRODUCT, x, args...)
-Base.:(*)(x::Expression, args::Expression...) = Expression(GEOMETRIC_PRODUCT, x, args...)
-Base.:(+)(x::Expression, args::Expression...) = Expression(ADDITION, x, args...)
-Base.:(-)(x::Expression, args::Expression...) = Expression(SUBTRACTION, x, args...)
-∧(x::Expression, y::Expression) = Expression(EXTERIOR_PRODUCT, x, y)
-exterior_product(x::Expression, y::Expression) = Expression(EXTERIOR_PRODUCT, x, y)
-exterior_product(sig::Signature, x::Expression, y::Expression) = simplified(sig, EXTERIOR_PRODUCT, x, y)
+⟑(x::Expression, args::Expression...) = Expression(x.cache, GEOMETRIC_PRODUCT, x, args...)
+Base.:(*)(x::Expression, args::Expression...) = Expression(x.cache, GEOMETRIC_PRODUCT, x, args...)
+Base.:(+)(x::Expression, args::Expression...) = Expression(x.cache, ADDITION, x, args...)
+Base.:(-)(x::Expression, args::Expression...) = Expression(x.cache, SUBTRACTION, x, args...)
+∧(x::Expression, y::Expression) = Expression(x.cache, EXTERIOR_PRODUCT, x, y)
+exterior_product(x::Expression, y::Expression) = Expression(x.cache, EXTERIOR_PRODUCT, x, y)
 
 # Traversal/transformation utilities.
 
-walk(ex::Expression, inner, outer) = outer(Expression(ex.head, filter!(!isnothing, inner.(ex.args))))
+walk(ex::Expression, inner, outer) = outer(Expression(ex.cache, ex.head, filter!(!isnothing, inner.(ex.args))))
 walk(ex, inner, outer) = outer(ex)
 postwalk(f, ex) = walk(ex, x -> postwalk(f, x), f)
 prewalk(f, ex) = walk(f(ex), x -> prewalk(f, x), identity)
@@ -634,10 +719,10 @@ end
 # Display.
 
 function Base.show(io::IO, ex::Expression)
-  isexpr(ex, BLADE) && return print(io, 'e', join(subscript.(ex)))
-  isexpr(ex, FACTOR) && return print_factor(io, ex[1])
+  isexpr(ex, BLADE) && return print(io, 'e', join(subscript.(dereference.(ex.cache, ex))))
+  isexpr(ex, FACTOR) && return print_factor(io, ex)
   if isexpr(ex, GEOMETRIC_PRODUCT) && isexpr(ex[end], BLADE)
-    if length(ex) == 2 && isexpr(ex[1], FACTOR) && (!Meta.isexpr(ex[1][1], :call) || ex[1][1].args[1] == getcomponent)
+    if length(ex) == 2 && isexpr(ex[1], FACTOR) && (!Meta.isexpr(dereference(ex[1]), :call) || dereference(ex[1]) === getcomponent)
       return print(io, ex[1], " ⟑ ", ex[end])
     else
       return print(io, '(', join(ex[1:(end - 1)], " ⟑ "), ") ⟑ ", ex[end])
@@ -649,6 +734,7 @@ function Base.show(io::IO, ex::Expression)
 end
 
 function print_factor(io, ex)
+  ex = dereference(ex)
   Meta.isexpr(ex, :call) && in(ex.args[1], (:*, :+)) && return print(io, join((sprint(print_factor, arg) for arg in @view ex.args[2:end]), " $(ex.args[1]) "))
   Meta.isexpr(ex, :call, 3) && ex.args[1] === getcomponent && return print(io, Expr(:ref, ex.args[2:3]...))
   Meta.isexpr(ex, :call, 2) && ex.args[1] === getcomponent && isa(ex.args[2], Number) && return print(io, ex.args[2])

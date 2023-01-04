@@ -6,7 +6,7 @@ Otherwise, all elements of the same grade are grouped, wrapped in k-vectors
 and added to a multivector expression.
 """
 function restructure_sums(ex::Expression, sig::Signature)
-  ex == factor(0) && return kvector(scalar(Zero()))
+  ex == factor(0) && return kvector(scalar(ex.cache, Zero()))
   if isblade(ex) || isweightedblade(ex)
     isone(nelements(sig, ex.grade::Int)) && return kvector(ex)
     terms = [ex]
@@ -46,7 +46,7 @@ function fill_kvector_components(ex::Expression, s::Signature)
     for indices in combinations(1:dimension(s), g)
       next = i ≤ lastindex(ex) ? ex[i]::Expression : nothing
       if isnothing(next) || indices ≠ basis_vectors(next)
-        insert!(ex.args, i, weighted(blade(indices), Zero()))
+        insert!(ex.args, i, weighted(blade(ex.cache, indices), Zero()))
       end
       i += 1
     end

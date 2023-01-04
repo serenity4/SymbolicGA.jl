@@ -190,7 +190,7 @@ function codegen_expression(sig::Signature, ex; flattening::Symbol = DEFAULT_FLA
   in(flattening, (:flattened, :nested)) || error("Expected :flattened or :nested value for flattening keyword argument, got $flattening")
   flattening === :flattened && isnothing(T) && (T = :Tuple)
   varinfo = merge!(builtin_varinfo(sig), @something(varinfo, VariableInfo()))
-  to_final_expr(generate_expression(sig, ex, varinfo), sig, flattening == :flattened, T)
+  to_final_expr(generate_expression(sig, ex, varinfo), flattening == :flattened, T)
 end
 
 function extract_signature(ex)
@@ -205,24 +205,24 @@ const ADJOINT_SYMBOL = Symbol("'")
 
 isreserved(op::Symbol) = in(op, (:⟑, :∧, :●, :+, :×, :-, :inverse, :reverse, :antireverse, :left_complement, :right_complement, :exp))
 
-function extract_blade_from_annotation(t, sig::Signature)
+function extract_blade_from_annotation(cache, t)
   isa(t, Symbol) || return nothing
-  (t === :e || t === :e0) && return blade()
-  t === :e̅ && return antiscalar(sig)
+  (t === :e || t === :e0) && return blade(cache)
+  t === :e̅ && return antiscalar(cache)
   m = match(r"^e(\d+)$", string(t))
-  dimension(sig) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
+  dimension(cache.sig) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
   isnothing(m) && return nothing
   indices = parse.(Int, collect(m[1]))
   allunique(indices) || error("Index duplicates found in blade annotation $t.")
-  maximum(indices) ≤ dimension(sig) || error("One or more indices exceeds the dimension of the specified space for blade $t")
-  blade(indices)
+  maximum(indices) ≤ dimension(cache.sig) || error("One or more indices exceeds the dimension of the specified space for blade $t")
+  blade(cache, indices)
 end
 
 # Examples:
 # - extract grade 4 for expressions x::4, x::KVector{4}, x::Quadvector.
 # - extract grades 1 and 3 for expressions x::(1 + 3), x::(Vector + Trivector), x::(KVector{1} + KVector{3}), x::Multivector{1, 3}, etc.
 # We might want to reduce the number of syntactically valid expressions though.
-function extract_grade_from_annotation(t, sig::Signature)
+function extract_grade_from_annotation(t, sig)
   isa(t, Int) && return t
   t === :Scalar && return 0
   t === :Vector && return 1
@@ -250,25 +250,26 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
     ex
   end
 
+  cache = ExpressionCache(sig)
   ex = postwalk(ex) do ex
     if Meta.isexpr(ex, ADJOINT_SYMBOL)
-      simplified(sig, REVERSE, ex.args[1]::Expression)
+      Expression(cache, REVERSE, ex.args[1]::Expression)
     elseif Meta.isexpr(ex, :call) && isa(ex.args[1], Symbol)
       op = ex.args[1]::Symbol
       !isreserved(op) && return ex
       args = ex.args[2:end]
-      simplified(sig, Head(op), args)
+      Expression(cache, Head(op), args)
     elseif Meta.isexpr(ex, :(::))
       ex, T = ex.args
-      b = extract_blade_from_annotation(T, sig)
+      b = extract_blade_from_annotation(cache, T)
       if !isnothing(b)
         !isa(ex, Expression) || error("Blade annotations for intermediate expressions are not supported.")
         return weighted(b, ex)
       end
       g = extract_grade_from_annotation(T, sig)
       isa(ex, Expression) && return project!(ex, g)
-      isa(g, Int) && return input_expression(sig, ex, g)::Expression
-      input_expression(sig, ex, g; flattened = !Meta.isexpr(T, (:tuple, :curly)))::Expression
+      isa(g, Int) && return input_expression(cache, ex, g)::Expression
+      input_expression(cache, ex, g; flattened = !Meta.isexpr(T, (:tuple, :curly)))::Expression
     else
       ex
     end
@@ -422,24 +423,24 @@ function extract_component(ex, i::Int; j::Optional{Int} = nothing, offset::Optio
   :($getcomponent($ex, $(i + something(offset, 0))))
 end
 
-function input_expression(sig::Signature, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
-  blades = map(blade, combinations(1:dimension(sig), g))
-  weights = extract_weights(sig, ex, g; j, offset)
-  simplified(sig, ADDITION, Any[simplified(GEOMETRIC_PRODUCT, factor(w), blade) for (blade, w) in zip(blades, weights)])
+function input_expression(cache::ExpressionCache, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
+  blades = map(args -> blade(cache, args), combinations(1:dimension(sig), g))
+  weights = extract_weights(cache.sig, ex, g; j, offset)
+  Expression(cache, ADDITION, Any[weighted(blade, w) for (blade, w) in zip(blades, weights)])
 end
 
-function input_expression(sig::Signature, ex, gs::AbstractVector; flattened::Bool = false)
+function input_expression(cache::ExpressionCache, ex, gs::AbstractVector; flattened::Bool = false)
   args = Any[]
   offset = 0
   for (j, g) in enumerate(gs)
     if flattened
-      push!(args, input_expression(sig, ex, g; offset))
-      offset += nelements(sig, g)
+      push!(args, input_expression(cache, ex, g; offset))
+      offset += nelements(cache.sig, g)
     else
-      push!(args, input_expression(sig, ex, g; j))
+      push!(args, input_expression(cache, ex, g; j))
     end
   end
-  simplified(sig, ADDITION, args)
+  Expression(cache, ADDITION, args)
 end
 
 function walk(ex::Expr, inner, outer)
@@ -476,19 +477,19 @@ end
 reconstructed_type(T::Nothing, sig::Signature, ex) = :($KVector{$(ex.grade::Int), $(dimension(sig))})
 reconstructed_type(T, sig::Signature, ex) = T
 
-function to_expr(ex, sig::Optional{Signature} = nothing, flatten::Bool = false, T = nothing)
+function to_expr(ex, flatten::Bool = false, T = nothing)
   if isexpr(ex, MULTIVECTOR)
     if flatten
       @assert !isnothing(T)
-      construction_exs = to_final_expr.(ex.args, sig::Signature, flatten, T)
-      args = reduce(vcat, [subex.args[3].args for subex in construction_exs]; init = Any[])
-      return :($construct($(reconstructed_type(T, sig::Signature, ex)), $(Expr(:tuple, args...))))
+      construction_exs = to_final_expr.(ex.args, flatten, T)
+      args = reduce(vcat, Any[subex.args[3].args for subex in construction_exs]; init = Any[])
+      return :($construct($(reconstructed_type(T, cache.sig, ex)), $(Expr(:tuple, args...))))
     else
-      return Expr(:tuple, to_final_expr.(ex, sig::Signature, flatten, Ref(T))...)
+      return Expr(:tuple, to_final_expr.(ex, flatten, Ref(T))...)
     end
   end
   isexpr(ex, FACTOR) && return to_final_expr(ex[1])
-  isexpr(ex, KVECTOR) && return :($construct($(reconstructed_type(T, sig::Signature, ex)), $(Expr(:tuple, to_final_expr.(ex.args)...))))
+  isexpr(ex, KVECTOR) && return :($construct($(reconstructed_type(T, cache.sig, ex)), $(Expr(:tuple, to_final_expr.(ex.args)...))))
   isexpr(ex, BLADE) && return 1
   if isexpr(ex, GEOMETRIC_PRODUCT)
     @assert length(ex) == 2
@@ -497,6 +498,6 @@ function to_expr(ex, sig::Optional{Signature} = nothing, flatten::Bool = false, 
   end
   ex === Zero() && return 0
   # Follow through opaque function calls.
-  Meta.isexpr(ex, :call) && return Expr(:call, ex.args[1], to_expr.(ex.args[2:end], sig, flatten, T)...)
+  Meta.isexpr(ex, :call) && return Expr(:call, ex.args[1], to_expr.(ex.args[2:end], flatten, T)...)
   ex
 end

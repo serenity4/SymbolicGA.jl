@@ -1,173 +1,183 @@
-using SymbolicGA: infer_grade, project!
+using SymbolicGA: infer_grade, project!, dereference
+
+equals(x::Expression, y::Expression) = x.head == y.head && all(equals(dereference(x.cache, xx), dereference(y.cache, yy)) for (xx, yy) in zip(x, y)) && x.grade === y.grade
+equals(x, y) = x == y
+
+# Do not cache expressions in-between tests.
+new_expression(sig::Signature, head, args...) = Expression(ExpressionCache(sig), head, args...)
+
+SymbolicGA.is_expression_caching_enabled() = false
 
 sig = Signature(3, 1)
+cache = ExpressionCache(sig)
 
 @testset "Expressions" begin
   @testset "Expression basics" begin
-    @test isexpr(factor(0), FACTOR, 1)
-    @test !isexpr(blade(1, 2), BLADE, 1)
-    @test isexpr(blade(1, 2), BLADE, 2)
-    @test isexpr(blade(1, 2), (FACTOR, BLADE))
+    @test isexpr(factor(cache, 0), FACTOR, 1)
+    @test !isexpr(blade(cache, 1, 2), BLADE, 1)
+    @test isexpr(blade(cache, 1, 2), BLADE, 2)
+    @test isexpr(blade(cache, 1, 2), (FACTOR, BLADE))
 
-    ex = blade(1, 2)
-    ex2 = postwalk(x -> isa(x, Int) ? x + 1 : x, ex)
-    @test ex2 == blade(2, 3)
+    ex = blade(cache, 1, 2)
+    ex2 = postwalk(x -> isa(dereference(cache, x), Int) ? dereference(cache, x) + 1 : x, ex)
+    @test ex2 == blade(cache, 2, 3)
   end
 
   @testset "Grade inference" begin
-    @test infer_grade(FACTOR, 0) == 0
-    @test infer_grade(BLADE, [1, 2, 3]) == 3
-    @test infer_grade(BLADE, [1, 2, 3, 3]) == 2
-    @test infer_grade(BLADE, [1, 2, 3, 3, 3]) == 3
-    @test infer_grade(BLADE, [1, 1, 2, 2, 3, 3, 3]) == 1
-    @test infer_grade(BLADE, [1, 2, 3, 1, 2, 4, 1, 2]) == 4
-    @test infer_grade(KVECTOR, [blade(1, 2), blade(2, 3)]) == 2
-    @test infer_grade(MULTIVECTOR, [blade(1, 2), blade(2, 3)]) == 2
-    @test infer_grade(MULTIVECTOR, [kvector(blade(1, 2), blade(2, 3)), kvector(blade(1))]) == [1, 2]
+    @test infer_grade(cache, FACTOR, 0) == 0
+    @test infer_grade(cache, BLADE, [1, 2, 3]) == 3
+    @test infer_grade(cache, BLADE, [1, 2, 3, 3]) == 2
+    @test infer_grade(cache, BLADE, [1, 2, 3, 3, 3]) == 3
+    @test infer_grade(cache, BLADE, [1, 1, 2, 2, 3, 3, 3]) == 1
+    @test infer_grade(cache, BLADE, [1, 2, 3, 1, 2, 4, 1, 2]) == 4
+    @test infer_grade(cache, KVECTOR, [blade(cache, 1, 2), blade(cache, 2, 3)]) == 2
+    @test infer_grade(cache, MULTIVECTOR, [blade(cache, 1, 2), blade(cache, 2, 3)]) == 2
+    @test infer_grade(cache, MULTIVECTOR, [kvector(blade(cache, 1, 2), blade(cache, 2, 3)), kvector(blade(cache, 1))]) == [1, 2]
 
-    ex = blade(1, 2)
+    cache_3 = ExpressionCache(Signature(3))
+    ex = blade(cache_3, 1, 2)
     @test grade(ex) == 2
-    @test antigrade(Signature(3), ex) == 1
-    ex = blade(1, 2) + blade(1)
+    @test antigrade(ex) == 1
+    ex = blade(cache_3, 1, 2) + blade(cache_3, 1)
     @test grade(ex) == [1, 2]
-    @test antigrade(Signature(3), ex) == [2, 1]
+    @test antigrade(ex) == [2, 1]
   end
 
   @testset "Blades and metric simplifications" begin
-    ex = blade(sig, 1, 1)
+    ex = blade(cache, 1, 1)
     @test ex.grade == 0
-    @test ex == scalar(1)
+    @test ex == scalar(cache, 1)
 
-    ex = blade(sig, 1, 2, 3, 1)
+    ex = blade(cache, 1, 2, 3, 1)
     @test ex.grade == 2
-    @test ex == blade(2, 3)
+    @test ex == blade(cache, 2, 3)
 
-    ex = blade(sig, 4, 4)
+    ex = blade(cache, 4, 4)
     @test ex.grade == 0
-    @test ex == scalar(-1)
+    @test ex == scalar(cache, -1)
 
-    ex = blade(sig, 1, 2, 1)
+    ex = blade(cache, 1, 2, 1)
     @test ex.grade == 1
-    @test ex == weighted(blade(2), -1)
+    @test ex == weighted(blade(cache, 2), -1)
 
-    @test blade(1) * blade(2) == blade(1, 2)
-    @test blade(1, 2) * blade(3) == blade(1, 2, 3)
+    @test blade(cache, 1) * blade(cache, 2) == blade(cache, 1, 2)
+    @test blade(cache, 1, 2) * blade(cache, 3) == blade(cache, 1, 2, 3)
   end
 
   @testset "Simplification of null elements in addition" begin
-    @test factor(1) + factor(0) == Expression(FACTOR, 1; simplify = false)
-    @test blade(1) + factor(0) == Expression(BLADE, 1; simplify = false)
+    @test factor(cache, 1) + factor(cache, 0) == factor(cache, 1)
+    @test blade(cache, 1) + factor(cache, 0) == blade(cache, 1)
   end
 
   @testset "Disassociation of products and sums" begin
-    @test factor(1) * (factor(:x) * factor(:y)) == factor(:(x * y))
-    @test factor(:z) * (factor(:x) * factor(:y)) == factor(:(z * x * y))
-    @test factor(1) + (factor(:x) + factor(:y)) == factor(:(x + y + 1))
-    @test factor(1) + (factor(2) + factor(0)) == factor(3)
+    @test factor(cache, 1) * (factor(cache, :x) * factor(cache, :y)) == factor(cache, :(x * y))
+    @test factor(cache, :z) * (factor(cache, :x) * factor(cache, :y)) == factor(cache, :(z * x * y))
+    @test factor(cache, 1) + (factor(cache, :x) + factor(cache, :y)) == factor(cache, :(x + y + 1))
+    @test factor(cache, 1) + (factor(cache, 2) + factor(cache, 0)) == factor(cache, 3)
   end
 
   @testset "Distribution of products" begin
-    @test (factor(:x) + factor(:y)) * (factor(:w) + factor(:z)) == factor(:((x + y) * (w + z)))
-    @test (blade(1) + blade(3)) * (blade(2) + blade(4)) == Expression(ADDITION, blade(1, 2), blade(1, 4), blade(3, 2), blade(3, 4); simplify = false)
-    @test (factor(:x) + blade(1)) * (factor(:y) + blade(4)) == Expression(ADDITION, factor(:(x * y)), factor(:x) * blade(4), blade(1) * factor(:y), blade(1, 4); simplify = false)
-    @test (factor(:x) + factor(:y)) * blade(1, 2) == Expression(GEOMETRIC_PRODUCT, factor(:x) + factor(:y), blade(1, 2); simplify = false)
+    @test (factor(cache, :x) + factor(cache, :y)) * (factor(cache, :w) + factor(cache, :z)) == factor(cache, :((x + y) * (w + z)))
+    @test (blade(cache, 1) + blade(cache, 3)) * (blade(cache, 2) + blade(cache, 4)) == Expression(ADDITION, blade(cache, 1, 2), blade(cache, 1, 4), blade(cache, 3, 2), blade(cache, 3, 4), cache; simplify = false)
+    @test (factor(cache, :x) + blade(cache, 1)) * (factor(cache, :y) + blade(cache, 4)) == Expression(ADDITION, factor(cache, :(x * y)), factor(cache, :x) * blade(cache, 4), blade(cache, 1) * factor(cache, :y), blade(cache, 1, 4), cache; simplify = false)
+    @test (factor(cache, :x) + factor(cache, :y)) * blade(cache, 1, 2) == Expression(GEOMETRIC_PRODUCT, factor(cache, :x) + factor(cache, :y), blade(cache, 1, 2), cache; simplify = false)
   end
 
   @testset "Simplification and canonicalization of factors" begin
-    @test blade(1, 2) * factor(3) == Expression(GEOMETRIC_PRODUCT, factor(3), blade(1, 2); simplify = false)
-    @test blade(1, 2) * factor(3) * factor(5) == Expression(GEOMETRIC_PRODUCT, factor(15), blade(1, 2); simplify = false)
-    @test blade(1, 2) * factor(:x) * factor(:(y[1])) == Expression(GEOMETRIC_PRODUCT, factor(:(x * y[1])), blade(1, 2); simplify = false)
-    @test factor(1) * blade(1, 2) * factor(3) == Expression(GEOMETRIC_PRODUCT, factor(3), blade(1, 2); simplify = false)
-    # @test blade(1, 2) * factor(0) == Expression(GEOMETRIC_PRODUCT, factor(0), blade(1, 2); simplify = false)
-    @test blade(1, 2) * factor(0) == factor(0)
-    @test factor(:(-1 * -1)) == factor(1)
-    @test factor(:(-1 * -1)) * blade(1, 2) == blade(1, 2)
+    @test blade(cache, 1, 2) * factor(cache, 3) == Expression(GEOMETRIC_PRODUCT, [factor(cache, 3), blade(cache, 1, 2)], cache; simplify = false)
+    @test blade(cache, 1, 2) * factor(cache, 3) * factor(cache, 5) == Expression(GEOMETRIC_PRODUCT, factor(cache, 15), blade(cache, 1, 2), cache; simplify = false)
+    @test blade(cache, 1, 2) * factor(cache, :x) * factor(cache, :(y[1])) == Expression(GEOMETRIC_PRODUCT, factor(cache, :(x * y[1])), blade(cache, 1, 2), cache; simplify = false)
+    @test factor(cache, 1) * blade(cache, 1, 2) * factor(cache, 3) == Expression(GEOMETRIC_PRODUCT, factor(cache, 3), blade(cache, 1, 2); simplify = false)
+    # @test blade(cache, 1, 2) * factor(cache, 0) == Expression(GEOMETRIC_PRODUCT, factor(cache, 0), blade(cache, 1, 2); simplify = false)
+    @test blade(cache, 1, 2) * factor(cache, 0) == factor(cache, 0)
+    @test factor(cache, :(-1 * -1)) == factor(cache, 1)
+    @test factor(cache, :(-1 * -1)) * blade(cache, 1, 2) == blade(cache, 1, 2)
 
     @testset "Simplification of additive factors" begin
-      @test factor(:x) + factor(:y) == factor(:(x + y))
-      @test factor(:x) + factor(1) == factor(:(x + 1))
-      @test factor(2) + factor(3) == factor(5)
-      @test factor(:x) + factor(3) + factor(:y) + factor(2) == factor(:(x + y + 5))
+      @test factor(cache, :x) + factor(cache, :y) == factor(cache, :(x + y))
+      @test factor(cache, :x) + factor(cache, 1) == factor(cache, :(x + 1))
+      @test factor(cache, 2) + factor(cache, 3) == factor(cache, 5)
+      @test factor(cache, :x) + factor(cache, 3) + factor(cache, :y) + factor(cache, 2) == factor(cache, :(x + y + 5))
 
-      @test scalar(:x) - scalar(:x) == factor(0)
-      @test scalar(:x) + scalar(:x) == scalar(:(2x))
-      @test scalar(:x) + scalar(:y) == scalar(:(x + y))
-      @test scalar(:x) + scalar(:x) - scalar(:(2x)) == factor(0)
-      @test scalar(:(x * y)) - scalar(:(x * y)) == factor(0)
-      @test scalar(:(x * y)) + scalar(:(x * y)) ≠ factor(0)
-      @test scalar(:x) - scalar(:(2x)) == scalar(:(-1 * x))
+      @test scalar(cache, :x) - scalar(cache, :x) == factor(cache, 0)
+      @test scalar(cache, :x) + scalar(cache, :x) == scalar(cache, :(2x))
+      @test scalar(cache, :x) + scalar(cache, :y) == scalar(cache, :(x + y))
+      @test scalar(cache, :x) + scalar(cache, :x) - scalar(cache, :(2x)) == factor(cache, 0)
+      @test scalar(cache, :(x * y)) - scalar(cache, :(x * y)) == factor(cache, 0)
+      @test scalar(cache, :(x * y)) + scalar(cache, :(x * y)) ≠ factor(cache, 0)
+      @test scalar(cache, :x) - scalar(cache, :(2x)) == scalar(cache, :(-1 * x))
     end
   end
 
   @testset "Blade grouping over addition" begin
-    x = weighted(blade(1, 3), :x)
+    x = weighted(blade(cache, 1, 3), :x)
     ex = x + x
-    @test ex == weighted(blade(1, 3), :(2x))
+    @test ex == weighted(blade(cache, 1, 3), :(2x))
 
-    ex = scalar(:x) + scalar(:y)
-    @test ex == scalar(:(x + y))
+    ex = scalar(cache, :x) + scalar(cache, :y)
+    @test ex == scalar(cache, :(x + y))
 
-    ex = weighted(blade(1), :x) + weighted(blade(2, 3), :y) + weighted(blade(1), :z)
-    @test ex == weighted(blade(2, 3), :y) + weighted(blade(1), :(x + z))
+    ex = weighted(blade(cache, 1), :x) + weighted(blade(cache, 2, 3), :y) + weighted(blade(cache, 1), :z)
+    @test ex == weighted(blade(cache, 2, 3), :y) + weighted(blade(cache, 1), :(x + z))
   end
 
   @testset "Projections" begin
-    @test project!(factor(:x), 1) == factor(0)
-    @test project!(factor(:x), 0) == factor(:x)
-    @test project!(blade(1, 2), 1) == factor(0)
-    @test project!(blade(1, 2) + blade(1), 1) == blade(1)
-    @test project!(blade(1) + blade(1, 2) + blade(1, 2, 3), 2) == blade(1, 2)
+    @test project!(factor(cache, :x), 1) == factor(cache, 0)
+    @test project!(factor(cache, :x), 0) == factor(cache, :x)
+    @test project!(blade(cache, 1, 2), 1) == factor(cache, 0)
+    @test project!(blade(cache, 1, 2) + blade(cache, 1), 1) == blade(cache, 1)
+    @test project!(blade(cache, 1) + blade(cache, 1, 2) + blade(cache, 1, 2, 3), 2) == blade(cache, 1, 2)
   end
 
   @testset "Reversions" begin
-    @test reverse(blade(1, 2)) == blade(2, 1)
-    @test reverse(factor(:x) * blade(1, 2)) == factor(:x) * blade(2, 1)
-    @test reverse(blade(1, 2, 3) + blade(2) + blade(2, 3)) == blade(3, 2, 1) + blade(2) + blade(3, 2)
+    @test reverse(blade(cache, 1, 2)) == blade(cache, 2, 1)
+    @test reverse(factor(cache, :x) * blade(cache, 1, 2)) == factor(cache, :x) * blade(cache, 2, 1)
+    @test reverse(blade(cache, 1, 2, 3) + blade(cache, 2) + blade(cache, 2, 3)) == blade(cache, 3, 2, 1) + blade(cache, 2) + blade(cache, 3, 2)
 
-    @test antireverse(sig, blade(1, 2)) == blade(2, 1)
-    @test antireverse(sig, factor(:x) * blade(1, 2)) == factor(:x) * blade(2, 1)
-    @test antireverse(sig, blade(1, 2, 3) + blade(2) + blade(2, 3)) == blade(1, 2, 3) - blade(2) + blade(3, 2)
-    @test antireverse(Signature(3, 0, 1), weighted(blade(4), 1.0)) == antireverse(Signature(3, 0, 1), blade(4)) == -blade(4)
+    @test antireverse(sig, blade(cache, 1, 2)) == blade(cache, 2, 1)
+    @test antireverse(sig, factor(cache, :x) * blade(cache, 1, 2)) == factor(cache, :x) * blade(cache, 2, 1)
+    @test antireverse(sig, blade(cache, 1, 2, 3) + blade(cache, 2) + blade(cache, 2, 3)) == blade(cache, 1, 2, 3) - blade(cache, 2) + blade(cache, 3, 2)
+    @test antireverse(Signature(3, 0, 1), weighted(blade(cache, 4), 1.0)) == antireverse(Signature(3, 0, 1), blade(cache, 4)) == -blade(cache, 4)
   end
 
   @testset "Exterior products" begin
-    x = blade(1, 2)
-    y = blade(3)
+    x = blade(cache, 1, 2)
+    y = blade(cache, 3)
 
-    @test exterior_product(blade(1, 2), blade(3)) == blade(1, 2, 3)
-    @test exterior_product(sig, blade(1, 2), blade(2)) == factor(0)
+    @test exterior_product(blade(cache, 1, 2), blade(cache, 3)) == blade(cache, 1, 2, 3)
+    @test exterior_product(blade(cache, 1, 2), blade(cache, 2)) == factor(cache, 0)
   end
 
   @testset "Common operators" begin
-    @test simplified(sig, INTERIOR_PRODUCT, blade(1), blade(1, 2)) == blade(2)
-    @test simplified(sig, COMMUTATOR_PRODUCT, blade(1), blade(2)) == weighted(blade(1, 2), 0.5) + weighted(blade(1, 2), 0.5)
-    @test simplified(sig, EXTERIOR_PRODUCT, blade(1), blade(2)) == blade(1, 2)
+    @test Expression(cache, INTERIOR_PRODUCT, blade(cache, 1), blade(cache, 1, 2)) == blade(cache, 2)
+    @test Expression(cache, COMMUTATOR_PRODUCT, blade(cache, 1), blade(cache, 2)) == weighted(blade(cache, 1, 2), 0.5) + weighted(blade(cache, 1, 2), 0.5)
+    @test Expression(cache, EXTERIOR_PRODUCT, blade(cache, 1), blade(cache, 2)) == blade(cache, 1, 2)
   end
 
   @testset "Inversion" begin
-    @test simplified(INVERSE, factor(2.0)) == factor(0.5)
-    @test simplified(INVERSE, factor(:x)) == factor(:($inv(x)))
-    @test simplified(sig, INVERSE, scalar(2.0)) == scalar(0.5)
-    @test simplified(sig, INVERSE, blade(1, 2)) == weighted(blade(1, 2), -1)
-    @test simplified(sig, INVERSE, weighted(blade(1, 2), 5.0)) == weighted(blade(1, 2), -0.2)
-    versor = simplified(ADDITION, scalar(2.0), weighted(blade(1, 2), 5.0))
-    @test simplified(sig, GEOMETRIC_PRODUCT, versor, simplified(sig, INVERSE, versor)) == scalar(1.0)
-    mv = simplified(ADDITION, scalar(2.0), weighted(blade(3), 1.2), weighted(blade(1, 2), 5.0))
-    @test_throws "only supported for versors" simplified(sig, GEOMETRIC_PRODUCT, mv, simplified(sig, INVERSE, mv)) == scalar(1.0)
+    @test simplified(INVERSE, factor(cache, 2.0)) == factor(cache, 0.5)
+    @test simplified(INVERSE, factor(cache, :x)) == factor(cache, :($inv(x)))
+    @test Expression(cache, INVERSE, scalar(cache, 2.0)) == scalar(cache, 0.5)
+    @test Expression(cache, INVERSE, blade(cache, 1, 2)) == weighted(blade(cache, 1, 2), -1)
+    @test Expression(cache, INVERSE, weighted(blade(cache, 1, 2), 5.0)) == weighted(blade(cache, 1, 2), -0.2)
+    versor = simplified(ADDITION, scalar(cache, 2.0), weighted(blade(cache, 1, 2), 5.0))
+    @test Expression(cache, GEOMETRIC_PRODUCT, versor, Expression(cache, INVERSE, versor)) == scalar(cache, 1.0)
+    mv = simplified(ADDITION, scalar(cache, 2.0), weighted(blade(cache, 3), 1.2), weighted(blade(cache, 1, 2), 5.0))
+    @test_throws "only supported for versors" Expression(cache, GEOMETRIC_PRODUCT, mv, Expression(cache, INVERSE, mv)) == scalar(cache, 1.0)
   end
 
   @testset "Exponentiation" begin
     sig = Signature(3, 0, 1)
-    b = blade(1, 2, 4)
-    ex = simplified(sig, EXPONENTIAL, b)
-    @test ex == simplified(ADDITION, scalar(1), b)
+    b = blade(cache, 1, 2, 4)
+    ex = Expression(cache, EXPONENTIAL, b)
+    @test ex == simplified(ADDITION, scalar(cache, 1), b)
 
     sig = Signature(3)
     for α in (1, 3.2)
-      b = weighted(blade(1, 2), α)
-      ex = simplified(sig, EXPONENTIAL, b)
+      b = weighted(blade(cache, 1, 2), α)
+      ex = Expression(cache, EXPONENTIAL, b)
       @test grade(ex) == [0, 2]
-      @test ex == simplified(ADDITION, scalar(cos(α)), simplified(GEOMETRIC_PRODUCT, scalar(sin(α) / α), b))
+      @test ex == simplified(ADDITION, scalar(cache, cos(α)), simplified(GEOMETRIC_PRODUCT, scalar(cache, sin(α) / α), b))
     end
   end
 end;
