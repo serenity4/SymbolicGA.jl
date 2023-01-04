@@ -167,7 +167,7 @@ end
 
 function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo} = nothing)
   ex = extract_expression(ex, sig, varinfo)
-  ex = restructure(ex, sig)
+  ex = restructure(ex)
 end
 
 """
@@ -424,7 +424,7 @@ function extract_component(ex, i::Int; j::Optional{Int} = nothing, offset::Optio
 end
 
 function input_expression(cache::ExpressionCache, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
-  blades = map(args -> blade(cache, args), combinations(1:dimension(sig), g))
+  blades = map(args -> blade(cache, args), combinations(1:dimension(cache.sig), g))
   weights = extract_weights(cache.sig, ex, g; j, offset)
   Expression(cache, ADDITION, Any[weighted(blade, w) for (blade, w) in zip(blades, weights)])
 end
@@ -452,16 +452,16 @@ function walk(ex::Expr, inner, outer)
   outer(new_ex)
 end
 
-function restructure(ex::Expression, sig::Signature)
+function restructure(ex::Expression)
   @debug "Before restructuring: $(stringc(ex))"
 
   # Structure the different parts into multivectors and k-vectors.
   # All `+` operations are replaced with k-vector or multivector expressions.
-  ex = restructure_sums(ex, sig)
+  ex = restructure_sums(ex)
   @debug "After sum restructuring: $(stringc(ex))"
 
   # Add zero-factored components for blades not represented in k-vectors.
-  ex = fill_kvector_components(ex, sig)
+  ex = fill_kvector_components(ex)
   @debug "After k-vector component filling: $(stringc(ex))"
   @debug "After restructuring: $(stringc(ex))"
   ex
@@ -483,13 +483,13 @@ function to_expr(ex, flatten::Bool = false, T = nothing)
       @assert !isnothing(T)
       construction_exs = to_final_expr.(ex.args, flatten, T)
       args = reduce(vcat, Any[subex.args[3].args for subex in construction_exs]; init = Any[])
-      return :($construct($(reconstructed_type(T, cache.sig, ex)), $(Expr(:tuple, args...))))
+      return :($construct($(reconstructed_type(T, ex.cache.sig, ex)), $(Expr(:tuple, args...))))
     else
       return Expr(:tuple, to_final_expr.(ex, flatten, Ref(T))...)
     end
   end
-  isexpr(ex, FACTOR) && return to_final_expr(ex[1])
-  isexpr(ex, KVECTOR) && return :($construct($(reconstructed_type(T, cache.sig, ex)), $(Expr(:tuple, to_final_expr.(ex.args)...))))
+  isexpr(ex, FACTOR) && return to_final_expr(dereference(ex))
+  isexpr(ex, KVECTOR) && return :($construct($(reconstructed_type(T, ex.cache.sig, ex)), $(Expr(:tuple, to_final_expr.(ex.args)...))))
   isexpr(ex, BLADE) && return 1
   if isexpr(ex, GEOMETRIC_PRODUCT)
     @assert length(ex) == 2

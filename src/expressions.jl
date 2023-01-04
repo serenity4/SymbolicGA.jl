@@ -86,23 +86,30 @@ mutable struct Expression
   end
 end
 
+struct Object
+  val::Any
+end
+
+Base.:(==)(x::Object, y::Object) = typeof(x.val) == typeof(y.val) && x.val == y.val
+Base.hash(x::Object, h::UInt) = hash(hash(x.val, hash(typeof(x.val))), h)
+
 struct ExpressionCache
   sig::Signature
   counter::IDCounter
-  primitive_ids::Dict{Any,ID}
-  primitives::Dict{ID,Any}
+  primitive_ids::Dict{Object,ID}
+  primitives::Dict{ID,Object}
   substitutions::Dict{ExpressionSpec,Expression}
 end
 
 Base.broadcastable(cache::ExpressionCache) = Ref(cache)
 
-ExpressionCache(sig::Signature) = ExpressionCache(sig, IDCounter(), Dict(), Dict(), Dict())
+ExpressionCache(sig::Signature) = ExpressionCache(sig, IDCounter(), IdDict(), IdDict(), Dict())
 
 is_expression_caching_enabled() = true
 
 Base.getproperty(ex::Expression, field::Symbol) = field === :cache ? getfield(ex, field)::ExpressionCache : getfield(ex, field)
 
-Expression(head::Head, ex::Expression) = Expression(ex.cache, head)
+Expression(head::Head, ex::Expression) = Expression(ex.cache, head, ex)
 Expression(cache::ExpressionCache, head::Head, args...) = Expression(cache, ExpressionSpec(head, args...))
 function Expression(cache::ExpressionCache, spec::ExpressionSpec)
   haskey(cache.substitutions, spec) && is_expression_caching_enabled() && return cache.substitutions[spec]
@@ -114,16 +121,16 @@ function build_expression!(cache::ExpressionCache, spec::ExpressionSpec)
   for (i, arg) in enumerate(args)
     isa(arg, Expression) && continue
     isa(arg, ID) && continue
-    id = get!(() -> next!(cache.counter), cache.primitive_ids, arg)
+    id = get!(() -> next!(cache.counter), cache.primitive_ids, Object(arg))
     args[i] = id
-    cache.primitives[id] = arg
+    cache.primitives[id] = Object(arg)
   end
   ex = Expression(head, args, cache)
   is_expression_caching_enabled() && (cache.substitutions[spec] = ex)
   ex
 end
 
-dereference(cache::ExpressionCache, primitive_id::ID) = cache.primitives[primitive_id]
+dereference(cache::ExpressionCache, primitive_id::ID) = cache.primitives[primitive_id].val
 dereference(cache::ExpressionCache, x) = x
 function dereference(ex::Expression)
   @assert length(ex) == 1
@@ -198,7 +205,7 @@ function simplify!(ex::Expression)
     length(args) == 1 && return substitute!(ex, weighted(args[1], -1))
     # Transform binary minus expression into an addition.
     @assert length(args) == 2
-    return subtitute!(ex, ADDITION, args[1], -args[2])
+    return substitute!(ex, ADDITION, args[1], -args[2])
   end
 
   # Simplify whole expression to zero if a product term is zero.
@@ -256,7 +263,7 @@ function simplify!(ex::Expression)
       blade_ex = blade(cache, blade_args)
       # Return the blade if all the terms were collapsed.
       nb == n && return substitute!(ex, blade_ex)
-      return subsitute!(ex, GEOMETRIC_PRODUCT, Any[args; blade_ex])
+      return substitute!(ex, GEOMETRIC_PRODUCT, Any[args; blade_ex])
     end
   end
 
@@ -303,9 +310,9 @@ function simplify!(ex::Expression)
 
   # Check that arguments make sense.
   n = expected_nargs(head)
-  !isnothing(n) && @assert length(args) == n "Expected $n arguments for expression $head, $n were provided\nArguments: $args"
+  !isnothing(n) && @assert length(args) == n "Expected $n arguments for expression $head, $(length(args)) were provided\nArguments: $args"
   @assert !isempty(args) || head === BLADE
-  head === BLADE && @assert all(isa(dereference(cache, i), Int) for i in args)
+  head === BLADE && @assert all(isa(dereference(cache, i), Int) for i in args) "Expected integer arguments in BLADE expression, got $(dereference.(cache, ex))"
   head === FACTOR && @assert !isa(args[1], Expression) "`Expression` argument detected in FACTOR expression: $(args[1])"
 
   # Propagate complements over addition.
@@ -422,7 +429,7 @@ function disassociate1(args, op::Head)
       push!(new_args, arg)
     end
   end
-  simplified(cache, op, new_args)
+  Expression(cache, op, new_args)
 end
 
 function distribute1(args, op::Head)
@@ -495,7 +502,7 @@ function simplify_addition(cache, args)
   end
   isempty(new_args) && return factor(cache, 0)
   length(new_args) == 1 && return factor(cache, new_args[1])
-  factor(Expr(:call, :+, new_args...))
+  factor(cache, Expr(:call, :+, new_args...))
 end
 
 function expected_nargs(head)
@@ -537,16 +544,17 @@ end
 # Empirical formula.
 # If anyone has a better one, please let me know.
 function blade_right_complement(b::Expression)
-  (; sig) = b.cache
-  blade(b.cache, reverse!(setdiff(1:dimension(sig), b.args))) * factor(b.cache, (-1)^(
-  isodd(sum(b; init = 0)) +
-  (dimension(sig) ÷ 2) % 2 +
-  isodd(dimension(sig)) & isodd(length(b))
-))
+  (; cache) = b
+  (; sig) = cache
+  blade(cache, reverse!(setdiff(1:dimension(sig), basis_vectors(b)))) * factor(cache, (-1)^(
+    isodd(sum(basis_vectors(b); init = 0)) +
+    (dimension(sig) ÷ 2) % 2 +
+    isodd(dimension(sig)) & isodd(length(b))
+  ))
 end
 
 # Exact formula derived from the right complement.
-blade_left_complement(b::Expression) = factor(b.cache, (-1)^(grade(b) * antigrade(b.cache.sig, b))) * blade_right_complement(b)
+blade_left_complement(b::Expression) = factor(b.cache, (-1)^(grade(b) * antigrade(b))) * blade_right_complement(b)
 
 function project!(ex, g, level = 0)
   isa(ex, Expression) || return ex
@@ -579,7 +587,7 @@ function apply_reverse_operators(ex::Expression)
     anti && in(antigrade(sig, ex.grade), (0, 1)) && return ex
     isexpr(ex, GEOMETRIC_PRODUCT) && return propagate_reverse(reverse_op, ex)
     @assert isexpr(ex, BLADE) "Unexpected operator $(ex.head) encountered when applying $reverse_op operators."
-    n = anti ? antigrade(sig, ex)::Int : grade(ex)::Int
+    n = anti ? antigrade(ex)::Int : grade(ex)::Int
     fac = (-1)^(n * (n - 1) ÷ 2)
     isone(fac) ? ex : -ex
   end
@@ -666,7 +674,7 @@ isopaquefactor(ex) = isexpr(ex, FACTOR) && isa(dereference(ex), Union{Symbol, Ex
 
 function basis_vectors(ex::Expression)
   isweightedblade(ex) && return basis_vectors(ex[2]::Expression)
-  isexpr(ex, BLADE) && return collect(Int, dereference(ex.cache, i) for i in ex.args)
+  isexpr(ex, BLADE) && return [dereference(ex.cache, i)::Int for i in ex]
   error("Expected blade or weighted blade expression, got $ex")
 end
 
@@ -728,13 +736,19 @@ function Base.show(io::IO, ex::Expression)
       return print(io, '(', join(ex[1:(end - 1)], " ⟑ "), ") ⟑ ", ex[end])
     end
   end
-  isexpr(ex, (GEOMETRIC_PRODUCT, ADDITION, MULTIVECTOR)) && return print(io, '(', Expr(:call, ex.head, ex.args...), ')')
+  isexpr(ex, (GEOMETRIC_PRODUCT, ADDITION, MULTIVECTOR)) && return print(io, '(', Expr(:call, head_symbol(ex.head), ex.args...), ')')
   isexpr(ex, KVECTOR) && return print(io, Expr(:call, Symbol("kvector", subscript(ex.grade)), ex.args...))
   print(io, Expression, "(:", ex.head, ", ", join(ex.args, ", "), ')')
 end
 
+function head_symbol(head::Head)
+  head === GEOMETRIC_PRODUCT && return :⟑
+  head === ADDITION && return :+
+  head === MULTIVECTOR && return :multivector
+end
+
+print_factor(io, ex::Expression) = print_factor(io, dereference(ex))
 function print_factor(io, ex)
-  ex = dereference(ex)
   Meta.isexpr(ex, :call) && in(ex.args[1], (:*, :+)) && return print(io, join((sprint(print_factor, arg) for arg in @view ex.args[2:end]), " $(ex.args[1]) "))
   Meta.isexpr(ex, :call, 3) && ex.args[1] === getcomponent && return print(io, Expr(:ref, ex.args[2:3]...))
   Meta.isexpr(ex, :call, 2) && ex.args[1] === getcomponent && isa(ex.args[2], Number) && return print(io, ex.args[2])

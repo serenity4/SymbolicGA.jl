@@ -107,14 +107,15 @@ end
   end
 
   sig = Signature(1, 1, 1)
-  ws = extract_weights(sig, :x, 1; offset = 0)
+  cache = ExpressionCache(sig)
+  ws = extract_weights(cache.sig, :x, 1; offset = 0)
   @test ws == [:($getcomponent(x, $i)) for i in 1:3]
-  ex = input_expression(sig, :x, 2)
+  ex = input_expression(cache, :x, 2)
   @test isexpr(ex, ADDITION, 3)
-  @test ex[1] == factor(first(ws)) * blade(1, 2)
+  @test ex[1] == factor(cache, first(ws)) * blade(cache, 1, 2)
 
   ex = extract_expression(:((x::Vector * y::Bivector)::Trivector), sig, builtin_varinfo(sig))
-  ex2 = restructure(ex, sig)
+  ex2 = restructure(ex)
   @test isexpr(ex2, KVECTOR, 1)
   @test isweighted(ex2[1]) && isexpr(ex2[1][2], BLADE)
   @test isa(string(ex2), String)

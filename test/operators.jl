@@ -1,7 +1,7 @@
 using SymbolicGA: postwalk, traverse, blade_left_complement, blade_right_complement, dimension
 using Combinatorics: combinations
 
-all_blades(sig::Signature) = [blade(indices) for indices in combinations(1:dimension(sig))]
+all_blades(cache::ExpressionCache) = [blade(cache, indices) for indices in combinations(1:dimension(cache.sig))]
 
 function ga_eval(sig_ex, ex; flattening = :nested, T = nothing, varinfo = nothing)
   eval(codegen_expression(sig_ex, ex; flattening, T, varinfo))
@@ -41,10 +41,10 @@ end
   end
 
   @testset "Complements" begin
-    for sig in [Signature.(2:3); Signature(3, 0, 1); Signature(4, 1); Signature.(6:10)]
-      @test all(all_blades(sig)) do b
-        (b ∧ blade_right_complement(sig, b) == antiscalar(sig)) &
-          (blade_left_complement(sig, b) ∧ b == antiscalar(sig))
+    for cache in ExpressionCache.([Signature.(2:3); Signature(3, 0, 1); Signature(4, 1); Signature.(6:10)])
+      @test all(all_blades(cache)) do b
+        (b ∧ blade_right_complement(b) == antiscalar(cache)) &
+          (blade_left_complement(b) ∧ b == antiscalar(cache))
       end
     end
   end

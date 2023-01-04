@@ -5,10 +5,10 @@ If all elements in the sum had the same grade, a k-vector is returned.
 Otherwise, all elements of the same grade are grouped, wrapped in k-vectors
 and added to a multivector expression.
 """
-function restructure_sums(ex::Expression, sig::Signature)
-  ex == factor(0) && return kvector(scalar(ex.cache, Zero()))
+function restructure_sums(ex::Expression)
+  ex == factor(ex.cache, 0) && return kvector(scalar(ex.cache, Zero()))
   if isblade(ex) || isweightedblade(ex)
-    isone(nelements(sig, ex.grade::Int)) && return kvector(ex)
+    isone(nelements(ex.cache.sig, ex.grade::Int)) && return kvector(ex)
     terms = [ex]
   else
     @assert isexpr(ex, ADDITION) "Expected addition expression, got expression type $(ex.head)"
@@ -37,13 +37,13 @@ end
 struct Zero end
 Base.show(io::IO, ::Zero) = print(io, '𝟎')
 
-function fill_kvector_components(ex::Expression, s::Signature)
+function fill_kvector_components(ex::Expression)
   postwalk(ex) do ex
     isexpr(ex, KVECTOR) || return ex
     g = grade(ex)
     i = 1
     ex = kvector(sort(ex.args, by = basis_vectors, lt = lt_basis_order))
-    for indices in combinations(1:dimension(s), g)
+    for indices in combinations(1:dimension(ex.cache.sig), g)
       next = i ≤ lastindex(ex) ? ex[i]::Expression : nothing
       if isnothing(next) || indices ≠ basis_vectors(next)
         insert!(ex.args, i, weighted(blade(ex.cache, indices), Zero()))

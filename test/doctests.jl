@@ -1,7 +1,9 @@
 using Documenter
 
-DocMeta.setdocmeta!(SymbolicGA, :DocTestSetup, quote
-    using SymbolicGA
-end)
+@testset "Doctests" begin
+    DocMeta.setdocmeta!(SymbolicGA, :DocTestSetup, quote
+        using SymbolicGA
+    end)
 
-doctest(SymbolicGA)
+    doctest(SymbolicGA)
+end;
