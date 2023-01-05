@@ -47,13 +47,26 @@ Type annotations may either:
 """
 macro ga end
 
+propagate_source(__source__, ex) = Expr(:block, LineNumberNode(__source__.line, __source__.file), ex)
+
 macro ga(sig_ex, flattening, T, ex)
   isa(flattening, QuoteNode) || error("Expected QuoteNode symbol for `flattening` argument, got ", repr(flattening))
   flattening = flattening.value
-  esc(codegen_expression(sig_ex, ex; flattening, T))
+  ex = codegen_expression(sig_ex, ex; flattening, T)
+  propagate_source(__source__, esc(ex))
 end
-macro ga(sig_ex, T_or_flattening, ex) isa(T_or_flattening, QuoteNode) ? esc(:(@ga $sig_ex $T_or_flattening $DEFAULT_TYPE $ex)) : esc(:(@ga $sig_ex $(QuoteNode(DEFAULT_FLATTENING)) $T_or_flattening $ex)) end
-macro ga(sig_ex, ex) esc(:(@ga $sig_ex $nothing $ex)) end
+macro ga(sig_ex, T_or_flattening, ex)
+  ex = if isa(T_or_flattening, QuoteNode)
+    :(@ga $sig_ex $T_or_flattening $DEFAULT_TYPE $ex)
+  else
+    :(@ga $sig_ex $(QuoteNode(DEFAULT_FLATTENING)) $T_or_flattening $ex)
+  end
+  propagate_source(__source__, esc(ex))
+end
+macro ga(sig_ex, ex)
+  ex = :(@ga $sig_ex $nothing $ex)
+  propagate_source(__source__, esc(ex))
+end
 
 """
     VariableInfo(; refs = Dict{Symbol,Any}(), funcs = Dict{Symbol,Any}(), warn_override = true)
@@ -190,7 +203,7 @@ function codegen_expression(sig::Signature, ex; flattening::Symbol = DEFAULT_FLA
   in(flattening, (:flattened, :nested)) || error("Expected :flattened or :nested value for flattening keyword argument, got $flattening")
   flattening === :flattened && isnothing(T) && (T = :Tuple)
   varinfo = merge!(builtin_varinfo(sig), @something(varinfo, VariableInfo()))
-  to_final_expr(generate_expression(sig, ex, varinfo), flattening == :flattened, T)
+  define_variables(generate_expression(sig, ex, varinfo), flattening == :flattened, T)
 end
 
 function extract_signature(ex)
@@ -230,10 +243,10 @@ function extract_grade_from_annotation(t, sig)
   t === :Trivector && return 3
   t === :Quadvector && return 4
   t === :Antiscalar && return dimension(sig)
-  t === :Multivector && return 0:dimension(sig)
+  t === :Multivector && return collect(0:dimension(sig))
   Meta.isexpr(t, :curly, 2) && t.args[1] === :KVector && return t.args[2]::Int
   Meta.isexpr(t, :annotate_projection) && t.args[1] === :+ && return Int[extract_grade_from_annotation(t, sig) for t in @view t.args[2:end]]
-  Meta.isexpr(t, :curly) && t.args[1] === :Multivector && return @view t.args[2:end]
+  Meta.isexpr(t, :curly) && t.args[1] === :Multivector && return [extract_grade_from_annotation(arg::Int, sig) for arg in t.args[2:end]]
   Meta.isexpr(t, :tuple) && return extract_grade_from_annotation.(t.args, sig)
   error("Unknown grade projection for algebraic element $t")
 end
@@ -269,7 +282,9 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
       g = extract_grade_from_annotation(T, sig)
       isa(ex, Expression) && return project!(ex, g)
       isa(g, Int) && return input_expression(cache, ex, g)::Expression
-      input_expression(cache, ex, g; flattened = !Meta.isexpr(T, (:tuple, :curly)))::Expression
+      isa(g, Vector{Int}) && return input_expression(cache, ex, g; flattened = !Meta.isexpr(T, (:tuple, :curly)))::Expression
+      # Consider the type annotation a regular Julia expression.
+      :($ex::$T)
     else
       ex
     end
@@ -477,27 +492,95 @@ end
 reconstructed_type(T::Nothing, sig::Signature, ex) = :($KVector{$(ex.grade::Int), $(dimension(sig))})
 reconstructed_type(T, sig::Signature, ex) = T
 
-function to_expr(ex, flatten::Bool = false, T = nothing)
+function to_expr(cache, ex, flatten::Bool, T, variables, stop_early = false)
+  if isa(ex, ID) || isa(ex, Expression)
+    rhs = get(variables, ex, nothing)
+    !isnothing(rhs) && return rhs
+  end
+  isa(ex, ID) && (ex = dereference(cache, ex))
   if isexpr(ex, MULTIVECTOR)
     if flatten
       @assert !isnothing(T)
-      construction_exs = to_final_expr.(ex.args, flatten, T)
-      args = reduce(vcat, Any[subex.args[3].args for subex in construction_exs]; init = Any[])
+      args = Expr.(:..., to_final_expr.(cache, ex.args, flatten, Ref(T), Ref(variables), true))
       return :($construct($(reconstructed_type(T, ex.cache.sig, ex)), $(Expr(:tuple, args...))))
     else
-      return Expr(:tuple, to_final_expr.(ex, flatten, Ref(T))...)
+      return Expr(:tuple, to_final_expr.(cache, ex, flatten, Ref(T), Ref(variables))...)
     end
   end
-  isexpr(ex, FACTOR) && return to_final_expr(dereference(ex))
-  isexpr(ex, KVECTOR) && return :($construct($(reconstructed_type(T, ex.cache.sig, ex)), $(Expr(:tuple, to_final_expr.(ex.args)...))))
+  isexpr(ex, FACTOR) && return to_final_expr(cache, ex[1], flatten, T, variables)
+  isexpr(ex, KVECTOR) && return :($construct($(reconstructed_type(T, ex.cache.sig, ex)), $(Expr(:tuple, to_final_expr.(cache, ex, flatten, Ref(T), Ref(variables))...))))
   isexpr(ex, BLADE) && return 1
   if isexpr(ex, GEOMETRIC_PRODUCT)
-    @assert length(ex) == 2
-    @assert isexpr(ex[2], BLADE)
-    return to_final_expr(ex[1]::Expression)
+    @assert isweightedblade(ex)
+    return to_final_expr(cache, ex[1]::Expression, flatten, T, variables)
   end
   ex === Zero() && return 0
-  # Follow through opaque function calls.
-  Meta.isexpr(ex, :call) && return Expr(:call, ex.args[1], to_expr.(ex.args[2:end], flatten, T)...)
+  isa(ex, Expr) && !stop_early && return Expr(ex.head, to_expr.(cache, ex.args, flatten, Ref(T), Ref(variables))...)
   ex
+end
+
+struct ExecutionGraph
+  g::SimpleDiGraph{Int}
+  exs::Dict{Union{ID,Expression},Int}
+  exs_inv::Dict{Int,Union{ID,Expression}}
+end
+
+ExecutionGraph() = ExecutionGraph(SimpleDiGraph{Int}(), Dict(), Dict())
+
+function get_vertex!(g::ExecutionGraph, ex::Union{ID,Expression})
+  v = get(g.exs, ex, nothing)
+  !isnothing(v) && return v
+  add_vertex!(g.g)
+  v = nv(g.g)
+  g.exs[ex] = v
+  g.exs_inv[v] = ex
+  v
+end
+
+function add_node_uses!(uses, g::ExecutionGraph, i, ex, T)
+  j = 0
+  if (isa(ex, ID) || isa(ex, Expression))
+    uses[ex] = 1 + get!(uses, ex, 0)
+    j = get_vertex!(g, ex)
+    add_edge!(g.g, i, j)
+  end
+  if isa(ex, ID) && T === Expression
+    ex = dereference(ex, ex)
+    if isa(ex, Expr)
+      for arg in ex.args
+        add_node_uses!(uses, g, j, arg, Expr)
+      end
+    end
+  elseif isa(ex, Expression) && T === Expr
+    for arg in ex
+      add_node_uses!(uses, g, j, arg, Expression)
+    end
+  end
+  nothing
+end
+
+function define_variables(ex::Expression, flatten::Bool, T)
+  variables = Dict{Union{ID,Expression},Symbol}()
+  uses = Dict{Union{ID,Expression},Int}()
+  g = ExecutionGraph()
+  add_node_uses!(uses, g, get_vertex!(g, ex), ex, Expr)
+  rem_edge!(g.g, 1, 1)
+  definitions = Expr(:block)
+
+  # Define variables in a first pass.
+  for (x, count) in pairs(uses)
+    variables[x] = gensym("SymbolicGA")
+  end
+
+  current_variables = Dict{Union{ID,Expression},Symbol}()
+
+  # Recursively generate code using the previously defined variables.
+  for v in reverse(topological_sort_by_dfs(g.g))
+    x = g.exs_inv[v]
+    code = to_final_expr(ex.cache, x, flatten, T, current_variables)
+    var = variables[x]
+    push!(definitions.args, Expr(:(=), var, code))
+    current_variables[x] = var
+  end
+  definitions
 end

@@ -162,9 +162,7 @@ end
   @test res === res2
 
   # The `1::e12` gets simplified to `e12`.
-  res = @ga 3 :flattened begin
-    (1::e1 * 1::e1 + 1::e12)::Multivector
-  end
+  res = @ga 3 :flattened (1::e1 * 1::e1 + 1::e12)::Multivector
   @test res == (1, 1, 0, 0)
 
   # Preserve element types.

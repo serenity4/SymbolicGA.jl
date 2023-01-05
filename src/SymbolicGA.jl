@@ -1,6 +1,7 @@
 module SymbolicGA
 
 using Combinatorics
+using Graphs
 
 const Optional{T} = Union{T,Nothing}
 
