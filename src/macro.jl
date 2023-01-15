@@ -537,23 +537,21 @@ function get_vertex!(g::ExecutionGraph, ex::Union{ID,Expression})
   v
 end
 
-function add_node_uses!(uses, g::ExecutionGraph, i, ex, T)
+function add_node_uses!(uses, g::ExecutionGraph, cache, i, ex, T)
   j = 0
-  if (isa(ex, ID) || isa(ex, Expression))
+  deref = dereference(cache, ex)
+  if (isa(ex, Expression) || isa(ex, ID) && isa(deref, Expr))
     uses[ex] = 1 + get!(uses, ex, 0)
     j = get_vertex!(g, ex)
     add_edge!(g.g, i, j)
   end
-  if isa(ex, ID) && T === Expression
-    ex = dereference(ex, ex)
-    if isa(ex, Expr)
-      for arg in ex.args
-        add_node_uses!(uses, g, j, arg, Expr)
-      end
+  if isa(ex, ID) && isa(deref, Expr)
+    for arg in deref.args
+      add_node_uses!(uses, g, cache, j, arg, T === Expression ? Expr : T)
     end
-  elseif isa(ex, Expression) && T === Expr
+  elseif isa(ex, Expression)
     for arg in ex
-      add_node_uses!(uses, g, j, arg, Expression)
+      add_node_uses!(uses, g, cache, j, arg, T === Expr ? Expression : T)
     end
   end
   nothing
@@ -563,24 +561,20 @@ function define_variables(ex::Expression, flatten::Bool, T)
   variables = Dict{Union{ID,Expression},Symbol}()
   uses = Dict{Union{ID,Expression},Int}()
   g = ExecutionGraph()
-  add_node_uses!(uses, g, get_vertex!(g, ex), ex, Expr)
+  add_node_uses!(uses, g, ex.cache, get_vertex!(g, ex), ex, Expr)
   rem_edge!(g.g, 1, 1)
   definitions = Expr(:block)
-
-  # Define variables in a first pass.
-  for (x, count) in pairs(uses)
-    variables[x] = gensym("SymbolicGA")
-  end
-
   current_variables = Dict{Union{ID,Expression},Symbol}()
 
   # Recursively generate code using the previously defined variables.
   for v in reverse(topological_sort_by_dfs(g.g))
     x = g.exs_inv[v]
     code = to_final_expr(ex.cache, x, flatten, T, current_variables)
-    var = variables[x]
-    push!(definitions.args, Expr(:(=), var, code))
-    current_variables[x] = var
+    if isa(code, Expr)
+      var = gensym("SymbolicGA")
+      push!(definitions.args, Expr(:(=), var, code))
+      current_variables[x] = var
+    end
   end
   definitions
 end
