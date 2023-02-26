@@ -521,8 +521,8 @@ end
 
 function simplify_addition(args)
   counter = 0
-  ids = Dictionary{Any,Int}()
-  id_counts = Dictionary{Int,Int}()
+  ids = Dict{Any,Int}()
+  id_counts = Dict{Int,Int}()
   new_args = []
   for arg in args
     n = 1
@@ -540,9 +540,9 @@ function simplify_addition(args)
       obj = isempty(xs) ? 1 : length(xs) == 1 ? xs[1] : sort!(xs; by = objectid)
     end
     id = get!(() -> (counter += 1), ids, obj)
-    set!(id_counts, id, something(get(id_counts, id, nothing), 0) + n)
+    id_counts[id] = something(get(id_counts, id, nothing), 0) + n
   end
-  for (x, id) in pairs(ids)
+  for (x, id) in sort!(collect(ids), by = last)
     n = id_counts[id]
     n == 0 && continue
     isa(x, Vector{Any}) && (x = Expr(:call, :*, x...))
