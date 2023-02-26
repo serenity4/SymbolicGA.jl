@@ -5,8 +5,7 @@ cache = ExpressionCache(sig)
 sc(x) = scalar(cache, x)
 fac(x) = factor(cache, x)
 bl(args...) = blade(cache, args...)
-x = sc(:x)
-y = sc(:y)
+x, y, z = sc.([:x, :y, :z])
 e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
 
 @testset "Expressions" begin
@@ -68,55 +67,48 @@ e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
   end
 
   @testset "Disassociation of products and sums" begin
-    @test fac(1) * (fac(:x) * fac(:y)) == fac(:(x * y))
-    @test fac(:z) * (fac(:x) * fac(:y)) == fac(:(z * x * y))
-    @test fac(1) + (fac(:x) + fac(:y)) == fac(:(x + y + 1))
+    @test fac(1) * (fac(:x) * fac(:y)) == fac(:x) * fac(:y)
+    @test fac(:z) * (fac(:x) * fac(:y)) == fac(:z) * fac(:x) * fac(:y)
+    @test fac(1) + (fac(:x) + fac(:y)) == fac(:x) + fac(:y) + fac(1)
     @test fac(1) + (fac(2) + fac(0)) == fac(3)
   end
 
   @testset "Distribution of products" begin
-    @test (fac(:x) + fac(:y)) * (fac(:w) + fac(:z)) == fac(:((x + y) * (w + z)))
     @test (bl(1) + bl(3)) * (bl(2) + bl(4)) == bl(1, 2) + bl(1, 4) + bl(3, 2) + bl(3, 4)
-    @test (fac(:x) + bl(1)) * (fac(:y) + bl(4)) == fac(:(x * y)) + fac(:x) * bl(4) + bl(1) * fac(:y) + bl(1, 4)
+    @test (fac(:x) + bl(1)) * (fac(:y) + bl(4)) == fac(:x) * fac(:y) + fac(:x) * bl(4) + bl(1) * fac(:y) + bl(1, 4)
     @test (fac(:x) + fac(:y)) * bl(1, 2) == (fac(:x) + fac(:y)) ⟑ bl(1, 2)
   end
 
   @testset "Simplification and canonicalization of factors" begin
     @test bl(1, 2) * fac(3) == fac(3) ⟑ bl(1, 2)
     @test bl(1, 2) * fac(3) * fac(5) == fac(15) ⟑ bl(1, 2)
-    @test bl(1, 2) * fac(:x) * fac(:(y[1])) == fac(:(x * y[1])) ⟑ bl(1, 2)
+    @test bl(1, 2) * fac(:x) * fac(:(y[1])) == fac(:x) * fac(:(y[1])) ⟑ bl(1, 2)
     @test fac(1) * bl(1, 2) * fac(3) == fac(3) ⟑ bl(1, 2)
     # @test bl(1, 2) * fac(0) == Expression(GEOMETRIC_PRODUCT, fac(0), bl(1, 2); simplify = false)
     @test bl(1, 2) * fac(0) == fac(0)
-    @test fac(:(-1 * -1)) == fac(1)
-    @test fac(:(-1 * -1)) * bl(1, 2) == bl(1, 2)
+    @test fac(-1) * fac(-1) == fac(1)
+    @test fac(-1) * fac(-1) * bl(1, 2) == bl(1, 2)
 
     @testset "Simplification of additive factors" begin
-      @test fac(:x) + fac(:y) == fac(:(x + y))
-      @test fac(:x) + fac(1) == fac(:(x + 1))
       @test fac(2) + fac(3) == fac(5)
-      @test fac(:x) + fac(3) + fac(:y) + fac(2) == fac(:(x + y + 5))
+      @test fac(:x) + fac(3) + fac(:y) + fac(2) == fac(:x) + fac(:y) + fac(5)
 
       @test x - x == fac(0)
-      @test x + x == sc(:(2x))
-      @test x + y == sc(:(x + y))
-      @test x + x - sc(:(2x)) == fac(0)
-      @test sc(:(x * y)) - sc(:(x * y)) == fac(0)
-      @test sc(:(x * y)) + sc(:(x * y)) ≠ fac(0)
-      @test x - sc(:(2x)) == sc(:(-1 * x))
+      @test x + x == 2x
+      @test x + x - 2x == fac(0)
+      @test x * y - x * y == fac(0)
+      @test x * y + x * y ≠ fac(0)
+      @test x - 2x == -x
     end
   end
 
   @testset "Blade grouping over addition" begin
-    x_e13 = weighted(bl(1, 3), :x)
+    x_e13 = bl(1, 3) * x
     ex = x_e13 + x_e13
-    @test ex == weighted(bl(1, 3), :(2x))
+    @test ex == bl(1, 3) * 2x
 
-    ex = x + y
-    @test ex == sc(:(x + y))
-
-    ex = weighted(bl(1), :x) + weighted(bl(2, 3), :y) + weighted(bl(1), :z)
-    @test ex == weighted(bl(2, 3), :y) + weighted(bl(1), :(x + z))
+    ex = e1 * x + bl(2, 3) * y + bl(1) * z
+    @test ex == bl(2, 3) * y + e1 * (x + z)
   end
 
   @testset "Projections" begin

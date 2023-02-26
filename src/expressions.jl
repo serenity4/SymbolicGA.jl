@@ -408,7 +408,7 @@ function collapse_factors(cache, f::F, args) where {F<:Function}
         push!(flattened_factors, fac)
       end
     end
-    !isunit(value) && push!(flattened_factors, value)
+    !isunit(value) && pushfirst!(flattened_factors, value)
     length(flattened_factors) == 1 && return factor(cache, flattened_factors[1])
 
     ex = Expr(:call)
@@ -704,6 +704,7 @@ antiscalar(cache::ExpressionCache) = blade(cache, 1:dimension(cache.sig))
 
 ⟑(x::Expression, args::Expression...) = Expression(x.cache, GEOMETRIC_PRODUCT, x, args...)
 Base.:(*)(x::Expression, args::Expression...) = Expression(x.cache, GEOMETRIC_PRODUCT, x, args...)
+Base.:(*)(x::Number, y::Expression, args::Expression...) = *(factor(y.cache, x), y, args...)
 Base.:(+)(x::Expression, args::Expression...) = Expression(x.cache, ADDITION, x, args...)
 Base.:(-)(x::Expression, args::Expression...) = Expression(x.cache, SUBTRACTION, x, args...)
 ∧(x::Expression, y::Expression) = Expression(x.cache, EXTERIOR_PRODUCT, x, y)
