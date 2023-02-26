@@ -18,6 +18,17 @@ e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
     ex = bl(1, 2)
     ex2 = postwalk(x -> isa(dereference(cache, x), Int) ? dereference(cache, x) + 1 : x, ex)
     @test ex2 == bl(2, 3)
+
+    x1 = factor(cache, Expression(cache, COMPONENT, :x, 1))
+    @test isexpr(x1 ⟑ e1, GEOMETRIC_PRODUCT, 2)
+  end
+
+  @testset "Expression caching" begin
+    _cache = ExpressionCache(sig)
+    @test scalar(_cache, :x) === scalar(_cache, :x)
+    x1, x2, x3 = factor.(_cache, Expression.(_cache, COMPONENT, :x, 1:3))
+    e1, e2, e3 = blade.(_cache, [1, 2, 3])
+    @test x1 ⟑ e1 + x2 ⟑ e2 + x3 ⟑ e3 === x1 ⟑ e1 + x2 ⟑ e2 + x3 ⟑ e3
   end
 
   @testset "Grade inference" begin
@@ -99,6 +110,14 @@ e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
       @test x * y - x * y == fac(0)
       @test x * y + x * y ≠ fac(0)
       @test x - 2x == -x
+
+      x1 = sc(Expression(cache, COMPONENT, :x, 1))
+      @test x1 + x1 == 2x1
+      x2 = sc(Expression(cache, COMPONENT, :x, 2))
+      @test x1 * x2 - x2 * x1 == sc(0)
+      ex = x1 * x2 + x2 * x1
+      @test isexpr(ex[1], FACTOR) && dereference(ex[1]) == Expr(:call, :*, 2, x1[1][1], x2[1][1])
+      @test x1 * x2 + x2 * x1 - 2 * x1 * x2 == sc(0)
     end
   end
 

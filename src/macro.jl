@@ -423,25 +423,25 @@ function expand_reference(refs, ex)
   ex => ref
 end
 
-function extract_weights(sig::Signature, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
-  n = nelements(sig, g)
+function extract_weights(cache::ExpressionCache, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
+  n = nelements(cache.sig, g)
   weights = Any[]
   for i in 1:n
-    push!(weights, extract_component(ex, i; j, offset, isscalar = in(g, (0, dimension(sig)))))
+    push!(weights, extract_component(cache, ex, i; j, offset, isscalar = in(g, (0, dimension(cache.sig)))))
   end
   weights
 end
 
-function extract_component(ex, i::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing, isscalar::Bool = false)
-  isscalar && isnothing(offset) && isnothing(j) && return :($getcomponent($ex))
-  !isnothing(j) && return :($getcomponent($ex, $j, $i))
-  :($getcomponent($ex, $(i + something(offset, 0))))
+function extract_component(cache::ExpressionCache, ex, i::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing, isscalar::Bool = false)
+  isscalar && isnothing(offset) && isnothing(j) && return Expression(cache, COMPONENT, ex)
+  !isnothing(j) && return Expression(cache, COMPONENT, ex, j, i)
+  Expression(cache, COMPONENT, ex, i + something(offset, 0))
 end
 
 function input_expression(cache::ExpressionCache, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
   blades = map(args -> blade(cache, args), combinations(1:dimension(cache.sig), g))
-  weights = extract_weights(cache.sig, ex, g; j, offset)
-  Expression(cache, ADDITION, Any[weighted(blade, w) for (blade, w) in zip(blades, weights)])
+  weights = extract_weights(cache, ex, g; j, offset)
+  Expression(cache, ADDITION, Term[weighted(blade, w) for (blade, w) in zip(blades, weights)])
 end
 
 function input_expression(cache::ExpressionCache, ex, gs::AbstractVector; flattened::Bool = false)
@@ -498,6 +498,7 @@ function to_expr(cache, ex, flatten::Bool, T, variables, stop_early = false)
     !isnothing(rhs) && return rhs
   end
   isa(ex, ID) && (ex = dereference(cache, ex))
+  isexpr(ex, COMPONENT) && return Expr(:call, getcomponent, to_final_expr.(cache, ex.args, flatten, Ref(T), Ref(variables), true)...)
   if isexpr(ex, MULTIVECTOR)
     if flatten
       @assert !isnothing(T)

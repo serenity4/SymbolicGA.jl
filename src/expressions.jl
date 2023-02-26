@@ -2,6 +2,7 @@ const GradeInfo = Union{Int,Vector{Int}}
 
 @enum Head::UInt8 begin
   # Decorations.
+  COMPONENT
   FACTOR
   BLADE
   KVECTOR
@@ -26,6 +27,10 @@ const GradeInfo = Union{Int,Vector{Int}}
   INVERSE
   EXPONENTIAL
 end
+
+const SCALAR_HEADS = [COMPONENT]
+
+isscalar(head::Head) = head in SCALAR_HEADS
 
 function Head(head::Symbol)
   head === :factor && return FACTOR
@@ -120,14 +125,16 @@ end
 
 function build_expression!(cache::ExpressionCache, spec::ExpressionSpec)
   (; head, args) = spec
-  for (i, arg) in enumerate(args)
-    isa(arg, Expression) && continue
-    isa(arg, ID) && continue
-    id = get!(() -> next!(cache.counter), cache.primitive_ids, Object(arg))
-    args[i] = id
-    cache.primitives[id] = Object(arg)
+  terms = Term[]
+  for arg in args
+    term = isa(arg, Expression) || isa(arg, ID) ? arg : begin
+      id = get!(() -> next!(cache.counter), cache.primitive_ids, Object(arg))
+      cache.primitives[id] = Object(arg)
+      id
+    end
+    push!(terms, term)
   end
-  ex = Expression(head, collect(Term, args), cache)
+  ex = Expression(head, terms, cache)
   is_expression_caching_enabled() && (cache.substitutions[spec] = ex)
   ex
 end
@@ -136,7 +143,8 @@ dereference(cache::ExpressionCache, primitive_id::ID) = cache.primitives[primiti
 dereference(cache::ExpressionCache, x) = x
 function dereference(ex::Expression)
   @assert length(ex) == 1
-  dereference(ex.cache, ex[1]::ID)
+  inner = ex[1]
+  isexpr(inner, COMPONENT) ? inner : dereference(ex.cache, inner::ID)
 end
 
 substitute!(ex::Expression, head::Head, args...) = substitute!(ex, ExpressionSpec(head, args...))
@@ -287,11 +295,11 @@ function simplify!(ex::Expression)
         for (vecs, weight) in blade_weights
           fac = dereference(weight)
           if Meta.isexpr(fac, :call) && fac.args[1] === :+
-            weight = simplify_addition(cache, @view fac.args[2:end])
-            if weight == factor(cache, 0)
+            terms = simplify_addition(@view fac.args[2:end])
+            if isempty(terms)
               delete!(blade_weights, vecs)
             else
-              blade_weights[vecs] = weight
+              blade_weights[vecs] = factor(cache, length(terms) == 1 ? terms[1] : Expr(:call, :+, terms...))
             end
           end
         end
@@ -303,9 +311,24 @@ function simplify!(ex::Expression)
   end
 
 
-  # Simplify -1 factors.
   if head === FACTOR
-    fac = dereference(ex)
+    fac = dereference(cache, only(args))
+
+    # Disassociate `Expr` multiplications and additions.
+    if iscall(fac, :+) || iscall(fac, :*)
+      disassociated = disassociate1(fac)
+      fac ≠ disassociated && return substitute!(ex, FACTOR, disassociated)
+    end
+    if iscall(fac, :*)
+      distributed = distribute1(fac)
+      fac ≠ distributed && return substitute!(ex, FACTOR, distributed)
+    end
+    if iscall(fac, :+)
+      terms = simplify_addition(args)
+      terms !== args && return substitute!(ex, FACTOR, isempty(terms) ? 0 : length(terms) == 1 ? terms[1] : Expr(:call, :+, terms...))
+    end
+
+    # Simplify -1 factors.
     new_fac = simplify_negations(fac)
     fac !== new_fac && return substitute!(ex, factor(cache, new_fac))
   end
@@ -315,7 +338,7 @@ function simplify!(ex::Expression)
   !isnothing(n) && @assert length(args) == n "Expected $n arguments for expression $head, $(length(args)) were provided\nArguments: $args"
   @assert !isempty(args) || head === BLADE
   head === BLADE && @assert all(isa(dereference(cache, i), Int) for i in args) "Expected integer arguments in BLADE expression, got $(dereference.(cache, ex))"
-  head === FACTOR && @assert !isa(args[1], Expression) "`Expression` argument detected in FACTOR expression: $(args[1])"
+  head === FACTOR && @assert !isa(args[1], Expression) || isscalar(args[1].head) "`Expression` argument detected in FACTOR expression: $(args[1])"
 
   # Propagate complements over addition.
   head in (LEFT_COMPLEMENT, RIGHT_COMPLEMENT) && isexpr(args[1], ADDITION) && return substitute!(ex, ADDITION, Expression.(cache, head, args[1]))
@@ -376,6 +399,8 @@ function simplify!(ex::Expression)
   ex
 end
 
+iscall(ex, f) = Meta.isexpr(ex, :call) && ex.args[1] === f
+
 function remove_unit_elements!(args, head)
   n = length(args)
   if head === GEOMETRIC_PRODUCT
@@ -434,6 +459,15 @@ function disassociate1(args, op::Head)
   Expression(cache, op, new_args)
 end
 
+function disassociate1(ex::Expr)
+  f = ex.args[1]
+  res = Expr(:call, f)
+  for arg in @view ex.args[2:end]
+    iscall(arg, f) ? append!(res.args, arg.args[2:end]) : push!(res.args, arg)
+  end
+  res
+end
+
 function distribute1(args, op::Head)
   x, ys = args[1], @view args[2:end]
   (; cache) = x
@@ -451,6 +485,26 @@ function distribute1(args, op::Head)
   Expression(cache, ADDITION, base)
 end
 
+function distribute1(ex::Expr)
+  (; args) = ex
+  x, ys = args[2], @view args[3:end]
+  base = iscall(x, :+) ? x.args[2:end] : [x]
+  for y in ys
+    new_base = []
+    yterms = iscall(y, :+) ? y.args[2:end] : (y,)
+    for xterm in base
+      for yterm in yterms
+        push!(new_base, disassociate1(Expr(:call, :*, xterm, yterm)))
+      end
+    end
+    base = new_base
+  end
+  length(base) == 1 && return only(base)
+  res = Expr(:call, :+)
+  append!(res.args, base)
+  res
+end
+
 function simplify_negations(fac)
   if Meta.isexpr(fac, :call) && fac.args[1] === :*
     head, args... = fac.args
@@ -466,10 +520,10 @@ function simplify_negations(fac)
   fac
 end
 
-function simplify_addition(cache, args)
+function simplify_addition(args)
   counter = 0
-  ids = Dict{Any,Int}()
-  id_counts = Dict{Int,Int}()
+  ids = Dictionary{Any,Int}()
+  id_counts = Dictionary{Int,Int}()
   new_args = []
   for arg in args
     n = 1
@@ -484,27 +538,23 @@ function simplify_addition(cache, args)
         end
         true
       end
-      # Extract the object after extraction of integer factors.
-      # Make sure that multiple arguments are stored such that ordering is not important,
-      # and other orderings should give the same ID.
-      obj = isempty(xs) ? 1 : length(xs) == 1 ? xs[1] : sort!(xs; by = hash)
+      obj = isempty(xs) ? 1 : length(xs) == 1 ? xs[1] : sort!(xs; by = string)
     end
     id = get!(() -> (counter += 1), ids, obj)
-    id_counts[id] = something(get(id_counts, id, nothing), 0) + n
+    set!(id_counts, id, something(get(id_counts, id, nothing), 0) + n)
   end
-  for (x, id) in sort(collect(ids); by = last)
+  for (x, id) in pairs(ids)
     n = id_counts[id]
     n == 0 && continue
     isa(x, Vector{Any}) && (x = Expr(:call, :*, x...))
     if n == 1
       push!(new_args, x)
     else
-      push!(new_args, scalar_multiply(n, x))
+      # TODO: remove the need for manual disassociation.
+      push!(new_args, disassociate1(scalar_multiply(n, x)))
     end
   end
-  isempty(new_args) && return factor(cache, 0)
-  length(new_args) == 1 && return factor(cache, new_args[1])
-  factor(cache, Expr(:call, :+, new_args...))
+  new_args == args ? args : new_args
 end
 
 function expected_nargs(head)
@@ -515,6 +565,7 @@ end
 
 function infer_grade(cache, head::Head, args)
   head === FACTOR && return 0
+  head === COMPONENT && return 0
   head === BLADE && return count(x -> isodd(dereference(cache, x)), map(x -> count(==(x), args), unique(args)))
   if head === GEOMETRIC_PRODUCT
     @assert length(args) == 2 && isexpr(args[1], FACTOR)
@@ -672,7 +723,7 @@ isblade(ex, n = nothing) = isexpr(ex, BLADE) && (isnothing(n) || n == length(ex)
 isscalar(ex::Expression) = isblade(ex, 0) || isweightedblade(ex, 0)
 isweighted(ex) = isexpr(ex, GEOMETRIC_PRODUCT, 2) && isexpr(ex[1]::Expression, FACTOR)
 isweightedblade(ex, n = nothing) = isweighted(ex) && isblade(ex[2]::Expression, n)
-isopaquefactor(ex) = isexpr(ex, FACTOR) && isa(dereference(ex), Union{Symbol, Expr, QuoteNode})
+isopaquefactor(ex) = isexpr(ex, FACTOR) && isa(dereference(ex), Union{Symbol, Expr, QuoteNode, Expression})
 
 function basis_vectors(ex::Expression)
   isweightedblade(ex) && return basis_vectors(ex[2]::Expression)
@@ -733,8 +784,11 @@ function Base.show(io::IO, ex::Expression)
   isexpr(ex, BLADE) && return print(io, 'e', join(subscript.(dereference.(ex.cache, ex))))
   isexpr(ex, FACTOR) && return print_factor(io, ex)
   if isexpr(ex, GEOMETRIC_PRODUCT) && isexpr(ex[end], BLADE)
-    if length(ex) == 2 && isexpr(ex[1], FACTOR) && (!Meta.isexpr(dereference(ex[1]), :call) || dereference(ex[1]) === getcomponent)
-      return print(io, ex[1], " ⟑ ", ex[end])
+    if length(ex) == 2 && isexpr(ex[1], FACTOR)
+      fac = ex[1]
+      if isexpr(fac, COMPONENT) || !Meta.isexpr(dereference(fac), :call)
+        return print(io, fac, " ⟑ ", ex[end])
+      end
     else
       return print(io, '(', join(ex[1:(end - 1)], " ⟑ "), ") ⟑ ", ex[end])
     end
@@ -750,12 +804,19 @@ function head_symbol(head::Head)
   head === MULTIVECTOR && return :multivector
 end
 
-print_factor(io, ex::Expression) = print_factor(io, dereference(ex))
+function print_factor(io, ex::Expression)
+  if isexpr(ex, COMPONENT)
+    # If we got one argument `x`, print `x[]`, unless it is a literal, in which case print e.g. `3`.
+    # Otherwise, print `x[indices...]`.
+    x, args... = dereference.(ex.cache, ex)
+    length(ex) == 1 && return print(io, isa(x, Number) ? x : Expr(:ref, x))
+    return print(io, Expr(:ref, x, args...))
+  end
+  print_factor(io, dereference(ex))
+end
+
 function print_factor(io, ex)
   Meta.isexpr(ex, :call) && in(ex.args[1], (:*, :+)) && return print(io, join((sprint(print_factor, arg) for arg in @view ex.args[2:end]), " $(ex.args[1]) "))
-  Meta.isexpr(ex, :call, 3) && ex.args[1] === getcomponent && return print(io, Expr(:ref, ex.args[2:3]...))
-  Meta.isexpr(ex, :call, 2) && ex.args[1] === getcomponent && isa(ex.args[2], Number) && return print(io, ex.args[2])
-  Meta.isexpr(ex, :call, 2) && ex.args[1] === getcomponent && return print(io, Expr(:ref, ex.args[2]))
   print(io, ex)
 end
 
