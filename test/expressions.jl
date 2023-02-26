@@ -2,17 +2,23 @@ using SymbolicGA: infer_grade, project!, dereference
 
 sig = Signature(3, 1)
 cache = ExpressionCache(sig)
+sc(x) = scalar(cache, x)
+fac(x) = factor(cache, x)
+bl(args...) = blade(cache, args...)
+x = sc(:x)
+y = sc(:y)
+e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
 
 @testset "Expressions" begin
   @testset "Expression basics" begin
-    @test isexpr(factor(cache, 0), FACTOR, 1)
-    @test !isexpr(blade(cache, 1, 2), BLADE, 1)
-    @test isexpr(blade(cache, 1, 2), BLADE, 2)
-    @test isexpr(blade(cache, 1, 2), (FACTOR, BLADE))
+    @test isexpr(fac(0), FACTOR, 1)
+    @test !isexpr(bl(1, 2), BLADE, 1)
+    @test isexpr(bl(1, 2), BLADE, 2)
+    @test isexpr(bl(1, 2), (FACTOR, BLADE))
 
-    ex = blade(cache, 1, 2)
+    ex = bl(1, 2)
     ex2 = postwalk(x -> isa(dereference(cache, x), Int) ? dereference(cache, x) + 1 : x, ex)
-    @test ex2 == blade(cache, 2, 3)
+    @test ex2 == bl(2, 3)
   end
 
   @testset "Grade inference" begin
@@ -22,9 +28,9 @@ cache = ExpressionCache(sig)
     @test infer_grade(cache, BLADE, [1, 2, 3, 3, 3]) == 3
     @test infer_grade(cache, BLADE, [1, 1, 2, 2, 3, 3, 3]) == 1
     @test infer_grade(cache, BLADE, [1, 2, 3, 1, 2, 4, 1, 2]) == 4
-    @test infer_grade(cache, KVECTOR, [blade(cache, 1, 2), blade(cache, 2, 3)]) == 2
-    @test infer_grade(cache, MULTIVECTOR, [blade(cache, 1, 2), blade(cache, 2, 3)]) == 2
-    @test infer_grade(cache, MULTIVECTOR, [kvector(blade(cache, 1, 2), blade(cache, 2, 3)), kvector(blade(cache, 1))]) == [1, 2]
+    @test infer_grade(cache, KVECTOR, [bl(1, 2), bl(2, 3)]) == 2
+    @test infer_grade(cache, MULTIVECTOR, [bl(1, 2), bl(2, 3)]) == 2
+    @test infer_grade(cache, MULTIVECTOR, [kvector(bl(1, 2), bl(2, 3)), kvector(bl(1))]) == [1, 2]
 
     _cache = ExpressionCache(Signature(3))
     ex = blade(_cache, 1, 2)
@@ -36,127 +42,127 @@ cache = ExpressionCache(sig)
   end
 
   @testset "Blades and metric simplifications" begin
-    ex = blade(cache, 1, 1)
+    ex = bl(1, 1)
     @test ex.grade == 0
-    @test ex == scalar(cache, 1)
+    @test ex == sc(1)
 
-    ex = blade(cache, 1, 2, 3, 1)
+    ex = bl(1, 2, 3, 1)
     @test ex.grade == 2
-    @test ex == blade(cache, 2, 3)
+    @test ex == bl(2, 3)
 
-    ex = blade(cache, 4, 4)
+    ex = bl(4, 4)
     @test ex.grade == 0
-    @test ex == scalar(cache, -1)
+    @test ex == sc(-1)
 
-    ex = blade(cache, 1, 2, 1)
+    ex = bl(1, 2, 1)
     @test ex.grade == 1
-    @test ex == weighted(blade(cache, 2), -1)
+    @test ex == weighted(bl(2), -1)
 
-    @test blade(cache, 1) * blade(cache, 2) == blade(cache, 1, 2)
-    @test blade(cache, 1, 2) * blade(cache, 3) == blade(cache, 1, 2, 3)
+    @test bl(1) * bl(2) == bl(1, 2)
+    @test bl(1, 2) * bl(3) == bl(1, 2, 3)
   end
 
   @testset "Simplification of null elements in addition" begin
-    @test factor(cache, 1) + factor(cache, 0) == factor(cache, 1)
-    @test blade(cache, 1) + factor(cache, 0) == blade(cache, 1)
+    @test fac(1) + fac(0) == fac(1)
+    @test bl(1) + fac(0) == bl(1)
   end
 
   @testset "Disassociation of products and sums" begin
-    @test factor(cache, 1) * (factor(cache, :x) * factor(cache, :y)) == factor(cache, :(x * y))
-    @test factor(cache, :z) * (factor(cache, :x) * factor(cache, :y)) == factor(cache, :(z * x * y))
-    @test factor(cache, 1) + (factor(cache, :x) + factor(cache, :y)) == factor(cache, :(x + y + 1))
-    @test factor(cache, 1) + (factor(cache, 2) + factor(cache, 0)) == factor(cache, 3)
+    @test fac(1) * (fac(:x) * fac(:y)) == fac(:(x * y))
+    @test fac(:z) * (fac(:x) * fac(:y)) == fac(:(z * x * y))
+    @test fac(1) + (fac(:x) + fac(:y)) == fac(:(x + y + 1))
+    @test fac(1) + (fac(2) + fac(0)) == fac(3)
   end
 
   @testset "Distribution of products" begin
-    @test (factor(cache, :x) + factor(cache, :y)) * (factor(cache, :w) + factor(cache, :z)) == factor(cache, :((x + y) * (w + z)))
-    @test (blade(cache, 1) + blade(cache, 3)) * (blade(cache, 2) + blade(cache, 4)) == blade(cache, 1, 2) + blade(cache, 1, 4) + blade(cache, 3, 2) + blade(cache, 3, 4)
-    @test (factor(cache, :x) + blade(cache, 1)) * (factor(cache, :y) + blade(cache, 4)) == factor(cache, :(x * y)) + factor(cache, :x) * blade(cache, 4) + blade(cache, 1) * factor(cache, :y) + blade(cache, 1, 4)
-    @test (factor(cache, :x) + factor(cache, :y)) * blade(cache, 1, 2) == (factor(cache, :x) + factor(cache, :y)) ⟑ blade(cache, 1, 2)
+    @test (fac(:x) + fac(:y)) * (fac(:w) + fac(:z)) == fac(:((x + y) * (w + z)))
+    @test (bl(1) + bl(3)) * (bl(2) + bl(4)) == bl(1, 2) + bl(1, 4) + bl(3, 2) + bl(3, 4)
+    @test (fac(:x) + bl(1)) * (fac(:y) + bl(4)) == fac(:(x * y)) + fac(:x) * bl(4) + bl(1) * fac(:y) + bl(1, 4)
+    @test (fac(:x) + fac(:y)) * bl(1, 2) == (fac(:x) + fac(:y)) ⟑ bl(1, 2)
   end
 
   @testset "Simplification and canonicalization of factors" begin
-    @test blade(cache, 1, 2) * factor(cache, 3) == factor(cache, 3) ⟑ blade(cache, 1, 2)
-    @test blade(cache, 1, 2) * factor(cache, 3) * factor(cache, 5) == factor(cache, 15) ⟑ blade(cache, 1, 2)
-    @test blade(cache, 1, 2) * factor(cache, :x) * factor(cache, :(y[1])) == factor(cache, :(x * y[1])) ⟑ blade(cache, 1, 2)
-    @test factor(cache, 1) * blade(cache, 1, 2) * factor(cache, 3) == factor(cache, 3) ⟑ blade(cache, 1, 2)
-    # @test blade(cache, 1, 2) * factor(cache, 0) == Expression(GEOMETRIC_PRODUCT, factor(cache, 0), blade(cache, 1, 2); simplify = false)
-    @test blade(cache, 1, 2) * factor(cache, 0) == factor(cache, 0)
-    @test factor(cache, :(-1 * -1)) == factor(cache, 1)
-    @test factor(cache, :(-1 * -1)) * blade(cache, 1, 2) == blade(cache, 1, 2)
+    @test bl(1, 2) * fac(3) == fac(3) ⟑ bl(1, 2)
+    @test bl(1, 2) * fac(3) * fac(5) == fac(15) ⟑ bl(1, 2)
+    @test bl(1, 2) * fac(:x) * fac(:(y[1])) == fac(:(x * y[1])) ⟑ bl(1, 2)
+    @test fac(1) * bl(1, 2) * fac(3) == fac(3) ⟑ bl(1, 2)
+    # @test bl(1, 2) * fac(0) == Expression(GEOMETRIC_PRODUCT, fac(0), bl(1, 2); simplify = false)
+    @test bl(1, 2) * fac(0) == fac(0)
+    @test fac(:(-1 * -1)) == fac(1)
+    @test fac(:(-1 * -1)) * bl(1, 2) == bl(1, 2)
 
     @testset "Simplification of additive factors" begin
-      @test factor(cache, :x) + factor(cache, :y) == factor(cache, :(x + y))
-      @test factor(cache, :x) + factor(cache, 1) == factor(cache, :(x + 1))
-      @test factor(cache, 2) + factor(cache, 3) == factor(cache, 5)
-      @test factor(cache, :x) + factor(cache, 3) + factor(cache, :y) + factor(cache, 2) == factor(cache, :(x + y + 5))
+      @test fac(:x) + fac(:y) == fac(:(x + y))
+      @test fac(:x) + fac(1) == fac(:(x + 1))
+      @test fac(2) + fac(3) == fac(5)
+      @test fac(:x) + fac(3) + fac(:y) + fac(2) == fac(:(x + y + 5))
 
-      @test scalar(cache, :x) - scalar(cache, :x) == factor(cache, 0)
-      @test scalar(cache, :x) + scalar(cache, :x) == scalar(cache, :(2x))
-      @test scalar(cache, :x) + scalar(cache, :y) == scalar(cache, :(x + y))
-      @test scalar(cache, :x) + scalar(cache, :x) - scalar(cache, :(2x)) == factor(cache, 0)
-      @test scalar(cache, :(x * y)) - scalar(cache, :(x * y)) == factor(cache, 0)
-      @test scalar(cache, :(x * y)) + scalar(cache, :(x * y)) ≠ factor(cache, 0)
-      @test scalar(cache, :x) - scalar(cache, :(2x)) == scalar(cache, :(-1 * x))
+      @test x - x == fac(0)
+      @test x + x == sc(:(2x))
+      @test x + y == sc(:(x + y))
+      @test x + x - sc(:(2x)) == fac(0)
+      @test sc(:(x * y)) - sc(:(x * y)) == fac(0)
+      @test sc(:(x * y)) + sc(:(x * y)) ≠ fac(0)
+      @test x - sc(:(2x)) == sc(:(-1 * x))
     end
   end
 
   @testset "Blade grouping over addition" begin
-    x = weighted(blade(cache, 1, 3), :x)
-    ex = x + x
-    @test ex == weighted(blade(cache, 1, 3), :(2x))
+    x_e13 = weighted(bl(1, 3), :x)
+    ex = x_e13 + x_e13
+    @test ex == weighted(bl(1, 3), :(2x))
 
-    ex = scalar(cache, :x) + scalar(cache, :y)
-    @test ex == scalar(cache, :(x + y))
+    ex = x + y
+    @test ex == sc(:(x + y))
 
-    ex = weighted(blade(cache, 1), :x) + weighted(blade(cache, 2, 3), :y) + weighted(blade(cache, 1), :z)
-    @test ex == weighted(blade(cache, 2, 3), :y) + weighted(blade(cache, 1), :(x + z))
+    ex = weighted(bl(1), :x) + weighted(bl(2, 3), :y) + weighted(bl(1), :z)
+    @test ex == weighted(bl(2, 3), :y) + weighted(bl(1), :(x + z))
   end
 
   @testset "Projections" begin
-    @test project!(factor(cache, :x), 1) == factor(cache, 0)
-    @test project!(factor(cache, :x), 0) == factor(cache, :x)
-    @test project!(blade(cache, 1, 2), 1) == factor(cache, 0)
-    @test project!(blade(cache, 1, 2) + blade(cache, 1), 1) == blade(cache, 1)
-    @test project!(blade(cache, 1) + blade(cache, 1, 2) + blade(cache, 1, 2, 3), 2) == blade(cache, 1, 2)
+    @test project!(fac(:x), 1) == fac(0)
+    @test project!(fac(:x), 0) == fac(:x)
+    @test project!(bl(1, 2), 1) == fac(0)
+    @test project!(bl(1, 2) + bl(1), 1) == bl(1)
+    @test project!(bl(1) + bl(1, 2) + bl(1, 2, 3), 2) == bl(1, 2)
   end
 
   @testset "Reversions" begin
-    @test reverse(blade(cache, 1, 2)) == blade(cache, 2, 1)
-    @test reverse(factor(cache, :x) * blade(cache, 1, 2)) == factor(cache, :x) * blade(cache, 2, 1)
-    @test reverse(blade(cache, 1, 2, 3) + blade(cache, 2) + blade(cache, 2, 3)) == blade(cache, 3, 2, 1) + blade(cache, 2) + blade(cache, 3, 2)
+    @test reverse(bl(1, 2)) == bl(2, 1)
+    @test reverse(fac(:x) * bl(1, 2)) == fac(:x) * bl(2, 1)
+    @test reverse(bl(1, 2, 3) + bl(2) + bl(2, 3)) == bl(3, 2, 1) + bl(2) + bl(3, 2)
 
-    @test antireverse(blade(cache, 1, 2)) == blade(cache, 2, 1)
-    @test antireverse(factor(cache, :x) * blade(cache, 1, 2)) == factor(cache, :x) * blade(cache, 2, 1)
-    @test antireverse(blade(cache, 1, 2, 3) + blade(cache, 2) + blade(cache, 2, 3)) == blade(cache, 1, 2, 3) - blade(cache, 2) + blade(cache, 3, 2)
+    @test antireverse(bl(1, 2)) == bl(2, 1)
+    @test antireverse(fac(:x) * bl(1, 2)) == fac(:x) * bl(2, 1)
+    @test antireverse(bl(1, 2, 3) + bl(2) + bl(2, 3)) == bl(1, 2, 3) - bl(2) + bl(3, 2)
     _cache = ExpressionCache(Signature(3, 0, 1))
     @test antireverse(weighted(blade(_cache, 4), 1)) == antireverse(blade(_cache, 4)) == -blade(_cache, 4)
   end
 
   @testset "Exterior products" begin
-    x = blade(cache, 1, 2)
-    y = blade(cache, 3)
+    x = bl(1, 2)
+    y = bl(3)
 
-    @test exterior_product(blade(cache, 1, 2), blade(cache, 3)) == blade(cache, 1, 2, 3)
-    @test exterior_product(blade(cache, 1, 2), blade(cache, 2)) == factor(cache, 0)
+    @test exterior_product(bl(1, 2), bl(3)) == bl(1, 2, 3)
+    @test exterior_product(bl(1, 2), bl(2)) == fac(0)
   end
 
   @testset "Common operators" begin
-    @test Expression(cache, INTERIOR_PRODUCT, blade(cache, 1), blade(cache, 1, 2)) == blade(cache, 2)
-    @test Expression(cache, COMMUTATOR_PRODUCT, blade(cache, 1), blade(cache, 2)) == weighted(blade(cache, 1, 2), 1.0)
-    @test Expression(cache, EXTERIOR_PRODUCT, blade(cache, 1), blade(cache, 2)) == blade(cache, 1, 2)
+    @test Expression(cache, INTERIOR_PRODUCT, bl(1), bl(1, 2)) == bl(2)
+    @test Expression(cache, COMMUTATOR_PRODUCT, bl(1), bl(2)) == weighted(bl(1, 2), 1.0)
+    @test Expression(cache, EXTERIOR_PRODUCT, bl(1), bl(2)) == bl(1, 2)
   end
 
   @testset "Inversion" begin
-    @test Expression(cache, INVERSE, factor(cache, 2.0)) == factor(cache, 0.5)
-    @test Expression(cache, INVERSE, factor(cache, :x)) == factor(cache, :($inv(x)))
-    @test Expression(cache, INVERSE, scalar(cache, 2.0)) == scalar(cache, 0.5)
-    @test Expression(cache, INVERSE, blade(cache, 1, 2)) == weighted(blade(cache, 1, 2), -1)
-    @test Expression(cache, INVERSE, weighted(blade(cache, 1, 2), 5.0)) == weighted(blade(cache, 1, 2), -0.2)
-    versor = Expression(cache, ADDITION, scalar(cache, 2.0), weighted(blade(cache, 1, 2), 5.0))
-    @test Expression(cache, GEOMETRIC_PRODUCT, versor, Expression(cache, INVERSE, versor)) == scalar(cache, 1.0)
-    mv = Expression(cache, ADDITION, scalar(cache, 2.0), weighted(blade(cache, 3), 1.2), weighted(blade(cache, 1, 2), 5.0))
-    @test_throws "only supported for versors" Expression(cache, GEOMETRIC_PRODUCT, mv, Expression(cache, INVERSE, mv)) == scalar(cache, 1.0)
+    @test Expression(cache, INVERSE, fac(2.0)) == fac(0.5)
+    @test Expression(cache, INVERSE, fac(:x)) == fac(:($inv(x)))
+    @test Expression(cache, INVERSE, sc(2.0)) == sc(0.5)
+    @test Expression(cache, INVERSE, bl(1, 2)) == weighted(bl(1, 2), -1)
+    @test Expression(cache, INVERSE, weighted(bl(1, 2), 5.0)) == weighted(bl(1, 2), -0.2)
+    versor = Expression(cache, ADDITION, sc(2.0), weighted(bl(1, 2), 5.0))
+    @test Expression(cache, GEOMETRIC_PRODUCT, versor, Expression(cache, INVERSE, versor)) == sc(1.0)
+    mv = Expression(cache, ADDITION, sc(2.0), weighted(bl(3), 1.2), weighted(bl(1, 2), 5.0))
+    @test_throws "only supported for versors" Expression(cache, GEOMETRIC_PRODUCT, mv, Expression(cache, INVERSE, mv)) == sc(1.0)
   end
 
   @testset "Exponentiation" begin
