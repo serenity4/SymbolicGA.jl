@@ -109,10 +109,11 @@ end
   sig = Signature(1, 1, 1)
   cache = ExpressionCache(sig)
   ws = extract_weights(cache.sig, :x, 1; offset = 0)
-  @test ws == [:($getcomponent(x, $i)) for i in 1:3]
+  @test length(ws) == 3
+  @test all(isexpr(w, SCALAR_COMOPNENT) && length(w) == 1 && w[1] == i for (i, w) in enumerate(ws))
   ex = input_expression(cache, :x, 2)
   @test isexpr(ex, ADDITION, 3)
-  @test ex[1] == factor(cache, first(ws)) * blade(cache, 1, 2)
+  @test ex[1] == scalar(cache, first(ws)) * blade(cache, 1, 2)
 
   ex = extract_expression(:((x::Vector * y::Bivector)::Trivector), sig, builtin_varinfo(sig))
   ex2 = restructure(ex)

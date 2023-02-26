@@ -6,7 +6,7 @@ Otherwise, all elements of the same grade are grouped, wrapped in k-vectors
 and added to a multivector expression.
 """
 function restructure_sums(ex::Expression)
-  ex == factor(ex.cache, 0) && return kvector(scalar(ex.cache, Zero()))
+  ex == scalar(ex.cache, 0) && return kvector(scalar(ex.cache, Zero()))
   if isblade(ex) || isweightedblade(ex)
     isone(nelements(ex.cache.sig, ex.grade::Int)) && return kvector(ex)
     terms = [ex]

@@ -2,8 +2,8 @@ using SymbolicGA: restructure_sums, fill_kvector_components, Zero
 
 @testset "Passes" begin
   cache = ExpressionCache(Signature(3))
-  x, y = factor(cache, :x) * blade(cache, 1, 3), factor(cache, :x) * blade(cache, 1, 2)
-  z = factor(cache, :x) * blade(cache, 1, 2, 3)
+  x, y = scalar(cache, :x) * blade(cache, 1, 3), scalar(cache, :x) * blade(cache, 1, 2)
+  z = scalar(cache, :x) * blade(cache, 1, 2, 3)
 
   ex = restructure_sums(x + y)
   @test ex == kvector(x, y)

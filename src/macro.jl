@@ -423,24 +423,24 @@ function expand_reference(refs, ex)
   ex => ref
 end
 
-function extract_weights(sig::Signature, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
-  n = nelements(sig, g)
+function extract_weights(cache::ExpressionCache, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
+  n = nelements(cache.sig, g)
   weights = Any[]
   for i in 1:n
-    push!(weights, extract_component(ex, i; j, offset, isscalar = in(g, (0, dimension(sig)))))
+    push!(weights, extract_component(cache, ex, i; j, offset, isscalar = in(g, (0, dimension(cache.sig)))))
   end
   weights
 end
 
-function extract_component(ex, i::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing, isscalar::Bool = false)
-  isscalar && isnothing(offset) && isnothing(j) && return :($getcomponent($ex))
-  !isnothing(j) && return :($getcomponent($ex, $j, $i))
-  :($getcomponent($ex, $(i + something(offset, 0))))
+function extract_component(cache::ExpressionCache, ex, i::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing, isscalar::Bool = false)
+  isscalar && isnothing(offset) && isnothing(j) && return Expression(cache, SCALAR_COMPONENT, ex)
+  !isnothing(j) && return Expression(cache, SCALAR_COMPONENT, ex, j, i)
+  Expression(cache, SCALAR_COMPONENT, ex, i + something(offset, 0))
 end
 
 function input_expression(cache::ExpressionCache, ex, g::Int; j::Optional{Int} = nothing, offset::Optional{Int} = nothing)
   blades = map(args -> blade(cache, args), combinations(1:dimension(cache.sig), g))
-  weights = extract_weights(cache.sig, ex, g; j, offset)
+  weights = extract_weights(cache, ex, g; j, offset)
   Expression(cache, ADDITION, Any[weighted(blade, w) for (blade, w) in zip(blades, weights)])
 end
 
@@ -507,7 +507,6 @@ function to_expr(cache, ex, flatten::Bool, T, variables, stop_early = false)
       return Expr(:tuple, to_final_expr.(cache, ex, flatten, Ref(T), Ref(variables))...)
     end
   end
-  isexpr(ex, FACTOR) && return to_final_expr(cache, ex[1], flatten, T, variables)
   isexpr(ex, KVECTOR) && return :($construct($(reconstructed_type(T, ex.cache.sig, ex)), $(Expr(:tuple, to_final_expr.(cache, ex, flatten, Ref(T), Ref(variables))...))))
   isexpr(ex, BLADE) && return 1
   if isexpr(ex, GEOMETRIC_PRODUCT)
@@ -515,9 +514,32 @@ function to_expr(cache, ex, flatten::Bool, T, variables, stop_early = false)
     return to_final_expr(cache, ex[1]::Expression, flatten, T, variables)
   end
   ex === Zero() && return 0
+  isexpr(ex, SCALAR) && return to_final_expr(cache, ex[1], flatten, T, variables)
+  isscalar(ex) && return Expr(:call, scalar_function(ex.head), to_expr.(cache, ex.args, flatten, Ref(T), Ref(variables))...)
   isa(ex, Expr) && !stop_early && return Expr(ex.head, to_expr.(cache, ex.args, flatten, Ref(T), Ref(variables))...)
   ex
 end
+
+function scalar_function(head::Head)
+  head === SCALAR_ADDITION && return +
+  head === SCALAR_EXPONENTIAL && return exp
+  head === SCALAR_PRODUCT && return *
+  head === SCALAR_DIVISION && return /
+  head === SCALAR_NAN_TO_ZERO && return nan_to_zero
+  head === SCALAR_INVERSE && return inv
+  head === SCALAR_COS && return cos
+  head === SCALAR_SIN && return sin
+  head === SCALAR_COSH && return cosh
+  head === SCALAR_SINH && return sinh
+  head === SCALAR_SQRT && return sqrt
+  head === SCALAR_ABS && return abs
+  head === SCALAR_NEGATION && return -
+  head === SCALAR_SUBTRACTION && return -
+  isscalar(head) && error("Head `$head` does not have a corresponding scalar function")
+  error("Expected head `$head` to be denoting a scalar expression")
+end
+
+nan_to_zero(x) = ifelse(isnan(x), zero(x), x)
 
 struct ExecutionGraph
   g::SimpleDiGraph{Int}

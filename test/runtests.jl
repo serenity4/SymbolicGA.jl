@@ -1,5 +1,5 @@
 using SymbolicGA, Test
-using SymbolicGA: Expression, ExpressionCache, ExpressionSpec, isexpr, postwalk, simplify!, isweighted, getcomponent, blade, factor, weighted, scalar, antiscalar, kvector, multivector, antigrade, antireverse, exterior_product, ⟑, ∧, Head, FACTOR, BLADE, KVECTOR, MULTIVECTOR, ADDITION, SUBTRACTION, NEGATION, REVERSE, ANTIREVERSE, LEFT_COMPLEMENT, RIGHT_COMPLEMENT, GEOMETRIC_PRODUCT, EXTERIOR_PRODUCT, INTERIOR_PRODUCT, COMMUTATOR_PRODUCT, INVERSE, EXPONENTIAL
+using SymbolicGA: Expression, ExpressionCache, ExpressionSpec, isexpr, postwalk, simplify!, isweighted, getcomponent, blade, weighted, scalar, antiscalar, kvector, multivector, antigrade, antireverse, exterior_product, ⟑, ∧, Head, SCALAR, BLADE, KVECTOR, MULTIVECTOR, ADDITION, SUBTRACTION, NEGATION, REVERSE, ANTIREVERSE, LEFT_COMPLEMENT, RIGHT_COMPLEMENT, GEOMETRIC_PRODUCT, EXTERIOR_PRODUCT, INTERIOR_PRODUCT, COMMUTATOR_PRODUCT, INVERSE, EXPONENTIAL, SCALAR_ADDITION, SCALAR_EXPONENTIAL, SCALAR_PRODUCT, SCALAR_DIVISION, SCALAR_NAN_TO_ZERO, SCALAR_INVERSE, SCALAR_COS, SCALAR_SIN, SCALAR_COSH, SCALAR_SINH, SCALAR_SQRT, SCALAR_ABS, SCALAR_COMPONENT, SCALAR_NEGATION, SCALAR_SUBTRACTION
 
 ENV["JULIA_DEBUG"] = "SymbolicGA"
 ENV["JULIA_DEBUG"] = ""
