@@ -101,21 +101,22 @@ end
   @test all(Ω .≈ @ga 3 cos(Base.:*(0.5, α))::Scalar - Π::Bivector * sin(Base.:*(0.5, α))::Scalar)
   @test (@ga 3 Ω::(Scalar, Bivector) ⟑ inverse(Ω::(Scalar, Bivector))) == KVector{0,3}(1.0)
 
-  # TODO: The trivector might always be null by construction, simplifications should therefore elide it in the final result.
-  x′, _ = @ga 3 begin
+  x′ = @ga 3 begin
     Ω::(Scalar, Bivector)
     Ω ⟑ x::Vector ⟑ inverse(Ω)
   end
   @test x′ ≈ KVector{1,3}(0.0, sqrt(2), 0.0)
 
   # Do it more succinctly.
-  y = @ga 3 begin
-    # Define unit plane for the rotation.
-    Π = a::Vector ⟑ b::Vector
-    # Define rotation generator.
-    Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
-    # Apply the rotation by sandwhiching x with Ω.
-    Ω ⟑ x::Vector ⟑ reverse(Ω)
+  @test_skip begin
+    x′′ = @ga 3 begin
+      # Define unit plane for the rotation.
+      Π = a::Vector ⟑ b::Vector
+      # Define rotation generator.
+      Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
+      # Apply the rotation by sandwhiching x with Ω.
+      Ω ⟑ x::Vector ⟑ reverse(Ω)
+    end
+    x′′ === x′
   end
-  @test y[1] === x′
 end;

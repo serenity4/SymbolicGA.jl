@@ -64,17 +64,6 @@ end
 next!(counter::IDCounter) = ID(counter.val += 1)
 IDCounter() = IDCounter(0)
 
-struct ExpressionSpec
-  head::Head
-  args::Vector{Any}
-end
-
-Base.:(==)(x::ExpressionSpec, y::ExpressionSpec) = x.head == y.head && x.args == y.args
-Base.hash(spec::ExpressionSpec, h::UInt) = hash(hash(spec.head) + hash(spec.args), h)
-
-ExpressionSpec(head::Head, args::AbstractVector) = ExpressionSpec(head, convert(Vector{Any}, args))
-ExpressionSpec(head::Head, args...) = ExpressionSpec(head, collect(Any, args))
-
 mutable struct Expression
   head::Head
   grade::GradeInfo
@@ -92,6 +81,14 @@ mutable struct Expression
 end
 
 const Term = Union{Expression, ID}
+
+struct ExpressionSpec
+  head::Head
+  args::Vector{Term}
+end
+
+Base.:(==)(x::ExpressionSpec, y::ExpressionSpec) = x.head == y.head && x.args == y.args
+Base.hash(spec::ExpressionSpec, h::UInt) = hash(hash(spec.head) + hash(spec.args), h)
 
 struct Object
   val::Any
@@ -116,15 +113,19 @@ is_expression_caching_enabled() = true
 
 Base.getproperty(ex::Expression, field::Symbol) = field === :cache ? getfield(ex, field)::ExpressionCache : getfield(ex, field)
 
+ExpressionSpec(cache::ExpressionCache, head::Head, args::AbstractVector) = ExpressionSpec(head, substitute_objects(cache, args))
+ExpressionSpec(cache::ExpressionCache, head::Head, args...) = ExpressionSpec(cache, head, collect(Any, args))
+
 Expression(head::Head, ex::Expression) = Expression(ex.cache, head, ex)
-Expression(cache::ExpressionCache, head::Head, args...) = Expression(cache, ExpressionSpec(head, args...))
+Expression(cache::ExpressionCache, head::Head, args...) = Expression(cache, ExpressionSpec(cache, head, args...))
 function Expression(cache::ExpressionCache, spec::ExpressionSpec)
   haskey(cache.substitutions, spec) && is_expression_caching_enabled() && return cache.substitutions[spec]
-  ex = build_expression!(cache, spec)
+  ex = Expression(spec.head, spec.args, cache)
+  is_expression_caching_enabled() && (cache.substitutions[spec] = ex)
+  ex
 end
 
-function build_expression!(cache::ExpressionCache, spec::ExpressionSpec)
-  (; head, args) = spec
+function substitute_objects(cache::ExpressionCache, args::AbstractVector)
   terms = Term[]
   for arg in args
     term = isa(arg, Expression) || isa(arg, ID) ? arg : begin
@@ -134,9 +135,7 @@ function build_expression!(cache::ExpressionCache, spec::ExpressionSpec)
     end
     push!(terms, term)
   end
-  ex = Expression(head, terms, cache)
-  is_expression_caching_enabled() && (cache.substitutions[spec] = ex)
-  ex
+  terms
 end
 
 dereference(cache::ExpressionCache, primitive_id::ID) = cache.primitives[primitive_id].val
@@ -147,7 +146,7 @@ function dereference(ex::Expression)
   isexpr(inner, COMPONENT) ? inner : dereference(ex.cache, inner::ID)
 end
 
-substitute!(ex::Expression, head::Head, args...) = substitute!(ex, ExpressionSpec(head, args...))
+substitute!(ex::Expression, head::Head, args...) = substitute!(ex, ExpressionSpec(ex.cache, head, args...))
 substitute!(ex::Expression, spec::ExpressionSpec) = substitute!(ex, Expression(ex.cache, spec))
 
 function substitute!(ex::Expression, other::Expression)
@@ -404,9 +403,9 @@ iscall(ex, f) = Meta.isexpr(ex, :call) && ex.args[1] === f
 function remove_unit_elements!(args, head)
   n = length(args)
   if head === GEOMETRIC_PRODUCT
-    filter!(x -> !isexpr(x, FACTOR) || dereference(x) !== 1, args)
+    filter!(x -> !isexpr(x, FACTOR) || dereference(x) != 1, args)
   elseif head === ADDITION
-    filter!(x -> !isexpr(x, FACTOR) || dereference(x) !== 0, args)
+    filter!(x -> !isexpr(x, FACTOR) || dereference(x) != 0, args)
   end
   did_remove = n > length(args)
   did_remove
@@ -684,8 +683,8 @@ scalar_exponential(x) = :($exp($x))
 scalar_multiply(x::Number, y::Number) = x * y
 scalar_multiply(x, y) = :($x * $y)
 scalar_divide(x, y) = scalar_multiply(x, scalar_inverse(y))
-scalar_nan_to_zero(x::Number) = isnan(x) ? 0 : x
-scalar_nan_to_zero(x) = :($isnan($x) ? 0 : $x)
+scalar_nan_to_zero(x::Number) = ifelse(isnan(x), 0, x)
+scalar_nan_to_zero(x) = :(ifelse(isnan($x), 0, $x))
 scalar_inverse(x::Number) = inv(x)
 scalar_inverse(x) = :($inv($x))
 scalar_cos(x::Number) = cos(x)
@@ -765,7 +764,7 @@ exterior_product(x::Expression, y::Expression) = Expression(x.cache, EXTERIOR_PR
 
 # Traversal/transformation utilities.
 
-walk(ex::Expression, inner, outer) = outer(Expression(ex.cache, ex.head, filter!(!isnothing, inner.(ex.args))))
+walk(ex::Expression, inner, outer) = outer(Expression(ex.cache, ex.head, Any[inner(x) for x in ex if !isnothing(x)]))
 walk(ex, inner, outer) = outer(ex)
 postwalk(f, ex) = walk(ex, x -> postwalk(f, x), f)
 prewalk(f, ex) = walk(f(ex), x -> prewalk(f, x), identity)
