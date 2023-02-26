@@ -7,6 +7,25 @@ f(x, y) = @ga 3 x::Vector ⟑ y::Vector
 @btime f($x, $y)
 @code_typed f(x, y)
 
+# Determinant - rank 2
+
+A₁ = @SVector rand(2)
+A₂ = @SVector rand(2)
+A = SMatrix([A₁ A₂])
+Δ = @ga 2 A₁::Vector ∧ A₂::Vector
+@assert Δ[] ≈ det(A)
+
+mydet(A₁, A₂) = (@ga 2 A₁::Vector ∧ A₂::Vector)[]
+
+@btime det($A)
+@btime mydet($A₁, $A₂)
+# `Base.sub_float` is probably faster than `Base.mul_float` with -1 and then `Base.add_float`,
+# which would explain why `det(A)` is slightly faster.
+@code_warntype optimize=true det(A)
+@code_warntype optimize=true mydet(A₁, A₂)
+
+# Determinant - rank 4
+
 A₁ = @SVector rand(4)
 A₂ = @SVector rand(4)
 A₃ = @SVector rand(4)
@@ -21,6 +40,8 @@ mydet(A₁, A₂, A₃, A₄) = (@ga 4 A₁::Vector ∧ A₂::Vector ∧ A₃::V
 @btime mydet($A₁, $A₂, $A₃, $A₄)
 @code_warntype optimize=true det(A)
 @code_warntype optimize=true mydet(A₁, A₂, A₃, A₄)
+
+# Rotations - 3D
 
 function rot(a, b, x, α)
   @ga 3 begin
@@ -41,7 +62,7 @@ x = (1.0, 1.0, 0.0)
 x′ = rot(a, b, x, α)
 @assert x′ ≈ KVector{1,3}(0.0, sqrt(2), 0.0)
 @btime rot($a, $b, $x, $α)
-# @code_warntype rot(a, b, x, α)
+@code_warntype rot(a, b, x, α)
 
 @time @macroexpand @ga 3 begin
   # Define unit plane for the rotation.
