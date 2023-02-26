@@ -86,6 +86,8 @@ mutable struct Expression
   end
 end
 
+const Term = Union{Expression, ID}
+
 struct Object
   val::Any
 end
@@ -125,7 +127,7 @@ function build_expression!(cache::ExpressionCache, spec::ExpressionSpec)
     args[i] = id
     cache.primitives[id] = Object(arg)
   end
-  ex = Expression(head, args, cache)
+  ex = Expression(head, collect(Term, args), cache)
   is_expression_caching_enabled() && (cache.substitutions[spec] = ex)
   ex
 end
@@ -237,7 +239,7 @@ function simplify!(ex::Expression)
       factors, nonfactors = filter(isexpr(FACTOR), args), filter(!isexpr(FACTOR), args)
       fac = collapse_factors(cache, *, factors)
       length(args) == nf && return substitute!(ex, fac)
-      return substitute!(ex, GEOMETRIC_PRODUCT, Any[fac; nonfactors])
+      return substitute!(ex, GEOMETRIC_PRODUCT, Term[fac; nonfactors])
     elseif nf == 1 && !isexpr(args[1], FACTOR)
       # Put the factor at the front.
       i = findfirst(isexpr(FACTOR), args)
@@ -263,7 +265,7 @@ function simplify!(ex::Expression)
       blade_ex = blade(cache, blade_args)
       # Return the blade if all the terms were collapsed.
       nb == n && return substitute!(ex, blade_ex)
-      return substitute!(ex, GEOMETRIC_PRODUCT, Any[args; blade_ex])
+      return substitute!(ex, GEOMETRIC_PRODUCT, Term[args; blade_ex])
     end
   end
 
@@ -600,7 +602,7 @@ antigrade(ex::Expression) = antigrade(ex.cache.sig, ex.grade)
 
 function propagate_reverse(reverse_op, ex::Expression)
   (; cache) = ex
-  res = Any[]
+  res = Term[]
   for arg in ex
     arg::Expression
     skip = isexpr(arg, FACTOR) || reverse_op === REVERSE ? in(arg.grade, (0, 1)) : in(antigrade(cache.sig, arg.grade), (0, 1))
@@ -675,7 +677,7 @@ isopaquefactor(ex) = isexpr(ex, FACTOR) && isa(dereference(ex), Union{Symbol, Ex
 function basis_vectors(ex::Expression)
   isweightedblade(ex) && return basis_vectors(ex[2]::Expression)
   isexpr(ex, BLADE) && return [dereference(ex.cache, i)::Int for i in ex]
-  error("Expected blade or weighted blade expression, got $ex")
+  error("Expected blade or weighted blade expression, got $ex (head: $(ex.head))")
 end
 
 function lt_basis_order(xinds, yinds)
@@ -694,9 +696,9 @@ weighted(x::Expression, fac) = Expression(x.cache, GEOMETRIC_PRODUCT, factor(x.c
 scalar(cache::ExpressionCache, fac) = factor(cache, fac) * blade(cache)
 blade(cache::ExpressionCache, xs...) = Expression(cache, BLADE, xs...)
 kvector(args::AbstractVector) = Expression((args[1]::Expression).cache, KVECTOR, args)
-kvector(xs...) = kvector(collect(Any, xs))
+kvector(xs...) = kvector(collect(Term, xs))
 multivector(args::AbstractVector) = Expression((args[1]::Expression).cache, MULTIVECTOR, args)
-multivector(xs...) = multivector(collect(Any, xs))
+multivector(xs...) = multivector(collect(Term, xs))
 Base.reverse(ex::Expression) = Expression(REVERSE, ex)
 antireverse(ex::Expression) = Expression(ANTIREVERSE, ex)
 antiscalar(cache::ExpressionCache, fac) = factor(cache, fac) * antiscalar(cache)
