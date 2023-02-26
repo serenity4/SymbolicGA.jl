@@ -493,7 +493,7 @@ reconstructed_type(T::Nothing, sig::Signature, ex) = :($KVector{$(ex.grade::Int)
 reconstructed_type(T, sig::Signature, ex) = T
 
 function to_expr(cache, ex, flatten::Bool, T, variables, stop_early = false)
-  if isa(ex, ID) || isa(ex, Expression)
+  if isa(ex, Term)
     rhs = get(variables, ex, nothing)
     !isnothing(rhs) && return rhs
   end
@@ -538,43 +538,52 @@ function get_vertex!(g::ExecutionGraph, ex::Union{ID,Expression})
   v
 end
 
-function add_node_uses!(uses, g::ExecutionGraph, cache, i, ex, T)
+isexpandable(deref) = isa(deref, Expr) || isa(deref, Expression) && isscalar(deref.head)
+
+function add_node_uses!(uses, g::ExecutionGraph, cache, i, ex)
   j = 0
   deref = dereference(cache, ex)
-  if (isa(ex, Expression) || isa(ex, ID) && isa(deref, Expr))
+  if (isa(ex, Expression) || isa(ex, ID) && isexpandable(deref))
     uses[ex] = 1 + get!(uses, ex, 0)
     j = get_vertex!(g, ex)
     add_edge!(g.g, i, j)
   end
-  if isa(ex, ID) && isa(deref, Expr)
-    for arg in deref.args
-      add_node_uses!(uses, g, cache, j, arg, T === Expression ? Expr : T)
-    end
-  elseif isa(ex, Expression)
+  if isa(ex, Expression)
     for arg in ex
-      add_node_uses!(uses, g, cache, j, arg, T === Expr ? Expression : T)
+      add_node_uses!(uses, g, cache, j, arg)
+    end
+  elseif isa(ex, ID) && isexpandable(deref)
+    for arg in deref.args
+      add_node_uses!(uses, g, cache, j, arg)
+    end
+  elseif isa(ex, Expr)
+    for arg in ex.args
+      if isa(arg, Expr)
+        add_node_uses!(uses, g, cache, i, arg)
+      elseif isa(arg, Expression)
+        add_node_uses!(uses, g, cache, i, arg)
+      end
     end
   end
   nothing
 end
 
 function define_variables(ex::Expression, flatten::Bool, T)
-  variables = Dict{Union{ID,Expression},Symbol}()
-  uses = Dict{Union{ID,Expression},Int}()
+  variables = Dict{Term,Symbol}()
+  uses = Dict{Term,Int}()
   g = ExecutionGraph()
-  add_node_uses!(uses, g, ex.cache, get_vertex!(g, ex), ex, Expr)
+  add_node_uses!(uses, g, ex.cache, get_vertex!(g, ex), ex)
   rem_edge!(g.g, 1, 1)
   definitions = Expr(:block)
-  current_variables = Dict{Union{ID,Expression},Symbol}()
 
   # Recursively generate code using the previously defined variables.
   for v in reverse(topological_sort_by_dfs(g.g))
     x = g.exs_inv[v]
-    code = to_final_expr(ex.cache, x, flatten, T, current_variables)
+    code = to_final_expr(ex.cache, x, flatten, T, variables)
     if isa(code, Expr)
-      var = gensym("SymbolicGA")
+      var = gensym()
       push!(definitions.args, Expr(:(=), var, code))
-      current_variables[x] = var
+      variables[x] = var
     end
   end
   definitions

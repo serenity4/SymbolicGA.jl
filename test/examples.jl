@@ -83,6 +83,8 @@ end
   @test (@pga3 unitize(−D::Vector ⩒ point((1.2, 1, 2)) ⩒ antireverse(D::Vector))) == KVector{1,4}(1.2, 1, 0, -1)
 end
 
+count_expr_nodes(ex) = isa(ex, Expr) ? sum(count_expr_nodes, ex.args) : 1
+
 @testset "3D rotations" begin
   a = (1.0, 0.0, 0.0)
   b = (0.0, 1.0, 0.0)
@@ -108,13 +110,19 @@ end
   @test x′ ≈ KVector{1,3}(0.0, sqrt(2), 0.0)
 
   # Do it more succinctly.
+  ex = @macroexpand @ga 3 begin
+    Π = a::Vector ⟑ b::Vector
+    Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
+  end;
+  @test_broken count_expr_nodes(ex) < 1000
+
   @test_skip begin
     x′′ = @ga 3 begin
       # Define unit plane for the rotation.
       Π = a::Vector ⟑ b::Vector
       # Define rotation generator.
       Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
-      # Apply the rotation by sandwhiching x with Ω.
+      # Apply the rotation by sandwiching x with Ω.
       Ω ⟑ x::Vector ⟑ reverse(Ω)
     end
     x′′ === x′

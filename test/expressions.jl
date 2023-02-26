@@ -116,7 +116,7 @@ e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
       x2 = sc(Expression(cache, COMPONENT, :x, 2))
       @test x1 * x2 - x2 * x1 == sc(0)
       ex = x1 * x2 + x2 * x1
-      @test isexpr(ex[1], FACTOR) && dereference(ex[1]) == Expr(:call, :*, 2, x1[1][1], x2[1][1])
+      @test isexpr(ex[1], FACTOR) && Set(dereference(ex[1]).args) == Set([:*, 2, x1[1][1], x2[1][1]])
       @test x1 * x2 + x2 * x1 - 2 * x1 * x2 == sc(0)
     end
   end

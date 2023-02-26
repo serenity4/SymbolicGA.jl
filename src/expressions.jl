@@ -537,7 +537,7 @@ function simplify_addition(args)
         end
         true
       end
-      obj = isempty(xs) ? 1 : length(xs) == 1 ? xs[1] : sort!(xs; by = string)
+      obj = isempty(xs) ? 1 : length(xs) == 1 ? xs[1] : sort!(xs; by = objectid)
     end
     id = get!(() -> (counter += 1), ids, obj)
     set!(id_counts, id, something(get(id_counts, id, nothing), 0) + n)
@@ -675,7 +675,8 @@ function expand_exponential(b::Expression)
   # Negative square: cos(α) + A * sin(α) / α
   # Positive square: cosh(α) + A * sinh(α) / α
   (s, c) = is_negative ? (scalar_sin, scalar_cos) : (scalar_sinh, scalar_cosh)
-  Expression(cache, ADDITION, scalar(cache, c(α)), Expression(cache, GEOMETRIC_PRODUCT, scalar(cache, scalar_nan_to_zero(scalar_divide(s(α), α))), b))
+  ex = Expression(cache, ADDITION, scalar(cache, c(α)), Expression(cache, GEOMETRIC_PRODUCT, scalar(cache, scalar_nan_to_zero(scalar_divide(s(α), α))), b))
+  ex
 end
 
 scalar_exponential(x::Number) = exp(x)
