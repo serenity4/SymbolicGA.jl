@@ -26,11 +26,21 @@ const GradeInfo = Union{Int,Vector{Int}}
   # Nonlinear operations.
   INVERSE
   EXPONENTIAL
+
+  # Scalar operations.
+  SCALAR_SQRT = 70
+  SCALAR_ABS = 71
+  SCALAR_NAN_TO_ZERO = 72
+  SCALAR_INVERSE = 73
+  SCALAR_COS = 74
+  SCALAR_SIN = 75
+  SCALAR_COSH = 76
+  SCALAR_SINH = 77
+  SCALAR_DIVISION = 78
+  SCALAR_PRODUCT = 79
 end
 
-const SCALAR_HEADS = [COMPONENT]
-
-isscalar(head::Head) = head in SCALAR_HEADS
+isscalar(head::Head) = head == COMPONENT || UInt8(head) ≥ 70
 
 function Head(head::Symbol)
   head === :factor && return FACTOR
@@ -143,7 +153,7 @@ dereference(cache::ExpressionCache, x) = x
 function dereference(ex::Expression)
   @assert length(ex) == 1
   inner = ex[1]
-  isexpr(inner, COMPONENT) ? inner : dereference(ex.cache, inner::ID)
+  isa(inner, Expression) && isscalar(inner.head) ? inner : dereference(ex.cache, inner::ID)
 end
 
 substitute!(ex::Expression, head::Head, args...) = substitute!(ex, ExpressionSpec(ex.cache, head, args...))
@@ -162,6 +172,7 @@ function simplify!(ex::Expression)
 
   # Simplify nested factor expressions.
   head === FACTOR && isexpr(args[1], FACTOR) && return args[1]
+  isscalar(head) && any(isexpr(FACTOR), args) && return substitute!(ex, head, Any[isexpr(x, FACTOR) ? x[1] : x for x in args])
 
   # Apply left and right complements.
   if head in (LEFT_COMPLEMENT, RIGHT_COMPLEMENT)
@@ -332,6 +343,16 @@ function simplify!(ex::Expression)
     fac !== new_fac && return substitute!(ex, factor(cache, new_fac))
   end
 
+  if isscalar(head)
+    x = dereference(cache, args[1])
+    n = expected_nargs(head)
+    n == 1 && isa(x, Number) && return substitute!(ex, factor(cache, scalar_function(head)(x)))
+    if n == 2
+      y = dereference(cache, args[2])
+      isa(x, Number) && isa(y, Number) && return substitute!(ex, factor(cache, scalar_function(head)(x, y)))
+    end
+  end
+
   # Check that arguments make sense.
   n = expected_nargs(head)
   !isnothing(n) && @assert length(args) == n "Expected $n arguments for expression $head, $(length(args)) were provided\nArguments: $args"
@@ -385,7 +406,7 @@ function simplify!(ex::Expression)
 
   if head === INVERSE
     a = args[1]::Expression
-    isexpr(a, FACTOR) && return substitute!(ex, factor(cache, scalar_inverse(dereference(a))))
+    isexpr(a, FACTOR) && return substitute!(ex, factor(cache, Expression(cache, SCALAR_INVERSE, dereference(a))))
     isweightedblade(a, 0) && return substitute!(ex, scalar(cache, Expression(cache, INVERSE, a[1]::Expression)))
     isblade(a, 0) && return a
     sc = Expression(cache, GEOMETRIC_PRODUCT, Expression(cache, REVERSE, a), a)
@@ -557,14 +578,14 @@ function simplify_addition(args)
 end
 
 function expected_nargs(head)
-  in(head, (FACTOR, NEGATION, REVERSE, ANTIREVERSE, LEFT_COMPLEMENT, RIGHT_COMPLEMENT, INVERSE, EXPONENTIAL)) && return 1
-  in(head, (INTERIOR_PRODUCT, COMMUTATOR_PRODUCT, SUBTRACTION)) && return 2
+  in(head, (FACTOR, NEGATION, REVERSE, ANTIREVERSE, LEFT_COMPLEMENT, RIGHT_COMPLEMENT, INVERSE, EXPONENTIAL, SCALAR_SQRT, SCALAR_ABS, SCALAR_COS, SCALAR_COSH, SCALAR_SIN, SCALAR_SINH, SCALAR_INVERSE, SCALAR_NAN_TO_ZERO)) && return 1
+  in(head, (INTERIOR_PRODUCT, COMMUTATOR_PRODUCT, SUBTRACTION, SCALAR_DIVISION)) && return 2
   nothing
 end
 
 function infer_grade(cache, head::Head, args)
   head === FACTOR && return 0
-  head === COMPONENT && return 0
+  isscalar(head) && return 0
   head === BLADE && return count(x -> isodd(dereference(cache, x)), map(x -> count(==(x), args), unique(args)))
   if head === GEOMETRIC_PRODUCT
     @assert length(args) == 2 && isexpr(args[1], FACTOR)
@@ -668,38 +689,19 @@ function expand_exponential(b::Expression)
   is_degenerate(sig) && any(iszero(metric(sig, v)) for v in vs) && return Expression(cache, ADDITION, scalar(cache, 1), b)
   b² = Expression(cache, GEOMETRIC_PRODUCT, b, b)
   @assert isscalar(b²)
-  α² = isweightedblade(b²) ? dereference(b²[1]) : 1
-  α = scalar_sqrt(scalar_abs(α²))
+  α² = isweightedblade(b²) ? b²[1] : factor(cache, 1)
+  α = Expression(cache, SCALAR_SQRT, Expression(cache, SCALAR_ABS, α²))
   # The sign may not be deducible from α² directly, so we compute it manually given metric simplifications and blade permutations.
-  is_negative = isodd(count(metric(sig, v) == -1 for v in vs)) ⊻ iseven(length(vs))
+  is_α²_negative = isodd(count(metric(sig, v) == -1 for v in vs)) ⊻ iseven(length(vs))
   # Negative square: cos(α) + A * sin(α) / α
   # Positive square: cosh(α) + A * sinh(α) / α
-  (s, c) = is_negative ? (scalar_sin, scalar_cos) : (scalar_sinh, scalar_cosh)
-  ex = Expression(cache, ADDITION, scalar(cache, c(α)), Expression(cache, GEOMETRIC_PRODUCT, scalar(cache, scalar_nan_to_zero(scalar_divide(s(α), α))), b))
+  (s, c) = is_α²_negative ? (SCALAR_SIN, SCALAR_COS) : (SCALAR_SINH, SCALAR_COSH)
+  ex = Expression(cache, ADDITION, scalar(cache, Expression(cache, c, α)), Expression(cache, GEOMETRIC_PRODUCT, scalar(cache, Expression(cache, SCALAR_NAN_TO_ZERO, Expression(cache, SCALAR_DIVISION, Expression(cache, s, α), α))), b))
   ex
 end
 
-scalar_exponential(x::Number) = exp(x)
-scalar_exponential(x) = :($exp($x))
-scalar_multiply(x::Number, y::Number) = x * y
 scalar_multiply(x, y) = :($x * $y)
-scalar_divide(x, y) = scalar_multiply(x, scalar_inverse(y))
-scalar_nan_to_zero(x::Number) = ifelse(isnan(x), 0, x)
-scalar_nan_to_zero(x) = :(ifelse(isnan($x), 0, $x))
-scalar_inverse(x::Number) = inv(x)
-scalar_inverse(x) = :($inv($x))
-scalar_cos(x::Number) = cos(x)
-scalar_cos(x) = :($cos($x))
-scalar_sin(x::Number) = sin(x)
-scalar_sin(x) = :($sin($x))
-scalar_cosh(x::Number) = cosh(x)
-scalar_cosh(x) = :($cosh($x))
-scalar_sinh(x::Number) = sinh(x)
-scalar_sinh(x) = :($sinh($x))
-scalar_sqrt(x::Number) = sqrt(x)
-scalar_sqrt(x) = :($sqrt($x))
-scalar_abs(x::Number) = abs(x)
-scalar_abs(x) = :($abs($x))
+scalar_multiply(x::Number, y::Number) = x * y
 
 # Basic interfaces.
 
@@ -782,7 +784,7 @@ end
 
 function Base.show(io::IO, ex::Expression)
   isexpr(ex, BLADE) && return print(io, 'e', join(subscript.(dereference.(ex.cache, ex))))
-  isexpr(ex, FACTOR) && return print_factor(io, ex)
+  isexpr(ex, FACTOR) && return print_factor(io, ex[1])
   if isexpr(ex, GEOMETRIC_PRODUCT) && isexpr(ex[end], BLADE)
     if length(ex) == 2 && isexpr(ex[1], FACTOR)
       fac = ex[1]
@@ -811,8 +813,10 @@ function print_factor(io, ex::Expression)
     x, args... = dereference.(ex.cache, ex)
     length(ex) == 1 && return print(io, isa(x, Number) ? x : Expr(:ref, x))
     return print(io, Expr(:ref, x, args...))
+  else
+    fname = nameof(scalar_function(ex.head))
+    print(io, fname, '(', dereference.(ex.cache, ex)..., ')')
   end
-  print_factor(io, dereference(ex))
 end
 
 function print_factor(io, ex)

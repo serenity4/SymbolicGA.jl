@@ -166,7 +166,6 @@ e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
 
   @testset "Inversion" begin
     @test Expression(cache, INVERSE, fac(2.0)) == fac(0.5)
-    @test Expression(cache, INVERSE, fac(:x)) == fac(:($inv(x)))
     @test Expression(cache, INVERSE, sc(2.0)) == sc(0.5)
     @test Expression(cache, INVERSE, bl(1, 2)) == weighted(bl(1, 2), -1)
     @test Expression(cache, INVERSE, weighted(bl(1, 2), 5.0)) == weighted(bl(1, 2), -0.2)
@@ -187,7 +186,7 @@ e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
       b = weighted(blade(_cache, 1, 2), α)
       ex = Expression(_cache, EXPONENTIAL, b)
       @test grade(ex) == [0, 2]
-      @test ex == Expression(_cache, ADDITION, scalar(_cache, cos(α)), Expression(_cache, GEOMETRIC_PRODUCT, scalar(_cache, sin(α) / α), b))
+      @test ex == scalar(_cache, cos(α)) + scalar(_cache, sin(α) / α) ⟑ b
     end
   end
 end;

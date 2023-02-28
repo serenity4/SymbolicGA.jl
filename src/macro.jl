@@ -498,7 +498,7 @@ function to_expr(cache, ex, flatten::Bool, T, variables, stop_early = false)
     !isnothing(rhs) && return rhs
   end
   isa(ex, ID) && (ex = dereference(cache, ex))
-  isexpr(ex, COMPONENT) && return Expr(:call, getcomponent, to_final_expr.(cache, ex.args, flatten, Ref(T), Ref(variables), true)...)
+  isa(ex, Expression) && isscalar(ex.head) && return Expr(:call, scalar_function(ex.head), to_final_expr.(cache, ex.args, flatten, Ref(T), Ref(variables), true)...)
   if isexpr(ex, MULTIVECTOR)
     if flatten
       @assert !isnothing(T)
@@ -519,6 +519,24 @@ function to_expr(cache, ex, flatten::Bool, T, variables, stop_early = false)
   isa(ex, Expr) && !stop_early && return Expr(ex.head, to_expr.(cache, ex.args, flatten, Ref(T), Ref(variables))...)
   ex
 end
+
+function scalar_function(head::Head)
+  head === COMPONENT && return getcomponent
+  head === SCALAR_SQRT && return sqrt
+  head === SCALAR_ABS && return abs
+  head === SCALAR_NAN_TO_ZERO && return nan_to_zero
+  head === SCALAR_INVERSE && return inv
+  head === SCALAR_COS && return cos
+  head === SCALAR_SIN && return sin
+  head === SCALAR_COSH && return cosh
+  head === SCALAR_SINH && return sinh
+  head === SCALAR_DIVISION && return /
+  head === SCALAR_PRODUCT && return *
+  isscalar(head) && error("Head `$head` does not have a corresponding scalar function")
+  error("Expected head `$head` to be denoting a scalar expression")
+end
+
+nan_to_zero(x) = ifelse(isnan(x), zero(x), x)
 
 struct ExecutionGraph
   g::SimpleDiGraph{Int}
