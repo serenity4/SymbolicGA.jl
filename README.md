@@ -18,7 +18,7 @@ using SymbolicGA
 
 # Compute the determinant of a 4x4 matrix.
 # Let A₁, A₂, A₃ and A₄ be the matrix columns.
-A₁, A₂, A₃, A₄ = ntuple(_ -> ntuple(_ -> rand(), 4), 4)
+A₁, A₂, A₃, A₄ = ntuple(_ -> rand(4), 4)
 # The determinant is the four-dimensional "volume" of the subspace spanned by all four column vectors.
 # This is trivially generalized to `n`-by-`n` matrices by using a signature of `n` and wedging all `n` column vectors.
 Δ = @ga 4 A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector
@@ -31,24 +31,26 @@ For advanced usage, tutorials and references, please consult the [official docum
 
 ## Performance
 
-This library applies rules of geometric algebra at compile-time to generate performant code for runtime execution. The resulting instructions are scalar operations, which should be very fast and comparable to hand-written optimized numerical code:
+This library applies rules of geometric algebra at compile-time to generate performant code for runtime execution. The resulting instructions are scalar operations, which should be fast and comparable to hand-written optimized numerical code:
 
 ```julia
 using StaticArrays: @SVector, SMatrix
 using LinearAlgebra: det
 using BenchmarkTools: @btime
+mydet(A₁, A₂, A₃, A₄) = @ga(4, A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector)[]
 A₁ = @SVector rand(4)
 A₂ = @SVector rand(4)
 A₃ = @SVector rand(4)
 A₄ = @SVector rand(4)
 A = SMatrix([A₁ A₂ A₃ A₄])
-Δ = @ga 4 A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector
-@assert Δ[] ≈ det(A)
-@btime (@ga 4 $A₁::Vector ∧ $A₂::Vector ∧ $A₃::Vector ∧ $A₄::Vector)[]
+@assert mydet(A₁, A₂, A₃, A₄) ≈ det(A)
 @btime det($A)
+@btime mydet($A₁, $A₂, $A₃, $A₄)
 ```
 
 ```
-5.743 ns (0 allocations: 0 bytes) # SymbolicGA
-5.916 ns (0 allocations: 0 bytes) # LinearAlgebra
+4.845 ns (0 allocations: 0 bytes) # LinearAlgebra
+13.485 ns (0 allocations: 0 bytes) # SymbolicGA
 ```
+
+It should be noted that in theory any performance gap can be addressed, as we have total control over what code is emitted.

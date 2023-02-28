@@ -9,13 +9,11 @@ f(x, y) = @ga 3 x::Vector ⟑ y::Vector
 
 # Determinant - rank 2
 
+mydet(A₁, A₂) = @ga(2, A₁::Vector ∧ A₂::Vector)[]
 A₁ = @SVector rand(2)
 A₂ = @SVector rand(2)
 A = SMatrix([A₁ A₂])
-Δ = @ga 2 A₁::Vector ∧ A₂::Vector
-@assert Δ[] ≈ det(A)
-
-mydet(A₁, A₂) = (@ga 2 A₁::Vector ∧ A₂::Vector)[]
+@assert mydet(A₁, A₂) ≈ det(A)
 
 @btime det($A)
 @btime mydet($A₁, $A₂)
@@ -26,15 +24,13 @@ mydet(A₁, A₂) = (@ga 2 A₁::Vector ∧ A₂::Vector)[]
 
 # Determinant - rank 4
 
+mydet(A₁, A₂, A₃, A₄) = @ga(4, A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector)[]
 A₁ = @SVector rand(4)
 A₂ = @SVector rand(4)
 A₃ = @SVector rand(4)
 A₄ = @SVector rand(4)
 A = SMatrix([A₁ A₂ A₃ A₄])
-Δ = @ga 4 A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector
-@assert Δ[] ≈ det(A)
-
-mydet(A₁, A₂, A₃, A₄) = (@ga 4 A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector)[]
+@assert mydet(A₁, A₂, A₃, A₄) ≈ det(A)
 
 @btime det($A)
 @btime mydet($A₁, $A₂, $A₃, $A₄)
