@@ -532,6 +532,7 @@ function scalar_function(head::Head)
   head === SCALAR_SINH && return sinh
   head === SCALAR_DIVISION && return /
   head === SCALAR_PRODUCT && return *
+  head === SCALAR_ADDITION && return +
   isscalar(head) && error("Head `$head` does not have a corresponding scalar function")
   error("Expected head `$head` to be denoting a scalar expression")
 end

@@ -103,6 +103,8 @@ e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
     @testset "Simplification of additive factors" begin
       @test fac(2) + fac(3) == fac(5)
       @test fac(:x) + fac(3) + fac(:y) + fac(2) == fac(:x) + fac(:y) + fac(5)
+      @test Expression(cache, SCALAR_PRODUCT, 2, 0.5, 1) == fac(1.0)
+      @test Expression(cache, SCALAR_ADDITION, 2, 0.5, 1) == fac(3.5)
 
       @test x - x == fac(0)
       @test x + x == 2x
@@ -116,7 +118,7 @@ e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
       x2 = sc(Expression(cache, COMPONENT, :x, 2))
       @test x1 * x2 - x2 * x1 == sc(0)
       ex = x1 * x2 + x2 * x1
-      @test isexpr(ex[1], FACTOR) && Set(dereference(ex[1]).args) == Set([:*, 2, x1[1][1], x2[1][1]])
+      @test isexpr(ex[1], FACTOR) && isexpr(ex[1][1], SCALAR_PRODUCT) && Set(dereference.(cache, ex[1][1].args)) == Set([2, x1[1][1], x2[1][1]])
       @test x1 * x2 + x2 * x1 - 2 * x1 * x2 == sc(0)
     end
   end
