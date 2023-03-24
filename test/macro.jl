@@ -1,13 +1,4 @@
-using SymbolicGA: extract_weights, input_expression, extract_expression, restructure, expand_variables, traverse, builtin_varinfo, argument_count, fill_argument_slots
-
-function traverse_collect(f, x, T = Expression)
-  res = []
-  traverse(x, T) do y
-    f(y) === true && push!(res, y)
-    nothing
-  end
-  res
-end
+using SymbolicGA: extract_weights, input_expression, extract_expression, restructure, expand_variables, builtin_varinfo, argument_count, fill_argument_slots
 
 @testset "Macro frontend" begin
   @testset "Function definition" begin
@@ -71,7 +62,7 @@ end
       radius(S::Quadvector)
     end
     ex2 = expand_variables(ex, sig, builtin_varinfo(sig; warn_override = false))
-    symbols = traverse_collect(ex -> in(ex, (:radius, :radius2, :normalize, :weight, :magnitude2, :n)), ex2, Expr)
+    symbols = expression_nodes(ex -> in(ex, (:radius, :radius2, :normalize, :weight, :magnitude2, :n)), ex2, Expr)
     @test isempty(symbols)
 
     @testset "Redefinition warnings" begin

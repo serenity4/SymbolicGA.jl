@@ -27,7 +27,7 @@ sphere_radius(X) = sqrt(@cga3(radius2(X::Quadvector))[])
 ≊(a, b) = all(isapprox.(a, b; atol = 1e-15))
 
 @testset "3D Conformal Geometric Algebra" begin
-  isnullvector(X) = iszero(@cga3(magnitude2(X::Vector))[])
+  isnullvector(X) = isapprox(@cga3(magnitude2(X::Vector))[], 0; atol = 1e-14)
   @test (@cga3 n ⋅ n̄) == (@cga3 n̄ ⋅ n) == KVector{0,5}((-1.0,))
   @test (@cga3 magnitude2(n ⦿ n)) == (@cga3 magnitude2(n̄ ⦿ n̄)) == KVector{0,5}((0,))
   A = point(sqrt(2) .* (1, 0, 0))

@@ -181,6 +181,7 @@ end
 function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo} = nothing)
   ex = extract_expression(ex, sig, varinfo)
   ex = restructure(ex)
+  ex = optimize!(ex)
 end
 
 """
