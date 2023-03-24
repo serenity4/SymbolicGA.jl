@@ -131,6 +131,10 @@ Base.getproperty(ex::Expression, field::Symbol) = field === :cache ? getfield(ex
 ExpressionSpec(cache::ExpressionCache, head::Head, args::AbstractVector) = ExpressionSpec(head, substitute_objects(cache, args))
 ExpressionSpec(cache::ExpressionCache, head::Head, args...) = ExpressionSpec(cache, head, collect(Any, args))
 
+function uncached_expression(cache::ExpressionCache, head::Head, args...)
+  Expression(head, substitute_objects(cache, collect(Any, args)), cache; simplify = false)
+end
+
 Expression(head::Head, ex::Expression) = Expression(ex.cache, head, ex)
 Expression(cache::ExpressionCache, head::Head, args...) = Expression(cache, ExpressionSpec(cache, head, args...))
 function Expression(cache::ExpressionCache, spec::ExpressionSpec)

@@ -12,6 +12,7 @@ include("passes.jl")
 include("interface.jl")
 include("macro.jl")
 include("types.jl")
+include("optimization.jl")
 
 export Signature,
   @ga,

@@ -1,5 +1,5 @@
 using SymbolicGA, Test
-using SymbolicGA: Expression, ExpressionCache, ExpressionSpec, isexpr, postwalk, simplify!, isweighted, getcomponent, blade, factor, weighted, scalar, antiscalar, kvector, multivector, antigrade, antireverse, exterior_product, ⟑, ∧, Head, COMPONENT, FACTOR, BLADE, KVECTOR, MULTIVECTOR, ADDITION, SUBTRACTION, NEGATION, REVERSE, ANTIREVERSE, LEFT_COMPLEMENT, RIGHT_COMPLEMENT, GEOMETRIC_PRODUCT, EXTERIOR_PRODUCT, INTERIOR_PRODUCT, COMMUTATOR_PRODUCT, INVERSE, EXPONENTIAL, SCALAR_ADDITION, SCALAR_PRODUCT, Term
+using SymbolicGA: Expression, ExpressionCache, ExpressionSpec, isexpr, postwalk, simplify!, isweighted, getcomponent, blade, factor, weighted, scalar, antiscalar, kvector, multivector, antigrade, antireverse, exterior_product, ⟑, ∧, Head, COMPONENT, FACTOR, BLADE, KVECTOR, MULTIVECTOR, ADDITION, SUBTRACTION, NEGATION, REVERSE, ANTIREVERSE, LEFT_COMPLEMENT, RIGHT_COMPLEMENT, GEOMETRIC_PRODUCT, EXTERIOR_PRODUCT, INTERIOR_PRODUCT, COMMUTATOR_PRODUCT, INVERSE, EXPONENTIAL, SCALAR_ADDITION, SCALAR_PRODUCT, Term, may_reuse, uncached_expression
 
 ENV["JULIA_DEBUG"] = "SymbolicGA"
 ENV["JULIA_DEBUG"] = ""
@@ -7,6 +7,7 @@ ENV["JULIA_DEBUG"] = ""
 @testset "SymbolicGA.jl" begin
     include("signatures.jl")
     include("expressions.jl")
+    include("optimization.jl")
     include("passes.jl")
     include("types.jl")
     include("macro.jl")
