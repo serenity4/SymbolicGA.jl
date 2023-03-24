@@ -20,6 +20,7 @@ uncached_mul(x, ys...; cache = x.cache) = uncached_expression(cache, SCALAR_PROD
   iter = IterativeRefinement(ex)
   apply!(iter)
   @test ex == uncached_add(uncached_add(:y, b; cache), b)
+  @test iter.metrics.reused == 1
 
   abcd = uncached_add(:a, :b, :c, :d; cache)
   expr = Expr(:call, :f, abcd)
@@ -30,7 +31,9 @@ uncached_mul(x, ys...; cache = x.cache) = uncached_expression(cache, SCALAR_PROD
 
   a = add(:x, :y, :z; cache)
   ex = uncached_add(a, a, uncached_mul(b, uncached_add(a, a)))
-  optimize!(ex)
+  iter = IterativeRefinement(ex)
+  apply!(iter)
   @test a == uncached_add(:y, uncached_add(:x, :z; cache); cache)
   @test ex == uncached_add(uncached_mul(b, uncached_add(a, a)), uncached_add(a, a))
+  @test iter.metrics.reused == 2
 end;

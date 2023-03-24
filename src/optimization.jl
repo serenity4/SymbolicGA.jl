@@ -1,3 +1,7 @@
+mutable struct RefinementMetrics
+  reused::Int
+end
+
 struct IterativeRefinement
   # Having an vector of `ExpressionSpec` instead of `Expression`s
   # would allow lazy substitutions.
@@ -5,6 +9,7 @@ struct IterativeRefinement
   # For now, we can directly mutate expressions.
   available::Dict{Int,Vector{Expression}}
   expressions::Vector{Expression}
+  metrics::RefinementMetrics
 end
 
 function IterativeRefinement(exs::Vector{Expression})
@@ -12,7 +17,7 @@ function IterativeRefinement(exs::Vector{Expression})
   for ex in exs
     make_available!(available, ex)
   end
-  IterativeRefinement(available, exs)
+  IterativeRefinement(available, exs, RefinementMetrics(0))
 end
 IterativeRefinement(ex::Expression) = IterativeRefinement(gather_scalar_expressions!(Expression[], ex))
 
@@ -104,5 +109,6 @@ function reuse!(ex::Expression, reused::Vector{Term}, iter::IterativeRefinement)
   available_n = iter.available[n]
   deleteat!(available_n, findfirst(x -> x === ex, available_n)::Int)
   make_available!(iter, ex)
+  iter.metrics.reused += 1
   ex
 end
