@@ -2,6 +2,8 @@ mutable struct RefinementMetrics
   reused::Int
 end
 
+Base.show(io::IO, metrics::RefinementMetrics) = print(io, RefinementMetrics, '(', metrics.reused, " reuses)")
+
 struct IterativeRefinement
   # Having an vector of `ExpressionSpec` instead of `Expression`s
   # would allow lazy substitutions.
@@ -34,23 +36,15 @@ function may_reuse(ex::Expression, available::Expression)
 end
 
 function optimize!(ex::Expression)
-  apply!(IterativeRefinement(ex))
+  iter = IterativeRefinement(ex)
+  apply!(iter)
   ex
 end
 
 function gather_scalar_expressions!(exs::Vector{Expression}, ex::Expression)
   (; cache) = ex
-  traverse(ex) do ex
+  traverse(ex; retraversal = Retraversal(cache, Expr)) do ex
     isexpr(ex, (SCALAR_ADDITION, SCALAR_PRODUCT)) && push!(exs, ex)
-    isa(ex, Expression) && for arg in ex
-      arg = dereference(cache, arg)
-      isa(arg, Expr) && traverse(arg, Expr) do subex
-        isa(subex, Expr) && for subarg in subex.args
-          isa(subarg, Expression) && gather_scalar_expressions!(exs, subarg)
-        end
-        true
-      end
-    end
     true
   end
   exs

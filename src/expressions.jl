@@ -745,12 +745,42 @@ walk(ex, inner, outer) = outer(ex)
 postwalk(f, ex) = walk(ex, x -> postwalk(f, x), f)
 prewalk(f, ex) = walk(f(ex), x -> prewalk(f, x), identity)
 
-function traverse(f, ex, ::Type{T} = Expression) where {T}
-  f(ex) === false && return nothing
-  !isa(ex, T) && return nothing
-  for arg in ex.args
-    traverse(f, arg, T)
+"""
+    Retraversal{RT}(should_retraverse, retraversed)
+
+Allow a retraversal to be conditionally done when `traverse(f, ex, T; retraversal)` encounters an element
+that is not a `T`.
+
+For any such element, if `should_retraverse` returns true, then a secondary traversal is performed
+on `retraversed(ex)::RT` with type `RT` as the traversal type. Upon encountering an object of type `T`,
+the initial traversal is continued from this object with `traverse(f, ex, T; retraversal)`.
+"""
+struct Retraversal{RT}
+  should_retraverse::Function # _ -> Bool
+  retraversed::Optional{Function} # _ -> RT 
+end
+
+Retraversal(RT::DataType) = Retraversal{RT}(x -> isa(x, RT), nothing)
+Retraversal(cache::ExpressionCache, RT::Type{Expr}) = Retraversal{RT}(x -> isa(dereference(cache, x), RT), x -> dereference(cache, x))
+
+function traverse(f, ex, ::Type{T} = Expression; retraversal::Optional{Retraversal{RT}} = nothing) where {T,RT}
+  f(ex) === false && return
+  if !isa(ex, T)
+    isnothing(retraversal) && return
+    retraversal.should_retraverse(ex) || return
+    traverse(retraversal.retraversed(ex)::RT, RT) do subex
+      isa(subex, T) && traverse(f, subex, T; retraversal)
+      true
+    end
+    return
   end
+  for arg in ex.args
+    traverse(f, arg, T; retraversal)
+  end
+end
+
+function complexity(ex::Expression)
+
 end
 
 # Display.
