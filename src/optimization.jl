@@ -3,7 +3,7 @@ mutable struct RefinementMetrics
   splits::Int
 end
 
-Base.show(io::IO, metrics::RefinementMetrics) = print(io, RefinementMetrics, '(', sprint(show, metrics), ")")
+Base.show(io::IO, metrics::RefinementMetrics) = print(io, RefinementMetrics, '(', sprint(show_metrics, metrics), ")")
 show_metrics(io::IO, metrics::RefinementMetrics) = print(io, metrics.reused, " reuses, ", metrics.splits, " splits")
 
 struct IterativeRefinement
@@ -33,8 +33,13 @@ end
 make_available!(iter::IterativeRefinement, ex::Expression) = make_available!(iter.available, ex)
 
 function may_reuse(ex::Expression, available::Expression)
+  isexpr(ex, available.head) || return false
+  may_reuse(ex, available.args)
+end
+
+function may_reuse(ex::Expression, available::Vector{<:Term})
   length(available) ≥ length(ex) && return false
-  isexpr(ex, available.head) && all(in(ex), available.args)
+   all(in(ex), available)
 end
 
 function optimize!(ex::Expression)
@@ -81,7 +86,7 @@ function exploit_available!(iter::IterativeRefinement)
   # a lesser potential for reuse.
   for (i, available) in sort(pairs(iter.available), by = first, rev = true)
     filter!(iter.expressions) do ex
-      length(ex) == 2 && return false
+      length(ex) ≤ 2 && return false
       length(ex) ≤ i && return true
       reuses = findall(x -> may_reuse(ex, x), available)
       isempty(reuses) && return true
@@ -89,7 +94,7 @@ function exploit_available!(iter::IterativeRefinement)
       # TODO: use the split information to simulate what other reuses would be unlocked with the new split,
       # then choose the reuse with the greater potential among all possible reuses.
       reuse!(ex, reused, iter)
-      length(ex) == 2
+      length(ex) > 2
     end
   end
   iter.metrics.reused - nreused
@@ -136,24 +141,49 @@ function reuse!(ex::Expression, reused::Vector{Term})
     false
   end
   @assert isempty(remaining)
-  push!(ex.args, uncached_expression(ex.cache, ex.head, reused))
+  reused_ex = unsimplified_expression(ex.cache, ex.head, reused)
+  push!(ex.args, reused_ex)
   @assert length(ex) > 1
   ex
 end
 
 function reuse!(ex::Expression, reused::Vector{Term}, iter::IterativeRefinement)
   n = length(ex)
-  reuse!(ex, reused)
+  reused_ex = reuse!(ex, reused)
   available_n = iter.available[n]
   deleteat!(available_n, findfirst(x -> x === ex, available_n)::Int)
   make_available!(iter, ex)
+  make_available!(iter, reused_ex)
   iter.metrics.reused += 1
   ex
 end
 
+function reusability_score(split::Vector{<:Term}, head::Head, iter::IterativeRefinement)
+  count(ex -> isexpr(ex, head) && may_reuse(ex, split), iter.expressions)
+end
+
+function find_split(ex::Expression, iter::IterativeRefinement)
+  best = nothing
+  best_score = 0
+  n = length(iter.expressions)
+  for i in reverse(2:(length(ex) - 1))
+    generator = binomial(length(ex), i) ≤ 10 ? combinations(eachindex(ex.args), i) : (select(eachindex(ex.args), i) for _ in 1:10)
+    for indices in generator
+      set = ex.args[indices]
+      score = reusability_score(set, ex.head, iter)
+      score > 0.1n && return set
+      if isnothing(best)
+        best, best_score = set, score
+      elseif best_score < score
+        best, best_score = set, score
+      end
+    end
+  end
+  best::Vector{Term}
+end
+
 function split!(ex::Expression, iter::IterativeRefinement)
-  # Split 50/50.
-  split = collect(Iterators.drop(ex.args, fld(length(ex.args), 2)))
+  split = find_split(ex, iter)
   iter.metrics.splits += 1
   reuse!(ex, split, iter)
   # Don't record the reuse.

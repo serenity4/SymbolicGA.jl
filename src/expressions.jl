@@ -117,12 +117,13 @@ struct ExpressionCache
   counter::IDCounter
   primitive_ids::Dict{Object,ID}
   primitives::Dict{ID,Object}
+  expressions::Dict{ExpressionSpec,Expression}
   substitutions::Dict{ExpressionSpec,Expression}
 end
 
 Base.broadcastable(cache::ExpressionCache) = Ref(cache)
 
-ExpressionCache(sig::Signature) = ExpressionCache(sig, IDCounter(), IdDict(), IdDict(), Dict())
+ExpressionCache(sig::Signature) = ExpressionCache(sig, IDCounter(), IdDict(), IdDict(), Dict(), Dict())
 
 is_expression_caching_enabled() = true
 
@@ -131,14 +132,13 @@ Base.getproperty(ex::Expression, field::Symbol) = field === :cache ? getfield(ex
 ExpressionSpec(cache::ExpressionCache, head::Head, args::AbstractVector) = ExpressionSpec(head, substitute_objects(cache, args))
 ExpressionSpec(cache::ExpressionCache, head::Head, args...) = ExpressionSpec(cache, head, collect(Any, args))
 
-function uncached_expression(cache::ExpressionCache, head::Head, args...)
-  uncached_expression(cache, head, collect(Any, args))
-end
-function uncached_expression(cache::ExpressionCache, head::Head, args::Vector{Any})
-  uncached_expression(cache, head, substitute_objects(cache, args))
-end
-function uncached_expression(cache::ExpressionCache, head::Head, args::Vector{Term})
-  Expression(head, args, cache; simplify = false)
+unsimplified_expression(cache::ExpressionCache, head::Head, args...) = unsimplified_expression(cache, ExpressionSpec(cache, head, args...))
+function unsimplified_expression(cache::ExpressionCache, spec::ExpressionSpec)
+  ex = get(cache.expressions, spec, nothing)
+  !isnothing(ex) && return ex
+  ex = Expression(spec.head, spec.args, cache; simplify = false)
+  cache.expressions[spec] = ex
+  ex
 end
 
 Expression(head::Head, ex::Expression) = Expression(ex.cache, head, ex)

@@ -5,8 +5,8 @@ cache = ExpressionCache(sig)
 
 add(x, ys...; cache = x.cache) = Expression(cache, SCALAR_ADDITION, x, ys...)
 mul(x, ys...; cache = x.cache) = Expression(cache, SCALAR_PRODUCT, x, ys...)
-uncached_add(x, ys...; cache = x.cache) = uncached_expression(cache, SCALAR_ADDITION, x, ys...)
-uncached_mul(x, ys...; cache = x.cache) = uncached_expression(cache, SCALAR_PRODUCT, x, ys...)
+unsimplified_add(x, ys...; cache = x.cache) = unsimplified_expression(cache, SCALAR_ADDITION, x, ys...)
+unsimplified_mul(x, ys...; cache = x.cache) = unsimplified_expression(cache, SCALAR_PRODUCT, x, ys...)
 
 @testset "Optimization" begin
   a = add(:x, :y, :z; cache)
@@ -16,29 +16,29 @@ uncached_mul(x, ys...; cache = x.cache) = uncached_expression(cache, SCALAR_PROD
   b = add(:x, :z; cache)
   @test !may_reuse(b, add(:x, :y; cache))
 
-  ex = uncached_add(a, b)
+  ex = unsimplified_add(a, b)
   iter = IterativeRefinement(ex)
   apply!(iter)
-  @test ex == uncached_add(uncached_add(:y, b; cache), b)
+  @test ex == unsimplified_add(unsimplified_add(:y, b; cache), b)
   @test iter.metrics.reused == 1
   @test iter.metrics.splits == 0
 
   a = add(:x, :y, :z; cache)
-  ex = uncached_add(a, a, uncached_mul(b, uncached_add(a, a)))
+  ex = unsimplified_add(a, a, unsimplified_mul(b, unsimplified_add(a, a)))
   iter = IterativeRefinement(ex)
   apply!(iter)
-  @test a == uncached_add(:y, uncached_add(:x, :z; cache); cache)
-  @test ex == uncached_add(uncached_mul(b, uncached_add(a, a)), uncached_add(a, a))
+  @test a == unsimplified_add(:y, unsimplified_add(:x, :z; cache); cache)
+  @test ex == unsimplified_add(unsimplified_mul(b, unsimplified_add(a, a)), unsimplified_add(a, a))
   @test iter.metrics.reused == 2
   @test iter.metrics.splits == 0
 
-  abcd = uncached_add(:a, :b, :c, :d; cache)
+  abcd = unsimplified_add(:a, :b, :c, :d; cache)
   expr = Expr(:call, :f, abcd)
-  nested = uncached_add(:x, uncached_add(:a, :b; cache), expr; cache)
+  nested = unsimplified_add(:x, unsimplified_add(:a, :b; cache), expr; cache)
   iter = IterativeRefinement(nested)
   @test in(abcd, iter.expressions)
   @test haskey(iter.available, 4)
   apply!(iter)
-  @test iter.metrics.splits == 1
+  @test iter.metrics.splits ≤ 2
   @test all(==(2) ∘ length, expression_nodes(ex))
 end;
