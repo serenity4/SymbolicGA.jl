@@ -10,11 +10,11 @@ unsimplified_mul(x, ys...; cache = x.cache) = unsimplified_expression(cache, SCA
 
 @testset "Optimization" begin
   a = add(:x, :y, :z; cache)
-  @test !may_reuse(a, a)
-  @test may_reuse(a, add(:x, :y; cache))
-  @test !may_reuse(a, mul(:x, :y; cache))
+  @test !may_reuse(a, ExpressionSpec(a))
+  @test may_reuse(a, ExpressionSpec(add(:x, :y; cache)))
+  @test !may_reuse(a, ExpressionSpec(mul(:x, :y; cache)))
   b = add(:x, :z; cache)
-  @test !may_reuse(b, add(:x, :y; cache))
+  @test !may_reuse(b, ExpressionSpec(add(:x, :y; cache)))
 
   ex = unsimplified_add(a, b)
   iter = IterativeRefinement(ex)

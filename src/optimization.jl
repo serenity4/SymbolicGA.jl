@@ -11,13 +11,13 @@ struct IterativeRefinement
   # would allow lazy substitutions.
   # Lazy vs eager is in favor of lazy only if we intend to backtrack.
   # For now, we can directly mutate expressions.
-  available::Dict{Int,Vector{Expression}}
+  available::Dict{Int,Vector{Pair{ExpressionSpec,Expression}}}
   expressions::Vector{Expression}
   metrics::RefinementMetrics
 end
 
 function IterativeRefinement(exs::Vector{Expression})
-  available = Dict{Int,Vector{Expression}}()
+  available = Dict{Int,Vector{Pair{ExpressionSpec,Expression}}}()
   for ex in exs
     make_available!(available, ex)
   end
@@ -25,14 +25,15 @@ function IterativeRefinement(exs::Vector{Expression})
 end
 IterativeRefinement(ex::Expression) = IterativeRefinement(gather_scalar_expressions!(Expression[], ex))
 
-function make_available!(available::Dict{Int,Vector{Expression}}, ex::Expression)
+function make_available!(available::Dict{Int,Vector{Pair{ExpressionSpec,Expression}}}, ex::Expression)
   n = length(ex)
-  available_n = get!(Vector{Expression}, available, n)
-  !in(available_n, ex) && push!(available_n, ex)
+  available_n = get!(Vector{Pair{ExpressionSpec, Expression}}, available, n)
+  spec = ExpressionSpec(ex)
+  !in(available_n, spec => ex) && push!(available_n, spec => ex)
 end
 make_available!(iter::IterativeRefinement, ex::Expression) = make_available!(iter.available, ex)
 
-function may_reuse(ex::Expression, available::Expression)
+function may_reuse(ex::Expression, available::ExpressionSpec)
   isexpr(ex, available.head) || return false
   may_reuse(ex, available.args)
 end
@@ -52,47 +53,50 @@ end
 function gather_scalar_expressions!(exs::Vector{Expression}, ex::Expression)
   (; cache) = ex
   traverse(ex; retraversal = Retraversal(cache, Expr)) do ex
-    isexpr(ex, (SCALAR_ADDITION, SCALAR_PRODUCT)) && push!(exs, ex)
+    isexpr(ex, (SCALAR_ADDITION, SCALAR_PRODUCT)) && !in(ex, exs) && push!(exs, ex)
     true
   end
   exs
 end
 
 function apply!(iter::IterativeRefinement)
+  @assert allunique(iter.expressions)
   exploited = exploit!(iter)
-  @debug "Exploited: $exploited"
+  @debug "Exploited: $exploited ($(length(iter.expressions)) remaining)"
   explored = -1
-  while exploited ≠ 0 || explored ≠ 0
+  while length(iter.expressions) > 0 && (exploited ≠ 0 || explored ≠ 0)
+    @assert allunique(iter.expressions)
     explored = explore!(iter)
     exploited = exploit!(iter)
-    @debug "Exploited: $exploited, explored: $explored"
+    @debug "Exploited: $exploited ($(length(iter.expressions)) remaining), explored: $explored"
   end
 end
 
 function exploit!(iter::IterativeRefinement)
   exploited = 0
   while true
-    exploited1 = exploit_available!(iter)
+    exploited1 = reuse_available!(iter)
     exploited1 == 0 && return exploited
     exploited += exploited1
   end
   exploited
 end
 
-function exploit_available!(iter::IterativeRefinement)
+function reuse_available!(iter::IterativeRefinement)
   nreused = iter.metrics.reused
-  # TODO: maybe to a 50/50 split instead of Sgoing for larger reuses first,
-  # as it might yields more expressions that are split like 90/10 offering
+  # TODO: maybe do a 50/50 split instead of going for larger reuses first,
+  # as it might yield more expressions that are split like 90/10 offering
   # a lesser potential for reuse.
   for (i, available) in sort(pairs(iter.available), by = first, rev = true)
     filter!(iter.expressions) do ex
       length(ex) ≤ 2 && return false
       length(ex) ≤ i && return true
-      reuses = findall(x -> may_reuse(ex, x), available)
+      reuses = findall(x -> may_reuse(ex, x.first), available)
       isempty(reuses) && return true
-      reused, split = simulate_reuse(ex, available[first(reuses)])
       # TODO: use the split information to simulate what other reuses would be unlocked with the new split,
       # then choose the reuse with the greater potential among all possible reuses.
+      (_, reused_ex) = available[first(reuses)]
+      reused, split = simulate_reuse(ex, reused_ex)
       reuse!(ex, reused, iter)
       length(ex) > 2
     end
@@ -101,9 +105,15 @@ function exploit_available!(iter::IterativeRefinement)
 end
 
 function explore!(iter::IterativeRefinement)
+  nsplits = split_descending!(iter)
+  filter!(x -> length(x) > 2, iter.expressions)
+  nsplits
+end
+
+function split_descending!(iter::IterativeRefinement)
   lengths = unique(length(ex) for ex in iter.expressions)
-  nsplits = iter.metrics.splits
-  for n in sort(lengths, rev = true)
+  ref = iter.metrics.splits
+  for n in sort!(lengths, rev = true)
     n ≤ 2 && return 0
     for ex in iter.expressions
       length(ex) == n || continue
@@ -112,8 +122,8 @@ function explore!(iter::IterativeRefinement)
     # Stop when at least 1 split has been performed.
     # This ensures that splits on large expressions can be
     # exploited before smaller expressions are split.
-    explored = iter.metrics.splits - nsplits
-    explored > 0 && return explored
+    nsplits = iter.metrics.splits - ref
+    nsplits > 0 && return nsplits
   end
   0
 end
@@ -150,16 +160,25 @@ end
 function reuse!(ex::Expression, reused::Vector{Term}, iter::IterativeRefinement)
   n = length(ex)
   reused_ex = reuse!(ex, reused)
-  available_n = iter.available[n]
-  deleteat!(available_n, findfirst(x -> x === ex, available_n)::Int)
   make_available!(iter, ex)
   make_available!(iter, reused_ex)
+  length(reused_ex) > 2 && !in(reused_ex, iter.expressions) && push!(iter.expressions, reused_ex)
   iter.metrics.reused += 1
   ex
 end
 
 function reusability_score(split::Vector{<:Term}, head::Head, iter::IterativeRefinement)
   count(ex -> isexpr(ex, head) && may_reuse(ex, split), iter.expressions)
+end
+
+function select(args, n)
+  sampled = keytype(args)[]
+  set = keys(args)
+  while length(sampled) < n
+    i = rand(set)
+    !in(i, sampled) && push!(sampled, i)
+  end
+  args[sampled]
 end
 
 function find_split(ex::Expression, iter::IterativeRefinement)

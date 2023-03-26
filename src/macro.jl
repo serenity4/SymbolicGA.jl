@@ -548,6 +548,16 @@ end
 
 ExecutionGraph() = ExecutionGraph(SimpleDiGraph{Int}(), Dict(), Dict())
 
+function ExecutionGraph(ex)
+  uses = Dict{Term,Int}()
+  g = ExecutionGraph()
+  add_node_uses!(uses, g, ex.cache, get_vertex!(g, ex), ex)
+  rem_edge!(g.g, 1, 1)
+  g
+end
+
+traverse(g::ExecutionGraph) = reverse(topological_sort_by_dfs(g.g))
+
 function get_vertex!(g::ExecutionGraph, ex::Union{ID,Expression})
   v = get(g.exs, ex, nothing)
   !isnothing(v) && return v
@@ -590,14 +600,11 @@ end
 
 function define_variables(ex::Expression, flatten::Bool, T)
   variables = Dict{Term,Symbol}()
-  uses = Dict{Term,Int}()
-  g = ExecutionGraph()
-  add_node_uses!(uses, g, ex.cache, get_vertex!(g, ex), ex)
-  rem_edge!(g.g, 1, 1)
+  g = ExecutionGraph(ex)
   definitions = Expr(:block)
 
   # Recursively generate code using the previously defined variables.
-  for v in reverse(topological_sort_by_dfs(g.g))
+  for v in traverse(g)
     x = g.exs_inv[v]
     code = to_final_expr(ex.cache, x, flatten, T, variables)
     if isa(code, Expr)

@@ -104,6 +104,7 @@ end
 
 Base.:(==)(x::ExpressionSpec, y::ExpressionSpec) = x.head == y.head && x.args == y.args
 Base.hash(spec::ExpressionSpec, h::UInt) = hash(hash(spec.head) + hash(spec.args), h)
+ExpressionSpec(ex::Expression) = ExpressionSpec(ex.head, ex.args)
 
 struct Object
   val::Any

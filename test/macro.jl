@@ -186,5 +186,5 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   z2 = (3, z..., 2)
   @test (@ga 3 𝟏 ∧ z2::Multivector) == (@ga 3 𝟏 ∧ (3::e + x::1 + y::2 + 2::e̅))
 
-  @test_throws "Unknown grade projection" @eval @ga 3 x::Unkonwn
+  @test_throws "Unknown grade projection" @eval @ga 3 x::Unknown
 end;
