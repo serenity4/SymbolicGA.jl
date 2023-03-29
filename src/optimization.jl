@@ -94,7 +94,7 @@ function reuse_available!(iter::IterativeRefinement)
   # TODO: maybe do a 50/50 split instead of going for larger reuses first,
   # as it might yield more expressions that are split like 90/10 offering
   # a lesser potential for reuse.
-  for (i, available) in sort(pairs(iter.available), by = first, rev = true)
+  for (i, available) in sort!(collect(iter.available), by = first, rev = true)
     filter!(iter.expressions) do ex
       length(ex) ≤ 2 && return false
       length(ex) ≤ i && return true
