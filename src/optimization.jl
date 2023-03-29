@@ -23,7 +23,9 @@ function IterativeRefinement(exs::Vector{Expression})
   end
   IterativeRefinement(available, exs, RefinementMetrics(0, 0))
 end
-IterativeRefinement(ex::Expression) = IterativeRefinement(gather_scalar_expressions!(Expression[], ex))
+IterativeRefinement(ex::Expression) = IterativeRefinement(gather_scalar_expressions(ex))
+
+gather_scalar_expressions(ex::Expression) = gather_scalar_expressions!(Expression[], ex)
 
 function make_available!(available::Dict{Int,Vector{Pair{ExpressionSpec,Expression}}}, ex::Expression)
   n = length(ex)
