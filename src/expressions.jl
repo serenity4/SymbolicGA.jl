@@ -491,7 +491,7 @@ function distribute1(cache, args, add_op::Head, mul_op::Head)
   x, ys = args[1], @view args[2:end]
   base = isexpr(x, add_op) ? x.args : [x]
   for y in ys
-    new_base = []
+    new_base = Term[]
     yterms = isexpr(y, add_op) ? y.args : (y,)
     for xterm in base
       for yterm in yterms
@@ -519,13 +519,13 @@ function simplify_addition(ex::Expression)
   counter = 0
   ids = Dict{Any,Int}()
   id_counts = Dict{Int,Int}()
-  new_args = []
+  new_args = Term[]
   for arg in ex
     n = 1
     obj = arg
     if isexpr(arg, SCALAR_PRODUCT)
       @assert length(arg) > 1
-      xs = []
+      xs = Term[]
       for x in arg
         xv = dereference(cache, x)
         if isa(xv, Int) || isa(xv, Integer)
@@ -542,7 +542,7 @@ function simplify_addition(ex::Expression)
   for (x, id) in sort!(collect(ids), by = last)
     n = id_counts[id]
     n == 0 && continue
-    isa(x, Vector{Any}) && (x = Expression(cache, SCALAR_PRODUCT, x...))
+    isa(x, Vector{Term}) && (x = Expression(cache, SCALAR_PRODUCT, x...))
     if n == 1
       push!(new_args, x)
     else
@@ -741,10 +741,10 @@ exterior_product(x::Expression, y::Expression) = Expression(x.cache, EXTERIOR_PR
 
 # Traversal/transformation utilities.
 
-walk(ex::Expression, inner, outer) = outer(Expression(ex.cache, ex.head, Any[inner(x) for x in ex if !isnothing(x)]))
-walk(ex, inner, outer) = outer(ex)
-postwalk(f, ex) = walk(ex, x -> postwalk(f, x), f)
-prewalk(f, ex) = walk(f(ex), x -> prewalk(f, x), identity)
+walk(ex::Expression, inner::I, outer::O) where {I,O} = outer(Expression(ex.cache, ex.head, Any[inner(x) for x in ex if !isnothing(x)]))
+walk(ex, inner::I, outer::O) where {I,O} = outer(ex)
+postwalk(f::F, ex) where {F} = walk(ex, x -> postwalk(f, x), f)
+prewalk(f::F, ex) where {F} = walk(f(ex), x -> prewalk(f, x), identity)
 
 """
     Retraversal{RT}(should_retraverse, retraversed)
@@ -756,19 +756,20 @@ For any such element, if `should_retraverse` returns true, then a secondary trav
 on `retraversed(ex)::RT` with type `RT` as the traversal type. Upon encountering an object of type `T`,
 the initial traversal is continued from this object with `traverse(f, ex, T; retraversal)`.
 """
-struct Retraversal{RT}
-  should_retraverse::Function # _ -> Bool
-  retraversed::Optional{Function} # _ -> RT 
+struct Retraversal{RT,F1<:Function,F2<:Optional{Function}}
+  should_retraverse::F1 # _ -> Bool
+  retraversed::F2 # _ -> RT 
 end
+Retraversal{RT}(should_retraverse, retraversed) where {RT} = Retraversal{RT,typeof(should_retraverse),typeof(retraversed)}(should_retraverse, retraversed)
 
 Retraversal(RT::DataType) = Retraversal{RT}(x -> isa(x, RT), nothing)
 Retraversal(cache::ExpressionCache, RT::Type{Expr}) = Retraversal{RT}(x -> isa(dereference(cache, x), RT), x -> dereference(cache, x))
 
-function traverse(f, ex, ::Type{T} = Expression; retraversal::Optional{Retraversal{RT}} = nothing) where {T,RT}
+function traverse(f::F, ex, ::Type{T} = Expression; retraversal::Optional{Retraversal{RT}} = nothing) where {F,T,RT}
   f(ex) === false && return
   if !isa(ex, T)
     isnothing(retraversal) && return
-    retraversal.should_retraverse(ex) || return
+    retraversal.should_retraverse(ex)::Bool || return
     traverse(retraversal.retraversed(ex)::RT, RT) do subex
       isa(subex, T) && traverse(f, subex, T; retraversal)
       true

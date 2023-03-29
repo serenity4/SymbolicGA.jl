@@ -253,11 +253,11 @@ function extract_grade_from_annotation(t, sig)
 end
 
 function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
-  ex = expand_variables(ex, sig, varinfo)
+  ex2 = expand_variables(ex, sig, varinfo)
   @debug "After variable expansion: $(stringc(ex))"
 
   # Make sure calls in annotations are not interpreted as actual operations.
-  ex = prewalk(ex) do ex
+  ex3 = prewalk(ex2) do ex
     if Meta.isexpr(ex, :(::)) && Meta.isexpr(ex.args[2], :call)
       ex.args[2] = Expr(:annotate_projection, ex.args[2].args...)
     end
@@ -265,7 +265,7 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
   end
 
   cache = ExpressionCache(sig)
-  ex = postwalk(ex) do ex
+  ex4 = postwalk(ex3) do ex
     if Meta.isexpr(ex, ADJOINT_SYMBOL)
       Expression(cache, REVERSE, ex.args[1]::Expression)
     elseif Meta.isexpr(ex, :call) && isa(ex.args[1], Symbol)
@@ -291,8 +291,8 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
     end
   end
 
-  isa(ex, Expression) || error("Could not fully extract expression: $ex\n\nOutermost expression has head $(ex.head) and arguments $(ex.args)\n")
-  ex
+  isa(ex4, Expression) || error("Could not fully extract expression: $ex4\n\nOutermost expression has head $(ex4.head) and arguments $(ex4.args)\n")
+  ex4
 end
 
 sourceloc(ln::Nothing) = ""
@@ -358,7 +358,9 @@ function expand_variables(ex, sig::Signature, varinfo::VariableInfo)
   last_ex = ex.args[i]
   rhs = Meta.isexpr(last_ex, :(=)) ? last_ex.args[2] : last_ex
   # Expand references and function calls.
-  postwalk(ex -> expand_subtree(ex, varinfo.refs, varinfo.funcs, Set{Symbol}()), rhs)
+  res = postwalk(ex -> expand_subtree(ex, varinfo.refs, varinfo.funcs, Set{Symbol}()), rhs)
+  !isa(res, Expr) && error("Expression resulted in a trivial RHS before simplifications: $(repr(res))")
+  res
 end
 
 function expand_subtree(ex, refs, funcs, used_refs)
@@ -486,7 +488,7 @@ end
 function to_final_expr(arg, args...)
   final = to_expr(arg, args...)
   @assert !isnothing(final) "`nothing` value detected as output element for argument $arg"
-  @assert !isa(final, Expression) "Expected non-Expression element, got $ex"
+  @assert !isa(final, Expression) "Expected non-Expression element, got $final"
   final
 end
 

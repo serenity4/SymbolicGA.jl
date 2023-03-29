@@ -4,6 +4,7 @@ x = (1.0, 2.0, 3.0)
 y = (50.0, 70.0, 70.0)
 
 f(x, y) = @ga 3 x::Vector ⟑ y::Vector
+@macroexpand @ga 3 x::Vector ⟑ y::Vector
 @btime f($x, $y)
 @code_typed f(x, y)
 
@@ -25,6 +26,7 @@ A = SMatrix([A₁ A₂])
 # Determinant - rank 4
 
 mydet(A₁, A₂, A₃, A₄) = @ga(4, A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector)[]
+@macroexpand @ga(4, A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector)
 A₁ = @SVector rand(4)
 A₂ = @SVector rand(4)
 A₃ = @SVector rand(4)

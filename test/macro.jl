@@ -91,7 +91,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
       ex = quote
         x = 3
         x = 4
-        x
+        x::Scalar
       end
       @test_logs (:warn, r"user-defined variable") expand_variables(ex, sig, VariableInfo())
     end
