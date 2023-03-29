@@ -844,3 +844,11 @@ function subscript(val)
   subscript_char(x) = Char(8320 + x)
   r > 0 ? string(subscript_char(r), subscript_char(mod(val, 10))) : string(subscript_char(val))
 end
+
+function show1(io::IO, ex::Expression)
+  args = map(x -> isa(x, Expression) ? repr(hash(x)) : x, ex.args)
+  print(io, Expression, '(', join([ex.head; args], ", "), ')')
+  println(io)
+end
+
+show1(ex::Expression) = show1(stdout, ex)

@@ -191,4 +191,11 @@ e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
       @test ex == scalar(_cache, cos(α)) + scalar(_cache, sin(α) / α) ⟑ b
     end
   end
+
+  @testset "Printing" begin
+    ex = sc(:x) + sc(:y) + bl(1, 2)
+    @test sprint(show1, ex) isa String && sprint(show, ex) isa String
+    ex = Expression(cache, SCALAR_ADDITION, :x, Expression(cache, SCALAR_PRODUCT, :y, :z))
+    @test sprint(show1, ex) isa String && sprint(show, ex) isa String
+  end
 end;

@@ -66,4 +66,7 @@ is_binarized(ex) = all(==(2) ∘ length, gather_scalar_expressions(ex))
   apply!(iter)
   @test iter.metrics.splits ≤ 2
   @test is_binarized(ex)
+
+  ex = generate_expression(sig, :(x::1 ⟑ y::2))
+  @test is_binarized(ex)
 end;
