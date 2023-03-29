@@ -1,5 +1,3 @@
-using SymbolicGA, Test
-
 sig = Signature(3, 1)
 cache = ExpressionCache(sig)
 sc(x) = scalar(cache, x)
@@ -19,10 +17,11 @@ is_binarized(ex) = all(==(2) ∘ length, gather_scalar_expressions(ex))
 @testset "Optimization" begin
   a = add(:x, :y, :z)
   @test !may_reuse(a, ExpressionSpec(a))
-  @test may_reuse(a, ExpressionSpec(add(:x, :y; cache)))
-  @test !may_reuse(a, ExpressionSpec(mul(:x, :y; cache)))
+  @test may_reuse(a, ExpressionSpec(add(:x, :y)))
+  @test !may_reuse(a, ExpressionSpec(mul(:x, :y)))
   b = add(:x, :z)
-  @test !may_reuse(b, ExpressionSpec(add(:x, :y; cache)))
+  @test !may_reuse(b, ExpressionSpec(add(:x, :y)))
+  @test !may_reuse(add(:x, :y, :z), ExpressionSpec(add(:x, :x)))
 
   ex = add(:x, :y)
   @test gather_scalar_expressions(ex) == [ex]
@@ -69,4 +68,18 @@ is_binarized(ex) = all(==(2) ∘ length, gather_scalar_expressions(ex))
 
   ex = generate_expression(sig, :(x::1 ⟑ y::2))
   @test is_binarized(ex)
+
+  ex = generate_expression(Signature(3), quote
+    Π = a::Vector ⟑ b::Vector
+    Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
+  end; optimize = false)
+  exs = gather_scalar_expressions(ex)
+  @test allunique(exs)
+  @test !is_binarized(ex)
+  optimize!(ex)
+  new_exs = gather_scalar_expressions(ex)
+  @test length(new_exs) > length(exs)
+  @test all(in(new_exs), exs)
+  # TODO: Get a consistent result; the issue probably stems from the non-deterministic sorting of terms in `simplify_addition`.
+  @test_skip is_binarized(ex)
 end;

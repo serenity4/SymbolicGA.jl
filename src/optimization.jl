@@ -29,6 +29,7 @@ gather_scalar_expressions(ex::Expression) = gather_scalar_expressions!(Expressio
 
 function make_available!(available::Dict{Int,Vector{Pair{ExpressionSpec,Expression}}}, ex::Expression)
   n = length(ex)
+  @assert n > 1
   available_n = get!(Vector{Pair{ExpressionSpec, Expression}}, available, n)
   spec = ExpressionSpec(ex)
   !in(available_n, spec => ex) && push!(available_n, spec => ex)
@@ -42,7 +43,10 @@ end
 
 function may_reuse(ex::Expression, available::Vector{<:Term})
   length(available) ≥ length(ex) && return false
-   all(in(ex), available)
+  all(available) do arg
+    n = count(==(arg), available)
+    n > 0 && count(==(arg), ex) == n
+  end
 end
 
 function optimize!(ex::Expression)
@@ -63,6 +67,7 @@ end
 
 function apply!(iter::IterativeRefinement)
   @assert allunique(iter.expressions)
+  @debug "Optimizing over $(length(iter.expressions)) expressions"
   exploited = exploit!(iter)
   @debug "Exploited: $exploited ($(length(iter.expressions)) remaining)"
   explored = -1
@@ -70,7 +75,7 @@ function apply!(iter::IterativeRefinement)
     @assert allunique(iter.expressions)
     explored = explore!(iter)
     exploited = exploit!(iter)
-    @debug "Exploited: $exploited ($(length(iter.expressions)) remaining), explored: $explored"
+    @debug "Explored: $explored, exploited: $exploited ($(length(iter.expressions)) remaining)"
   end
 end
 
@@ -108,12 +113,12 @@ end
 
 function explore!(iter::IterativeRefinement)
   nsplits = split_descending!(iter)
-  filter!(x -> length(x) > 2, iter.expressions)
+  filter!(>(2) ∘ length, iter.expressions)
   nsplits
 end
 
 function split_descending!(iter::IterativeRefinement)
-  lengths = unique(length(ex) for ex in iter.expressions)
+  lengths = unique!(length.(iter.expressions))
   ref = iter.metrics.splits
   for n in sort!(lengths, rev = true)
     n ≤ 2 && return 0
@@ -135,8 +140,11 @@ function simulate_reuse(ex::Expression, reused::Expression)
   reused, split = Term[], Term[]
   for arg in ex
     if in(arg, remaining)
-      push!(reused, arg)
-      deleteat!(remaining, findfirst(x -> x === arg, remaining)::Int)
+      # We may have `x !== x` and `x == x` if `x` comes from an unsimplified expression.
+      # In such case we choose `x` from `remaining` as the unsimplified form is what we want for codegen.
+      i = findfirst(==(arg), remaining)::Int
+      push!(reused, remaining[i])
+      deleteat!(remaining, i)
     else
       push!(split, arg)
     end
@@ -145,9 +153,10 @@ function simulate_reuse(ex::Expression, reused::Expression)
 end
 
 function reuse!(ex::Expression, reused::Vector{Term})
+  @assert length(reused) > 1
   remaining = copy(reused)
   filter!(ex.args) do arg
-    j = findfirst(x -> arg === x, remaining)
+    j = findfirst(==(arg), remaining)
     isnothing(j) && return true
     deleteat!(remaining, j)
     false
@@ -156,11 +165,10 @@ function reuse!(ex::Expression, reused::Vector{Term})
   reused_ex = unsimplified_expression(ex.cache, ex.head, reused)
   push!(ex.args, reused_ex)
   @assert length(ex) > 1
-  ex
+  reused_ex
 end
 
 function reuse!(ex::Expression, reused::Vector{Term}, iter::IterativeRefinement)
-  n = length(ex)
   reused_ex = reuse!(ex, reused)
   make_available!(iter, ex)
   make_available!(iter, reused_ex)
@@ -173,22 +181,15 @@ function reusability_score(split::Vector{<:Term}, head::Head, iter::IterativeRef
   count(ex -> isexpr(ex, head) && may_reuse(ex, split), iter.expressions)
 end
 
-function select(args, n)
-  sampled = keytype(args)[]
-  set = keys(args)
-  while length(sampled) < n
-    i = rand(set)
-    !in(i, sampled) && push!(sampled, i)
-  end
-  args[sampled]
-end
+select(args, n) = args[1:n]
 
 function find_split(ex::Expression, iter::IterativeRefinement)
   best = nothing
   best_score = 0
   n = length(iter.expressions)
   for i in reverse(2:(length(ex) - 1))
-    generator = binomial(length(ex), i) ≤ 10 ? combinations(eachindex(ex.args), i) : (select(eachindex(ex.args), i) for _ in 1:10)
+    possibilities = eachindex(ex.args)
+    generator = binomial(length(ex), i) ≤ 10 ? combinations(possibilities, i) : (select(possibilities, i) for _ in 1:10)
     for indices in generator
       set = ex.args[indices]
       score = reusability_score(set, ex.head, iter)

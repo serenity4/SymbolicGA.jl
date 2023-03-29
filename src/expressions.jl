@@ -138,7 +138,7 @@ function unsimplified_expression(cache::ExpressionCache, spec::ExpressionSpec)
   ex = get(cache.expressions, spec, nothing)
   !isnothing(ex) && return ex
   ex = Expression(spec.head, spec.args, cache; simplify = false)
-  cache.expressions[spec] = ex
+  is_expression_caching_enabled() && (cache.expressions[spec] = ex)
   ex
 end
 
@@ -147,7 +147,10 @@ Expression(cache::ExpressionCache, head::Head, args...) = Expression(cache, Expr
 function Expression(cache::ExpressionCache, spec::ExpressionSpec)
   haskey(cache.substitutions, spec) && is_expression_caching_enabled() && return cache.substitutions[spec]
   ex = Expression(spec.head, spec.args, cache)
-  is_expression_caching_enabled() && (cache.substitutions[spec] = ex)
+  if is_expression_caching_enabled()
+    cache.expressions[ExpressionSpec(ex)] = ex
+    cache.substitutions[spec] = ex
+  end
   ex
 end
 
