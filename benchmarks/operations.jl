@@ -42,15 +42,28 @@ A = SMatrix([A₁ A₂ A₃ A₄])
 # Rotations - 3D
 
 function rot(a, b, x, α)
+  # Define unit plane for the rotation.
+  Π = @ga 3 a::Vector ∧ b::Vector
+  # Define rotation generator.
+  Ω = @ga 3 exp((-α::Scalar / 2::Scalar) ⟑ Π::Bivector)
+  # Apply the rotation by sandwiching x with Ω.
   @ga 3 begin
-    # Define unit plane for the rotation.
-    Π = a::Vector ⟑ b::Vector
-    # Define rotation generator.
-    Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
-    # Apply the rotation by sandwiching x with Ω.
+    Ω::(0, 2)
     Ω ⟑ x::Vector ⟑ reverse(Ω)
   end
 end
+
+# TODO: Allow specification in one `@ga` macro like below.
+# function rot(a, b, x, α)
+#   @ga 3 begin
+#     # Define unit plane for the rotation.
+#     Π = a::Vector ⟑ b::Vector
+#     # Define rotation generator.
+#     Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
+#     # Apply the rotation by sandwiching x with Ω.
+#     Ω ⟑ x::Vector ⟑ reverse(Ω)
+#   end
+# end
 
 a = (1.0, 0.0, 0.0)
 b = (0.0, 1.0, 0.0)

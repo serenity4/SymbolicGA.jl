@@ -95,7 +95,7 @@ count_expr_nodes(ex) = isa(ex, Expr) ? sum(count_expr_nodes, ex.args) : 1
   Π = @ga 3 a::Vector ∧ b::Vector
 
   # Define rotation bivector.
-  ϕ = @ga 3 α::Scalar * Π::Bivector
+  ϕ = @ga 3 α::Scalar ⟑ Π::Bivector
 
   # Define rotation generator.
   Ω = @ga 3 exp(-(ϕ::Bivector) / 2::Scalar)
