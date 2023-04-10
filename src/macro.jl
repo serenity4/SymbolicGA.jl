@@ -178,9 +178,10 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
   VariableInfo(; refs, funcs, warn_override)
 end
 
-function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo} = nothing; optimize = true)
+function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo} = nothing; factorize = true, optimize = true)
   ex = extract_expression(ex, sig, @something(varinfo, merge!(builtin_varinfo(sig), VariableInfo())))
   ex = restructure(ex)
+  factorize && factorize!(ex)
   optimize && (ex = optimize!(ex))
   ex
 end

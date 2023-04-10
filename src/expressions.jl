@@ -705,6 +705,7 @@ end
 # Basic interfaces.
 
 Base.:(==)(x::Expression, y::Expression) = x.head == y.head && (!isdefined(x, :grade) || !isdefined(y, :grade) || x.grade == y.grade) && x.args == y.args
+Base.setindex!(x::Expression, args...) = setindex!(x.args, args...)
 Base.getindex(x::Expression, args...) = x.args[args...]
 Base.firstindex(x::Expression) = firstindex(x.args)
 Base.lastindex(x::Expression) = lastindex(x.args)
@@ -790,6 +791,10 @@ Retraversal{RT}(should_retraverse, retraversed) where {RT} = Retraversal{RT,type
 Retraversal(RT::DataType) = Retraversal{RT}(x -> isa(x, RT), nothing)
 Retraversal(cache::ExpressionCache, RT::Type{Expr}) = Retraversal{RT}(x -> isa(dereference(cache, x), RT), x -> dereference(cache, x))
 
+traversal_iterator(ex::Expression) = ex.args
+traversal_iterator(ex::Expr) = ex.args
+traversed(ex, i) = traversal_iterator(ex)[i]
+
 function traverse(f::F, ex, ::Type{T} = Expression; retraversal::Optional{Retraversal{RT}} = nothing) where {F,T,RT}
   f(ex) === false && return
   if !isa(ex, T)
@@ -801,13 +806,26 @@ function traverse(f::F, ex, ::Type{T} = Expression; retraversal::Optional{Retrav
     end
     return
   end
-  for arg in ex.args
+  for arg in traversal_iterator(ex)
     traverse(f, arg, T; retraversal)
   end
 end
 
-function complexity(ex::Expression)
-
+function traverse_indexed(f::F, ex, ::Type{T} = Expression, i = nothing; retraversal::Optional{Retraversal{RT}} = nothing) where {F,T,RT}
+  f(ex, i) === false && return
+  !isnothing(i) && (ex = traversed(ex, i))
+  if !isa(ex, T)
+    isnothing(retraversal) && return
+    retraversal.should_retraverse(ex)::Bool || return
+    traverse_indexed(retraversal.retraversed(ex)::RT, RT) do subex, i
+      isa(subex, T) && traverse_indexed(f, subex, T, i; retraversal)
+      !isa(subex, T)
+    end
+    return
+  end
+  for i in eachindex(traversal_iterator(ex))
+    traverse_indexed(f, ex, T, i; retraversal)
+  end
 end
 
 # Display.

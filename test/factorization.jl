@@ -24,10 +24,25 @@ umul(x, ys...) = unsimplified_expression(cache, SCALAR_PRODUCT, x, ys...)
   ex = add(mul(a, c, e), mul(a, c, f), mul(a, d, e), mul(a, d, f), mul(b, c, e), mul(b, c, f), mul(b, d, e), mul(b, d, f))
   @test factorize(ex) ≈ umul(add(a, b), add(c, d), add(e, f))
 
+  ex2 = fac(ex)
+  factorize!(ex2)
+  @test factorize(ex) ≈ ex2[1]
+
   ex = add(mul(a, b, c), mul(c, d, e), mul(a, d, f))
   @test factorize(ex) in (
     uadd(umul(a, add(mul(b, c), mul(d, f))), mul(c, d, e)),
     uadd(umul(c, uadd(mul(a, b), mul(d, e))), mul(a, d, f)),
     uadd(umul(d, add(mul(c, e), mul(a, f))), mul(a, b, c)),
   )
+
+  ex = generate_expression(Signature(3), quote
+    Π = a::Vector ⟑ b::Vector
+    Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
+  end; factorize = false, optimize = false)
+  factorize!(ex)
+
+  ex = generate_expression(Signature(3), :((x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector); factorize = false, optimize = false)
+  @test all(>(1) ∘ length, gather_scalar_expressions(ex))
+  factorize!(ex)
+  @test all(>(1) ∘ length, gather_scalar_expressions(ex))
 end;

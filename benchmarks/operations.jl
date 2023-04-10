@@ -18,8 +18,8 @@ A = SMatrix([A₁ A₂])
 
 @btime det($A)
 @btime mydet($A₁, $A₂)
-# `Base.sub_float` is probably faster than `Base.mul_float` with -1 and then `Base.add_float`,
-# which would explain why `det(A)` is slightly faster.
+# `Base.sub_float` is used instead of `Base.mul_float` with -1 and then `Base.add_float`,
+# but it seems like it's the same speed.
 @code_warntype optimize=true det(A)
 @code_warntype optimize=true mydet(A₁, A₂)
 

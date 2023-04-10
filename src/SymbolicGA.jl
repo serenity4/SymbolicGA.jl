@@ -3,6 +3,7 @@ module SymbolicGA
 using Combinatorics
 using Graphs
 using CompileTraces
+using Dictionaries
 
 const Optional{T} = Union{T,Nothing}
 
