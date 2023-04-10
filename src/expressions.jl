@@ -69,6 +69,7 @@ primitive type ID 64 end
 
 ID(val::UInt64) = reinterpret(ID, val)
 ID(val::Integer) = ID(UInt64(val))
+Base.isapprox(x::ID, y::ID) = x == y
 
 Base.iterate(id::ID) = nothing
 Base.length(id::ID) = 1
@@ -108,6 +109,22 @@ end
 Base.:(==)(x::ExpressionSpec, y::ExpressionSpec) = x.head == y.head && x.args == y.args
 Base.hash(spec::ExpressionSpec, h::UInt) = hash(hash(spec.head) + hash(spec.args), h)
 ExpressionSpec(ex::Expression) = ExpressionSpec(ex.head, ex.args)
+Base.isapprox(::Expression, ::ID) = false
+Base.isapprox(::ID, ::Expression) = false
+function Base.isapprox(x::Expression, y::Expression)
+  (x.head === y.head && length(x) == length(y)) || return false
+  (; head) = x
+  !isunordered(head) && return all(xx ≈ yy for (xx, yy) in zip(x, y))
+  used = Set{Term}()
+  for xx in x
+    i = findfirst(yy -> xx ≈ yy && !in(yy, used), y)
+    isnothing(i) && return false
+    push!(used, y[i])
+  end
+  true
+end
+
+isunordered(head::Head) = head in (ADDITION, SCALAR_ADDITION, SCALAR_PRODUCT)
 
 struct Object
   val::Any
@@ -481,8 +498,8 @@ function collapse_factors(cache, head::Head, args)
   return factor(cache, value)
 end
 
-function disassociate1(cache, args, op::Head)
-  new_args = []
+function disassociate1(args, op::Head)
+  new_args = Term[]
   for arg in args
     if isexpr(arg, op)
       append!(new_args, arg.args)
@@ -490,8 +507,10 @@ function disassociate1(cache, args, op::Head)
       push!(new_args, arg)
     end
   end
-  Expression(cache, op, new_args)
+  new_args
 end
+
+disassociate1(cache, args, op::Head) = Expression(cache, op, disassociate1(args, op))
 
 function distribute1(cache, args, add_op::Head, mul_op::Head)
   x, ys = args[1], @view args[2:end]

@@ -61,9 +61,10 @@ function apply!(fact::Factorization)
   factor, factorized_terms = pairs[i]
   factorized = Term[remove_single_factor(term, factor) for term in factorized_terms]
   sum = length(factorized) == 1 ? factorized[1] : unsimplified_expression(cache, SCALAR_ADDITION, factorized)
-  product = unsimplified_expression(cache, SCALAR_PRODUCT, factor, factorize(sum))
+  product = unsimplified_expression(cache, SCALAR_PRODUCT, disassociate1(Term[factor, factorize(sum)], SCALAR_PRODUCT))
   unfactorized_terms = filter(!in(factorized_terms), terms)
   isempty(unfactorized_terms) && return product
   unfactorized = length(unfactorized_terms) == 1 ? unfactorized_terms[1] : factorize(unsimplified_expression(cache, SCALAR_ADDITION, unfactorized_terms))
-  unsimplified_expression(cache, SCALAR_ADDITION, product, unfactorized)
+  new_ex = unsimplified_expression(cache, SCALAR_ADDITION, disassociate1(Term[product, unfactorized], SCALAR_ADDITION))
+  factorize(new_ex)
 end
