@@ -70,6 +70,9 @@ primitive type ID 64 end
 ID(val::UInt64) = reinterpret(ID, val)
 ID(val::Integer) = ID(UInt64(val))
 
+Base.iterate(id::ID) = nothing
+Base.length(id::ID) = 1
+
 mutable struct IDCounter
   val::UInt64
 end

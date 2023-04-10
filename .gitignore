@@ -3,3 +3,4 @@ Manifest.toml
 /experiments
 /JuliaSysimage.so
 /.vscode
+/scratch

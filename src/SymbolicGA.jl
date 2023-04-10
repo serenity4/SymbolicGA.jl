@@ -14,6 +14,7 @@ include("interface.jl")
 include("macro.jl")
 include("types.jl")
 include("optimization.jl")
+include("factorization.jl")
 @compile_traces verbose = false joinpath(@__DIR__, "precompilation_traces.jl")
 
 export Signature,

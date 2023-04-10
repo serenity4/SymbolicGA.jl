@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# Make sure to uncomment the inclusion of `precompiled.jl` from `src/SPIRV.jl`,
+# Make sure to uncomment the inclusion of `precompiled.jl` from `src/$pkg.jl`,
 # otherwise we'll be missing a lot of precompile directives.
 
 pkg=$1
