@@ -12,6 +12,7 @@ Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 [compat]
 Combinatorics = "1.0.2"
 CompileTraces = "1"
+Dictionaries = "0.3"
 Graphs = "1"
 julia = "1.8"
 
