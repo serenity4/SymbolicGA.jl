@@ -64,6 +64,8 @@ function Head(head::Symbol)
   head === :× && return COMMUTATOR_PRODUCT
   head === :inverse && return INVERSE
   head === :exp && return EXPONENTIAL
+  head === :abs && return SCALAR_ABS
+  head === :sqrt && return SCALAR_SQRT
   error("Head '$head' is unknown")
 end
 

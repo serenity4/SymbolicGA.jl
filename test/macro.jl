@@ -187,4 +187,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   @test (@ga 3 𝟏 ∧ z2::Multivector) == (@ga 3 𝟏 ∧ (3::e + x::1 + y::2 + 2::e̅))
 
   @test_throws "Unknown grade projection" @eval @ga 3 x::Unknown
+
+  # Ability to interpolate parts of expressions to shield them from processing.
+  @test (@ga 3 $(x[1] * x[2])::e1) == KVector{1,3}(x[1] * x[2], 0, 0)
 end;

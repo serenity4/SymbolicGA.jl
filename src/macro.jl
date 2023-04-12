@@ -261,6 +261,12 @@ function extract_grade_from_annotation(t, sig)
 end
 
 function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
+  # Shield interpolated regions in a `QuoteNode` from expression processing.
+  ex = prewalk(ex) do ex
+    Meta.isexpr(ex, :$) && return QuoteNode(ex.args[1])
+    ex
+  end
+
   ex2 = expand_variables(ex, sig, varinfo)
   @debug "After variable expansion: $(stringc(ex))"
 
@@ -285,7 +291,12 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
       ex, T = ex.args
       b = extract_blade_from_annotation(cache, T)
       if !isnothing(b)
-        !isa(ex, Expression) || error("Blade annotations for intermediate expressions are not supported.")
+        if isa(ex, Expression)
+          # Allow blade projections only when it is equivalent to projecting on a grade.
+          isempty(basis_vectors(b)) && return project!(ex, 0)
+          basis_vectors(b) == collect(1:dimension(sig)) && return project!(ex, dimension(sig))
+          error("Blade annotations are not supported for specifying projections.")
+        end
         return weighted(b, ex)
       end
       g = extract_grade_from_annotation(T, sig)
@@ -294,6 +305,10 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
       isa(g, Vector{Int}) && return input_expression(cache, ex, g; flattened = !Meta.isexpr(T, (:tuple, :curly)))::Expression
       # Consider the type annotation a regular Julia expression.
       :($ex::$T)
+    elseif isa(ex, QuoteNode) && !isa(ex.value, Symbol)
+      # Unwrap quoted expressions, except for symbols for which quoting is the only
+      # way to poss a literal around.
+      ex.value
     else
       ex
     end
