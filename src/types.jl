@@ -30,6 +30,8 @@ end
 
 KVector{K,D}(xs...) where {K,D} = KVector{K,D}(xs)
 
+const Scalar{T,D} = KVector{0,T,D,1}
+
 """
     Bivector{T,D,N}
 

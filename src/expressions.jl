@@ -2,11 +2,11 @@ const GradeInfo = Union{Int,Vector{Int}}
 
 @enum Head::UInt8 begin
   # Decorations.
-  COMPONENT
-  FACTOR
-  BLADE
-  KVECTOR
-  MULTIVECTOR
+  COMPONENT = 1
+  FACTOR = 2
+  BLADE = 3
+  KVECTOR = 4
+  MULTIVECTOR = 5
 
   # Linear operations.
   ADDITION
@@ -44,6 +44,8 @@ end
 isscalar(head::Head) = head == COMPONENT || UInt8(head) ≥ 70
 isaddition(head::Head) = in(head, (ADDITION, SCALAR_ADDITION))
 ismultiplication(head::Head) = in(head, (GEOMETRIC_PRODUCT, SCALAR_PRODUCT))
+isdecoration(head::Head) = UInt8(head) ≤ 5
+isoperation(head::Head) = !isdecoration(head)
 
 function Head(head::Symbol)
   head === :factor && return FACTOR
@@ -387,12 +389,7 @@ function simplify!(ex::Expression)
     end
   end
 
-  # Check that arguments make sense.
-  n = expected_nargs(head)
-  !isnothing(n) && n ≥ 0 && @assert length(args) == n "Expected $n arguments for expression $head, $(length(args)) were provided\nArguments: $args"
-  @assert !isempty(args) || head === BLADE
-  head === BLADE && @assert all(isa(dereference(cache, i), Int) for i in args) "Expected integer arguments in BLADE expression, got $(dereference.(cache, ex))"
-  head === FACTOR && @assert !isa(args[1], Expression) || isscalar(args[1].head) "`Expression` argument detected in FACTOR expression: $(args[1])"
+  validate_arguments(cache, head, args)
 
   # Propagate complements over addition.
   head in (LEFT_COMPLEMENT, RIGHT_COMPLEMENT) && isexpr(args[1], ADDITION) && return substitute!(ex, ADDITION, Expression.(cache, head, args[1]))
@@ -445,7 +442,7 @@ function simplify!(ex::Expression)
     isweightedblade(a, 0) && return substitute!(ex, scalar(cache, Expression(cache, INVERSE, a[1]::Expression)))
     isblade(a, 0) && return a
     sc = Expression(cache, GEOMETRIC_PRODUCT, Expression(cache, REVERSE, a), a)
-    isscalar(sc) || error("`reverse(A) ⟑ A` is not a scalar, suggesting that A is not a versor. Inversion is only supported for versors at the moment.")
+    isscalar(sc) || error("`reverse(A) ⟑ A` is not a scalar, suggesting that A is not a versor (i.e., an element of the form `v₁ ⟑ ... ⟑ vₙ` with nonzero (vᵢ)ᵢ). Inversion is only supported for versors at the moment.")
     return substitute!(ex, GEOMETRIC_PRODUCT, Expression(cache, REVERSE, a), Expression(cache, INVERSE, sc))
   end
 
@@ -583,6 +580,17 @@ function expected_nargs(head)
   in(head, (INTERIOR_PRODUCT, COMMUTATOR_PRODUCT, SUBTRACTION, SCALAR_DIVISION)) && return 2
   in(head, (SCALAR_ADDITION, SCALAR_PRODUCT)) && return -1 # variable number of arguments
   nothing
+end
+
+function validate_arguments(cache, head, args)
+  n = expected_nargs(head)
+  !isnothing(n) && n ≥ 0 && @assert length(args) == n "Expected $n arguments for expression $head, $(length(args)) were provided\nArguments: $args"
+  head !== BLADE && @assert !isempty(args)
+  head === BLADE && @assert all(isa(dereference(cache, i), Int) for i in args) "Expected integer arguments in BLADE expression, got $(dereference.(cache, ex))"
+  head === FACTOR && @assert !isa(args[1], Expression) || isscalar(args[1].head) "`Expression` argument detected in FACTOR expression: $(args[1])"
+  isoperation(head) && !isscalar(head) && @assert all(isa(x, Expression) for x in args) "Non-scalar operations must not involve bare literal IDs"
+  head === MULTIVECTOR && @assert all(isexpr(x, KVECTOR) for x in args) "Multivector expressions must contain explicit `KVECTOR` arguments"
+  head === KVECTOR && @assert all(isblade(x) || isweightedblade(x) for x in args) "KVector expressions must contain (weighted) blade arguments"
 end
 
 function infer_grade(cache, head::Head, args)

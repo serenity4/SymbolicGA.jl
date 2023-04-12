@@ -143,6 +143,10 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :inverse_dual => :left_complement,
   )
 
+  @static if VERSION ≥ v"1.10-DEV"
+    refs[Symbol("⟇")] = :geometric_antiproduct
+  end
+
   funcs = Dict{Symbol,Any}(
     :bulk_left_complement => :(antireverse($(@arg 1)) ⟑ 𝟙),
     :bulk_right_complement => :(reverse($(@arg 1)) ⟑ 𝟙),

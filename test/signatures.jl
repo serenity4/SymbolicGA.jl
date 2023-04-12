@@ -1,4 +1,4 @@
-using SymbolicGA: metric, dimension, is_degenerate, triplet
+using SymbolicGA: metric, is_degenerate, triplet
 
 @testset "Signature" begin
     @test Signature("+++") == Signature(3, 0)

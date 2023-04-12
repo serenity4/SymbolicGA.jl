@@ -14,11 +14,11 @@ end
 
   @testset "Associativity" begin
     @test generate(:(A + (B + C))) == generate(:((A + B) + C))
-    @test generate(:(A * (B * C))) == generate(:((A * B) * C))
+    @test generate(:(A ⟑ (B ⟑ C))) == generate(:((A ⟑ B) ⟑ C))
   end
 
   @testset "Distributivity" begin
-    @test generate(:(A * (B + C))) == generate(:(A * B + A * C))
+    @test generate(:(A ⟑ (B + C))) == generate(:(A ⟑ B + A ⟑ C))
     @test generate(:(A ∧ (B + C))) == generate(:(A ∧ (B + C)))
   end
 
