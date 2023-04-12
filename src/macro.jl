@@ -45,28 +45,30 @@ Type annotations may either:
 - Specify what type of geometric entity an input should be considered as, where components are then picked off with `getcomponent`.
 - Request the projection of an intermediate expression over one or multiple grades.
 """
-macro ga end
-
-propagate_source(__source__, ex) = Expr(:block, LineNumberNode(__source__.line, __source__.file), ex)
-
-macro ga(sig_ex, flattening, T, ex)
-  isa(flattening, QuoteNode) || error("Expected QuoteNode symbol for `flattening` argument, got ", repr(flattening))
-  flattening = flattening.value
+macro ga(sig_ex, args...)
+  flattening, T, ex = parse_arguments(args)
   ex = codegen_expression(sig_ex, ex; flattening, T)
   propagate_source(__source__, esc(ex))
 end
-macro ga(sig_ex, T_or_flattening, ex)
-  ex = if isa(T_or_flattening, QuoteNode)
-    :(@ga $sig_ex $T_or_flattening $DEFAULT_TYPE $ex)
+
+function parse_arguments(args)
+  length(args) > 4 && throw(MethodError(var"@ga", args))
+  flattening = T = ex = nothing
+  if length(args) == 3
+    flattening, T, ex = args
   else
-    :(@ga $sig_ex $(QuoteNode(DEFAULT_FLATTENING)) $T_or_flattening $ex)
+    T_or_flattening, ex = length(args) == 1 ? (nothing, args[1]) : args
+    if isa(T_or_flattening, QuoteNode)
+      flattening, T = T_or_flattening, DEFAULT_TYPE
+    else
+      flattening, T = QuoteNode(DEFAULT_FLATTENING), T_or_flattening
+    end
   end
-  propagate_source(__source__, esc(ex))
+  isa(flattening, QuoteNode) || error("Expected QuoteNode symbol for `flattening` argument, got ", repr(flattening))
+  flattening.value, T, ex
 end
-macro ga(sig_ex, ex)
-  ex = :(@ga $sig_ex $nothing $ex)
-  propagate_source(__source__, esc(ex))
-end
+
+propagate_source(__source__, ex) = Expr(:block, LineNumberNode(__source__.line, __source__.file), ex)
 
 """
     VariableInfo(; refs = Dict{Symbol,Any}(), funcs = Dict{Symbol,Any}(), warn_override = true)
