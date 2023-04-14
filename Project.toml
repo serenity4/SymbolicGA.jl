@@ -1,7 +1,7 @@
 name = "SymbolicGA"
 uuid = "be1275fb-6550-422f-8b88-a5943ccecfb8"
 authors = ["Cédric Belmant"]
-version = "0.1.0"
+version = "0.1.1"
 
 [deps]
 Combinatorics = "861a8166-3701-5b0c-9a16-15d98fcdc6aa"
