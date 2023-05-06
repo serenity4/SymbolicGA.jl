@@ -2,7 +2,8 @@ module SymbolicGA
 
 using Combinatorics
 using Graphs
-using CompileTraces
+using CompileTraces: @compile_traces
+using PrecompileTools: @compile_workload
 using Dictionaries
 
 const Optional{T} = Union{T,Nothing}
@@ -16,7 +17,8 @@ include("macro.jl")
 include("types.jl")
 include("optimization.jl")
 include("factorization.jl")
-@compile_traces verbose = false joinpath(@__DIR__, "precompilation_traces.jl")
+
+@compile_workload @compile_traces verbose = false joinpath(@__DIR__, "precompilation_traces.jl")
 
 export Signature,
   @ga,
