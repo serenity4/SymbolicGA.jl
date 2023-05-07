@@ -11,7 +11,7 @@ Graphs = "86223c79-3864-5bf0-83f7-82e725a168b6"
 PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 
 [compat]
-Combinatorics = "1.0.2"
+Combinatorics = "1"
 CompileTraces = "1"
 Dictionaries = "0.3"
 Graphs = "1"
