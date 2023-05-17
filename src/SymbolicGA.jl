@@ -18,7 +18,7 @@ include("types.jl")
 include("optimization.jl")
 include("factorization.jl")
 
-@compile_workload @compile_traces verbose = false joinpath(@__DIR__, "precompilation_traces.jl")
+@compile_workload @compile_traces "precompilation_traces.jl"
 
 export Signature,
   @ga,
