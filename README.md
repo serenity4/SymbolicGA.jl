@@ -25,6 +25,19 @@ A₁, A₂, A₃, A₄ = ntuple(_ -> rand(4), 4)
 # We got an antiscalar out as a `KVector{4}`.
 # Extract the component with `[]`.
 Δ[]
+
+# Let's compute the rotation of a vector x by α radians in the plane formed by a and b.
+# We do this in 3D, but this works in any dimension with the appropriate signature; 2D but also 4D, 5D, etc.
+a = (1.0, 0.0, 0.0)
+b = (0.0, 1.0, 0.0)
+x = (1.0, 1.0, 0.0)
+α = π / 6
+# Define unit plane for the rotation.
+Π = @ga 3 a::Vector ⟑ b::Vector
+# Define rotation generator.
+Ω = @ga 3 exp((-α::Scalar / 2::Scalar) ⟑ Π::(Scalar, Bivector))
+# Apply the rotation with the versor product of x by Ω.
+x′ = @ga 3 x::Vector << Ω::(Scalar, Bivector)
 ```
 
 For advanced usage, tutorials and references, please consult the [official documentation](https://github.com/serenity4.github.io/SymbolicGA.jl/dev).

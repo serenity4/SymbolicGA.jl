@@ -143,6 +143,7 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :antidivision => :right_antidivision,
     :dual => :right_complement,
     :inverse_dual => :left_complement,
+    :<< => :versor_product,
   )
 
   @static if VERSION ≥ v"1.10-DEV"
@@ -179,6 +180,8 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :antiinverse => :(inverse_dual(inverse(dual($(@arg 1))))),
     :left_antidivision => :(inverse_dual(left_division(dual($(@arg 1)), dual($(@arg 2))))),
     :right_antidivision => :(inverse_dual(right_division(dual($(@arg 1)), dual($(@arg 2))))),
+
+    :versor_product => :($(@arg 2) ⟑ $(@arg 1) ⟑ inverse($(@arg 2))),
   )
 
   VariableInfo(; refs, funcs, warn_override)
