@@ -32,12 +32,16 @@ a = (1.0, 0.0, 0.0)
 b = (0.0, 1.0, 0.0)
 x = (1.0, 1.0, 0.0)
 α = π / 6
-# Define unit plane for the rotation.
-Π = @ga 3 a::Vector ⟑ b::Vector
+# Define a unit plane for the rotation.
+# The unitization ensures we don't need `a` and `b` to be orthogonal nor to be unit vectors.
+# If these conditions are otherwise met, unitization can be skipped.
+Π = @ga 3 unitize(a::Vector ∧ b::Vector)
+
 # Define rotation generator.
-Ω = @ga 3 exp((-α::Scalar / 2::Scalar) ⟑ Π::(Scalar, Bivector))
+Ω = @ga 3 exp(-(α::Scalar / 2::Scalar) ⟑ Π::Bivector)
 # Apply the rotation with the versor product of x by Ω.
 x′ = @ga 3 x::Vector << Ω::(Scalar, Bivector)
+@assert collect(x′) ≈ [0.36602540378443876, 1.3660254037844386, 0.0]
 ```
 
 For advanced usage, tutorials and references, please consult the [official documentation](https://github.com/serenity4.github.io/SymbolicGA.jl/dev).

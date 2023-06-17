@@ -86,6 +86,17 @@ end
 count_expr_nodes(ex) = isa(ex, Expr) ? sum(count_expr_nodes, ex.args) : 1
 
 @testset "3D rotations" begin
+  function rotate_3d(x, a, b, α)
+    # Define a unit plane for the rotation.
+    # The unitization ensures we don't need `a` and `b` to be orthogonal nor to be unit vectors.
+    Π = @ga 3 unitize(a::1 ∧ b::1)
+
+    # Define rotation generator.
+    Ω = @ga 3 exp(-(α::0 / 2::0) ⟑ Π::2)
+    # Apply the rotation with the versor product of x by Ω.
+    @ga 3 x::1 << Ω::(0, 2)
+  end
+
   a = (1.0, 0.0, 0.0)
   b = (0.0, 1.0, 0.0)
   x = (1.0, 1.0, 0.0)
@@ -103,11 +114,15 @@ count_expr_nodes(ex) = isa(ex, Expr) ? sum(count_expr_nodes, ex.args) : 1
   @test all(Ω .≈ @ga 3 cos(Base.:*(0.5, α))::Scalar - Π::Bivector * sin(Base.:*(0.5, α))::Scalar)
   @test (@ga 3 Ω::(Scalar, Bivector) ⟑ inverse(Ω::(Scalar, Bivector))) == KVector{0,3}(1.0)
 
-  x′ = @ga 3 begin
-    Ω::(Scalar, Bivector)
-    Ω ⟑ x::Vector ⟑ inverse(Ω)
-  end
+  x′ = @ga 3 x::1 << Ω::(0, 2)
   @test x′ ≈ KVector{1,3}(0.0, sqrt(2), 0.0)
+
+  @test rotate_3d((1.0, 0.0, 0.0), a, b, π/6) ≈ KVector{1,3}(cos(π/6), sin(π/6), 0.0)
+  @test rotate_3d((1.0, 0.0, 0.0), a, b, π/3) ≈ KVector{1,3}(cos(π/3), sin(π/3), 0.0)
+  @test rotate_3d((2.0, 0.0, 0.0), a, b, π/3) ≈ KVector{1,3}(2cos(π/3), 2sin(π/3), 0.0)
+  @test rotate_3d((2.0, 0.0, 0.0), a, 2 .* b, π/3) ≈ rotate_3d((2.0, 0.0, 0.0), a, b, π/3)
+  @test rotate_3d((2.0, 0.0, 0.0), a, (1/sqrt(2), 1/sqrt(2), 0.0), π/3) ≈ rotate_3d((2.0, 0.0, 0.0), a, b, π/3)
+  @test rotate_3d((2.0, 0.0, 0.0), a, (1.0, 1.0, 0.0), π/3) ≈ rotate_3d((2.0, 0.0, 0.0), a, b, π/3)
 
   # Do it more succinctly.
   ex = @macroexpand @ga 3 begin

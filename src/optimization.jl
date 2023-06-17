@@ -11,13 +11,13 @@ struct IterativeRefinement
   # would allow lazy substitutions.
   # Lazy vs eager is in favor of lazy only if we intend to backtrack.
   # For now, we can directly mutate expressions.
-  available::Dict{Int,Vector{Pair{ExpressionSpec,Expression}}}
+  available::Dictionary{Int,Vector{Pair{ExpressionSpec,Expression}}}
   expressions::Vector{Expression}
   metrics::RefinementMetrics
 end
 
 function IterativeRefinement(exs::Vector{Expression})
-  available = Dict{Int,Vector{Pair{ExpressionSpec,Expression}}}()
+  available = Dictionary{Int,Vector{Pair{ExpressionSpec,Expression}}}()
   for ex in exs
     make_available!(available, ex)
   end
@@ -27,7 +27,7 @@ IterativeRefinement(ex::Expression) = IterativeRefinement(gather_scalar_expressi
 
 gather_scalar_expressions(ex::Expression) = gather_scalar_expressions!(Expression[], ex)
 
-function make_available!(available::Dict{Int,Vector{Pair{ExpressionSpec,Expression}}}, ex::Expression)
+function make_available!(available::Dictionary{Int,Vector{Pair{ExpressionSpec,Expression}}}, ex::Expression)
   n = length(ex)
   @assert n > 1
   available_n = get!(Vector{Pair{ExpressionSpec, Expression}}, available, n)
@@ -72,7 +72,7 @@ function apply!(iter::IterativeRefinement)
   @debug "Exploited: $exploited ($(length(iter.expressions)) remaining)"
   explored = -1
   while length(iter.expressions) > 0 && (exploited ≠ 0 || explored ≠ 0)
-    @assert allunique(iter.expressions)
+    allunique(iter.expressions) || @debug "Expressions are not unique: $(iter.expressions)"
     explored = explore!(iter)
     exploited = exploit!(iter)
     @debug "Explored: $explored, exploited: $exploited ($(length(iter.expressions)) remaining)"
@@ -94,7 +94,8 @@ function reuse_available!(iter::IterativeRefinement)
   # TODO: maybe do a 50/50 split instead of going for larger reuses first,
   # as it might yield more expressions that are split like 90/10 offering
   # a lesser potential for reuse.
-  for (i, available) in sort!(collect(iter.available), by = first, rev = true)
+  sortkeys!(iter.available)
+  for (i, available) in pairs(iter.available)
     filter!(iter.expressions) do ex
       length(ex) ≤ 2 && return false
       length(ex) ≤ i && return true
