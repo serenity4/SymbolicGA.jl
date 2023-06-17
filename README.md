@@ -48,7 +48,9 @@ For advanced usage, tutorials and references, please consult the [official docum
 
 ## Performance
 
-This library applies rules of geometric algebra at compile-time to generate performant code for runtime execution. The resulting instructions are scalar operations, which should be fast and comparable to hand-written optimized numerical code:
+This library applies rules of geometric algebra at compile-time to generate performant code for runtime execution. The resulting instructions are scalar operations, which should be fast and comparable to hand-written optimized numerical code.
+
+Here is for computing determinants, compared with LinearAlgebra:
 
 ```julia
 using StaticArrays: @SVector, SMatrix
@@ -65,9 +67,39 @@ A = SMatrix([A₁ A₂ A₃ A₄])
 @btime mydet($A₁, $A₂, $A₃, $A₄)
 ```
 
-```
+```julia
 4.845 ns (0 allocations: 0 bytes) # LinearAlgebra
 13.485 ns (0 allocations: 0 bytes) # SymbolicGA
+```
+
+Here is for rotating a 3D vector along an arbitrary plane and angle. Note that part of the timing is only about building the rotation operator Ω, which would correspond to building a rotation matrix in conventional approaches.
+
+```julia
+function rotate_3d(x, a, b, α)
+  Π = @ga 3 unitize(a::1 ∧ b::1)
+  Ω = @ga 3 exp(-(α::0 / 2::0) ⟑ Π::2)
+  rotate_3d(x, Ω)
+end
+
+rotate_3d(x, Ω) = @ga 3 x::1 << Ω::(0, 2)
+
+a = (1.0, 0.0, 0.0)
+b = (2.0, 2.0, 0.0) # some arbitrary non-unit vector non-orthogonal to `a`.
+x = (2.0, 0.0, 0.0)
+α = π / 6
+
+x′ = rotate_3d(x, a, b, α)
+@assert x′ ≈ KVector{1,3}(2cos(π/6), 2sin(π/6), 0.0)
+@btime rotate_3d($a, $b, $x, $α)
+Ω = @ga 3 exp(-(α::0 / 2::0) ⟑ (a::1 ∧ b::1))
+@btime rotate_3d($x, $Ω)
+```
+
+```julia
+# 3D rotation, including both the construction of the rotation operator from a plane and its application.
+40.582 ns (0 allocations: 0 bytes)
+# Application of rotation operator.
+8.310 ns (0 allocations: 0 bytes)
 ```
 
 It should be noted that in theory any performance gap can be addressed, as we have total control over what code is emitted.

@@ -53,36 +53,34 @@ function rot(a, b, x, α)
   end
 end
 
-# TODO: Allow specification in one `@ga` macro like below.
-# function rot(a, b, x, α)
-#   @ga 3 begin
-#     # Define unit plane for the rotation.
-#     Π = a::Vector ⟑ b::Vector
-#     # Define rotation generator.
-#     Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
-#     # Apply the rotation by sandwiching x with Ω.
-#     Ω ⟑ x::Vector ⟑ reverse(Ω)
-#   end
-# end
+function rotate_3d(x, a, b, α)
+  Π = @ga 3 unitize(a::1 ∧ b::1)
+  Ω = @ga 3 exp(-(α::0 / 2::0) ⟑ Π::2)
+  rotate_3d(x, Ω)
+end
+
+rotate_3d(x, Ω) = @ga 3 x::1 << Ω::(0, 2)
 
 a = (1.0, 0.0, 0.0)
-b = (0.0, 1.0, 0.0)
-x = (1.0, 1.0, 0.0)
-α = π / 4
+b = (2.0, 2.0, 0.0)
+x = (2.0, 0.0, 0.0)
+α = π / 6
 
-x′ = rot(a, b, x, α)
-@assert x′ ≈ KVector{1,3}(0.0, sqrt(2), 0.0)
-@btime rot($a, $b, $x, $α)
-@code_warntype rot(a, b, x, α)
+x′ = rotate_3d(x, a, b, α)
+@assert x′ ≈ KVector{1,3}(2cos(π/6), 2sin(π/6), 0.0)
+@btime rotate_3d($a, $b, $x, $α)
+@code_warntype rotate_3d(a, b, x, α)
+Ω = @ga 3 exp(-(α::0 / 2::0) ⟑ (a::1 ∧ b::1))
+@btime rotate_3d($x, $Ω)
 
-@time @macroexpand @ga 3 begin
-  # Define unit plane for the rotation.
-  Π = a::Vector ⟑ b::Vector
-  # Define rotation generator.
-  Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
-  # Apply the rotation by sandwhiching x with Ω.
-  Ω ⟑ x::Vector ⟑ reverse(Ω)
-end;
+# @time @macroexpand @ga 3 begin
+#   # Define unit plane for the rotation.
+#   Π = a::Vector ⟑ b::Vector
+#   # Define rotation generator.
+#   Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
+#   # Apply the rotation by sandwhiching x with Ω.
+#   Ω ⟑ x::Vector ⟑ reverse(Ω)
+# end;
 
 @time @macroexpand @ga 3 begin
   Π = a::Vector ⟑ b::Vector
