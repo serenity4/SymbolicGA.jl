@@ -173,7 +173,7 @@ function Expression(cache::ExpressionCache, spec::ExpressionSpec)
   ex = Expression(spec.head, spec.args, cache)
   if is_expression_caching_enabled()
     cache.expressions[ExpressionSpec(ex)] = ex
-    @assert !haskey(cache.substitutions, spec) "A result is already cached for $spec" * cache.substitutions[spec] === ex ? " but is inconsistent with the computed value: $ex !== $(cache.substitutions[spec])" : " and is the computed value."
+    @assert !haskey(cache.substitutions, spec) "A result is already cached for $spec" * (cache.substitutions[spec] === ex ? " but is inconsistent with the computed value: $ex !== $(cache.substitutions[spec])" : " and is the computed value.")
     cache.substitutions[spec] = ex
   end
   ex

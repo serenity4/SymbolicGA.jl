@@ -20,7 +20,7 @@ end
 point(A) = @cga3 point(A)
 point_pair(A, B) = @cga3 point(A) ∧ point(B)
 circle(A, B, C) = @cga3 point(A) ∧ point(B) ∧ point(C)
-line(A, B, C) = @cga3 point(A) ∧ point(B) ∧ n
+line(A, B) = @cga3 point(A) ∧ point(B) ∧ n
 sphere(A, B, C, D) = @cga3 point(A) ∧ point(B) ∧ point(C) ∧ point(D)
 plane(A, B, C) = @cga3 point(A) ∧ point(B) ∧ point(C) ∧ n
 circle_radius(X) = sqrt(-@cga3(radius2(X::Trivector))[])
