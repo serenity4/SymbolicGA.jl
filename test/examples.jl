@@ -2,8 +2,10 @@ macro cga3(args...)
   definitions = quote
     n = 1.0::e4 + 1.0::e5
     n̄ = (-0.5)::e4 + 0.5::e5
+    n̅ = n̄ # n\bar !== n\overbar but they display exactly the same.
     embed(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
     magnitude2(x) = x ⦿ x
+    point(x) = (embed(x) + (0.5::Scalar * magnitude2(embed(x))) * n + n̄)::Vector
     weight(X) = -X ⋅ n
     unitize(X) = X / weight(X)
     radius2(X) = (magnitude2(X) / magnitude2(X ∧ n))::Scalar
@@ -15,33 +17,32 @@ macro cga3(args...)
   esc(codegen_expression((4, 1, 0), args...; varinfo))
 end
 
-point(x) = @cga3 (embed(x) + (0.5::Scalar * magnitude2(embed(x))) * n + n̄)::Vector
-point_pair(A, B) = @cga3 A::Vector ∧ B::Vector
-circle(A, B, C) = @cga3 point_pair(A, B)::Bivector ∧ C::Vector
-line(A, B, C) = @cga3 point_pair(A, B)::Bivector ∧ n
-sphere(A, B, C, D) = @cga3 circle(A, B, C)::Trivector ∧ D::Vector
-plane(A, B, C) = @cga3 circle(A, B, C)::Trivector ∧ n
+point(A) = @cga3 point(A)
+point_pair(A, B) = @cga3 point(A) ∧ point(B)
+circle(A, B, C) = @cga3 point(A) ∧ point(B) ∧ point(C)
+line(A, B, C) = @cga3 point(A) ∧ point(B) ∧ n
+sphere(A, B, C, D) = @cga3 point(A) ∧ point(B) ∧ point(C) ∧ point(D)
+plane(A, B, C) = @cga3 point(A) ∧ point(B) ∧ point(C) ∧ n
 circle_radius(X) = sqrt(-@cga3(radius2(X::Trivector))[])
 sphere_radius(X) = sqrt(@cga3(radius2(X::Quadvector))[])
-
-≊(a, b) = all(isapprox.(a, b; atol = 1e-15))
 
 @testset "3D Conformal Geometric Algebra" begin
   isnullvector(X) = isapprox(@cga3(magnitude2(X::Vector))[], 0; atol = 1e-14)
   @test (@cga3 n ⋅ n̄) == (@cga3 n̄ ⋅ n) == KVector{0,5}((-1.0,))
   @test (@cga3 magnitude2(n ⦿ n)) == (@cga3 magnitude2(n̄ ⦿ n̄)) == KVector{0,5}((0,))
-  A = point(sqrt(2) .* (1, 0, 0))
-  B = point(sqrt(2) .* (0, 1, 0))
-  C = point(sqrt(2) .* (0, 0, 1))
-  D = point(sqrt(2) .* (-1, 0, 0))
-  @test all(isnullvector, (A, B, C, D))
+  A = sqrt(2) .* (1, 0, 0)
+  B = sqrt(2) .* (0, 1, 0)
+  C = sqrt(2) .* (0, 0, 1)
+  D = sqrt(2) .* (-1, 0, 0)
+  @test all(isnullvector, point.((A, B, C, D)))
   S1 = sphere(A, B, C, D)
-  @test (@cga3 unitize((A .* 2)::Vector)) == A
-  O = point((0, 0, 0))
-  C1 = @cga3 center(S1::Quadvector)::Vector
-  @test @cga3(unitize(C1::Vector)) ≊ O
+  𝒜 = point(A)
+  @test (@cga3 unitize((𝒜 .* 2)::Vector)) == 𝒜
+  O = (0, 0, 0)
+  C1 = @cga3 center(S1::Quadvector)
+  @test @cga3(unitize(C1::Vector)) ≈ point(O)
   @test length(@cga3 weight(S1::Quadvector)) == 10
-  @test (@cga3(radius2(S1::Quadvector))[]) ≈ sphere_radius(S1)^2 ≈ 2.0
+  @test @cga3(radius2(S1::Quadvector))[] ≈ sphere_radius(S1)^2 ≈ 2.0
 end;
 
 macro pga3(args...)

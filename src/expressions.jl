@@ -173,6 +173,7 @@ function Expression(cache::ExpressionCache, spec::ExpressionSpec)
   ex = Expression(spec.head, spec.args, cache)
   if is_expression_caching_enabled()
     cache.expressions[ExpressionSpec(ex)] = ex
+    @assert !haskey(cache.substitutions, spec) "A result is already cached for $spec" * cache.substitutions[spec] === ex ? " but is inconsistent with the computed value: $ex !== $(cache.substitutions[spec])" : " and is the computed value."
     cache.substitutions[spec] = ex
   end
   ex
@@ -238,6 +239,7 @@ function simplify!(ex::Expression)
       last = nothing
       fac = 1
       i = 1
+      args = copy(args)
       while length(args) ≥ 2
         i > lastindex(args) && break
         new = dereference(cache, args[i])
@@ -278,14 +280,13 @@ function simplify!(ex::Expression)
   end
 
   # Remove unit elements for multiplication and addition.
-  did_remove = remove_unit_elements!(args, head)
-  if did_remove
-    head === GEOMETRIC_PRODUCT && isempty(args) && return substitute!(ex, scalar(cache, 1))
-    head === ADDITION && isempty(args) && return substitute!(ex, scalar(cache, 0))
-    return substitute!(ex, head, args)
-  end
-
   if in(head, (GEOMETRIC_PRODUCT, ADDITION))
+    new_args = remove_unit_elements(args, head)
+    if length(new_args) < length(args)
+      head === GEOMETRIC_PRODUCT && isempty(new_args) && return substitute!(ex, scalar(cache, 1))
+      head === ADDITION && isempty(new_args) && return substitute!(ex, scalar(cache, 0))
+      return substitute!(ex, head, new_args)
+    end
     length(args) == 1 && return substitute!(ex, args[1]::Expression)
 
     # Disassociate ⟑ and +.
@@ -305,6 +306,7 @@ function simplify!(ex::Expression)
       # Put the factor at the front.
       i = findfirst(isexpr(FACTOR), args)
       fac = args[i]::Expression
+      args = copy(args)
       deleteat!(args, i)
       pushfirst!(args, fac)
       return substitute!(ex, GEOMETRIC_PRODUCT, args)
@@ -313,6 +315,7 @@ function simplify!(ex::Expression)
     # Collapse all bases and blades into a single blade.
     nb = count(isexpr(BLADE), args)
     if nb > 1
+      args = copy(args)
       n = length(args)
       blade_args = []
       for i in reverse(eachindex(args))
@@ -455,15 +458,12 @@ end
 
 iscall(ex, f) = Meta.isexpr(ex, :call) && ex.args[1] === f
 
-function remove_unit_elements!(args, head)
-  n = length(args)
+function remove_unit_elements(args, head)
   if head === GEOMETRIC_PRODUCT
-    filter!(x -> !isexpr(x, FACTOR) || dereference(x) != 1, args)
+    filter(x -> !isexpr(x, FACTOR) || dereference(x) != 1, args)
   elseif head === ADDITION
-    filter!(x -> !isexpr(x, FACTOR) || dereference(x) != 0, args)
+    filter(x -> !isexpr(x, FACTOR) || dereference(x) != 0, args)
   end
-  did_remove = n > length(args)
-  did_remove
 end
 
 function collapse_factors(cache, head::Head, args)
@@ -590,7 +590,7 @@ function validate_arguments(cache, head, args)
   head !== BLADE && @assert !isempty(args)
   head === BLADE && @assert all(isa(dereference(cache, i), Int) for i in args) "Expected integer arguments in BLADE expression, got $(dereference.(cache, ex))"
   head === FACTOR && @assert !isa(args[1], Expression) || isscalar(args[1].head) "`Expression` argument detected in FACTOR expression: $(args[1])"
-  isoperation(head) && !isscalar(head) && @assert all(isa(x, Expression) for x in args) "Non-scalar operation $head must not involve bare literal IDs"
+  isoperation(head) && !isscalar(head) && @assert all(isa(x, Expression) for x in args) "Non-scalar operation $head must not involve bare literal IDs: $(filter(x -> !isa(x, Expression), args)) => $(dereference.(cache, filter(x -> !isa(x, Expression), args)))"
   head === MULTIVECTOR && @assert all(isexpr(x, KVECTOR) for x in args) "Multivector expressions must contain explicit `KVECTOR` arguments"
   head === KVECTOR && @assert all(isblade(x) || isweightedblade(x) for x in args) "KVector expressions must contain (weighted) blade arguments"
 end
