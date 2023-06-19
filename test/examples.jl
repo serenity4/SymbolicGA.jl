@@ -197,7 +197,7 @@ end;
     @test is_on_line(ret)
     @test !is_within_segment(ret)
 
-    ret = line_tests(@ga 3 dual(A::1 × B::1))
+    ret = line_tests((100.0, 100.0, 100.0))
     @test !is_on_line(ret)
     @test !is_within_segment(ret)
   end
