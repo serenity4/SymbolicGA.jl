@@ -183,17 +183,14 @@ end;
     @test t₁[1][] ≥ -1e-15 && isapprox(t₂[1][], 0.0; atol = 1e-15)
 
     ret = line_tests(A .+ 0.5 .* (B .- A))
-    t₁, t₂ = ret
     @test is_on_line(ret)
     @test is_within_segment(ret)
 
     ret = line_tests(A .+ -0.1 .* (B .- A))
-    t₁, t₂ = ret
     @test is_on_line(ret)
     @test !is_within_segment(ret)
 
     ret = line_tests(A .+ 1.1 .* (B .- A))
-    t₁, t₂ = ret
     @test is_on_line(ret)
     @test !is_within_segment(ret)
 
