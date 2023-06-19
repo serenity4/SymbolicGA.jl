@@ -144,3 +144,61 @@ count_expr_nodes(ex) = isa(ex, Expr) ? sum(count_expr_nodes, ex.args) : 1
     x′′ === x′
   end
 end;
+
+@testset "Oriented 3D CGA" begin
+  @testset "Inclusion of a point in a line segment" begin
+    A = rand(3)
+    B = rand(3)
+    L = @cga3 point(A) ∧ point(B) ∧ n
+    P = A .+ 0.5 .* (B .- A)
+
+    function line_tests(P)
+      t₁ = @cga3 begin
+        L = point(A) ∧ point(B) ∧ n
+        (point(A) ∧ point(P) ∧ n) ⟑ L
+      end
+      t₂ = @cga3 begin
+        L = point(A) ∧ point(B) ∧ n
+        (point(P) ∧ point(B) ∧ n) ⟑ L
+      end
+      (t₁, t₂)
+    end
+    PRECISION = 1e-15
+    is_zero(x, y) = isapprox(x, y; atol = PRECISION)
+    is_positive(x::Number) = x ≥ -PRECISION
+    is_zero_bivector(x) = is_zero(x, zero(KVector{2,Float64,5}))
+    is_on_line((t₁, t₂)) = is_zero_bivector(t₁[2]) && is_zero_bivector(t₂[2])
+    is_within_segment((t₁, t₂)) = is_positive(t₁[1][]) && is_positive(t₂[1][])
+
+    ret = line_tests(A)
+    t₁, t₂ = ret
+    @test is_on_line(ret)
+    @test is_within_segment(ret)
+    @test isapprox(t₁[1][], 0.0; atol = 1e-15) && t₂[1][] ≥ -1e-15
+
+    ret = line_tests(B)
+    t₁, t₂ = ret
+    @test is_on_line(ret)
+    @test is_within_segment(ret)
+    @test t₁[1][] ≥ -1e-15 && isapprox(t₂[1][], 0.0; atol = 1e-15)
+
+    ret = line_tests(A .+ 0.5 .* (B .- A))
+    t₁, t₂ = ret
+    @test is_on_line(ret)
+    @test is_within_segment(ret)
+
+    ret = line_tests(A .+ -0.1 .* (B .- A))
+    t₁, t₂ = ret
+    @test is_on_line(ret)
+    @test !is_within_segment(ret)
+
+    ret = line_tests(A .+ 1.1 .* (B .- A))
+    t₁, t₂ = ret
+    @test is_on_line(ret)
+    @test !is_within_segment(ret)
+
+    ret = line_tests(@ga 3 dual(A::1 × B::1))
+    @test !is_on_line(ret)
+    @test !is_within_segment(ret)
+  end
+end

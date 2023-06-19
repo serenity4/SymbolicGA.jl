@@ -271,7 +271,7 @@ function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
   end
 
   ex2 = expand_variables(ex, sig, varinfo)
-  @debug "After variable expansion: $(stringc(ex))"
+  @debug "After variable expansion: $(stringc(ex2))"
 
   # Make sure calls in annotations are not interpreted as actual operations.
   ex3 = prewalk(ex2) do ex

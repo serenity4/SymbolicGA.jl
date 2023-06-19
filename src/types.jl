@@ -64,11 +64,13 @@ Base.getindex(kvec::KVector) = only(kvec.elements)
 Base.getindex(kvec::KVector, indices) = kvec.elements[indices]
 
 Base.eltype(::Type{<:KVector{<:Any,T}}) where {T} = T
-Base.length(::Type{<:KVector{<:Any,<:Any,<:Any,N}}) where {N} = N
+Base.length(::Type{<:KVector{K,<:Any,D,N}}) where {K,D,N} = N
+Base.length(::Type{<:KVector{K,<:Any,D}}) where {K,D} = binomial(D, K)
+Base.zero(T::Type{<:KVector{K,<:Any,D}}) where {K,D} = KVector{K,D}(ntuple(_ -> zero(eltype(T)), length(T)))
 
 grade(::Type{<:KVector{K}}) where {K} = K
 
-for f in (:(Base.eltype), :(Base.length), :grade)
+for f in (:(Base.eltype), :(Base.length), :grade, :(Base.zero))
   @eval $f(kvec::KVector) = $f(typeof(kvec))
 end
 
