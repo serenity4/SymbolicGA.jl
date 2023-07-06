@@ -3,8 +3,8 @@ using Combinatorics: combinations
 
 all_blades(cache::ExpressionCache) = [blade(cache, indices) for indices in combinations(1:dimension(cache.sig))]
 
-function ga_eval(sig_ex, ex; flattening = :nested, T = nothing, bindings = nothing)
-  eval(codegen_expression(sig_ex, ex; flattening, T, bindings))
+function ga_eval(sig_ex, ex; T = nothing, bindings = nothing)
+  eval(codegen_expression(sig_ex, ex; T, bindings))
 end
 
 @testset "Operators" begin

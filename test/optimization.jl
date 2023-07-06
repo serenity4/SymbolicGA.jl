@@ -66,10 +66,10 @@ is_binarized(ex) = all(==(2) ∘ length, gather_scalar_expressions(ex))
   @test iter.metrics.splits ≤ 2
   @test is_binarized(ex)
 
-  ex = generate_expression(sig, :(x::1 ⟑ y::2); optimize = true, factorize = false)
+  ex, _ = generate_expression(sig, :(x::1 ⟑ y::2); optimize = true, factorize = false)
   @test is_binarized(ex)
 
-  ex = generate_expression(Signature(3), quote
+  ex, _ = generate_expression(Signature(3), quote
     Π = a::Vector ⟑ b::Vector
     Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
   end; optimize = false, factorize = false)

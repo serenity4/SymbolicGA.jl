@@ -106,7 +106,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   @test isexpr(ex, ADDITION, 3)
   @test ex[1] == factor(cache, first(ws)) * blade(cache, 1, 2)
 
-  ex = extract_expression(:((x::Vector ⟑ y::Bivector)::Trivector), sig, builtin_bindings())
+  ex, _ = extract_expression(:((x::Vector ⟑ y::Bivector)::Trivector), sig, builtin_bindings())
   ex2 = restructure(ex)
   @test isexpr(ex2, KVECTOR, 1)
   @test isweighted(ex2[1]) && isexpr(ex2[1][2], BLADE)
@@ -154,14 +154,14 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   @test res === res2
 
   # The `1::e12` gets simplified to `e12`.
-  res = @ga 3 :flattened (1::e1 ⟑ 1::e1 + 1::e12)::Multivector
+  res = @ga 3 (1::e1 ⟑ 1::e1 + 1::e12)::(0 + 1 + 2)
   @test res == (1, 1, 0, 0)
 
   # Preserve element types.
-  res = @ga 3 :flattened (1::e1 ⟑ 1::e1 + 1.0::e12)::Multivector
+  res = @ga 3 (1::e1 ⟑ 1::e1 + 1.0::e12)::(0 + 1 + 2)
   @test res == (1, 1.0, 0, 0)
 
-  res = @ga 3 :flattened (1::e1 ⟑ 1::e1 + 2::e12)::Multivector
+  res = @ga 3 (1::e1 ⟑ 1::e1 + 2::e12)::(0 + 1 + 2)
   @test res == (1, 2, 0, 0)
 
   res = @ga 3 ((x::Vector)')
@@ -181,7 +181,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   z = (x..., y...)
   z_nested = (x, y)
   @test (@ga 3 𝟏 ∧ z::(1 + 2)) == (@ga 3 𝟏 ∧ z_nested::(1, 2)) == (@ga 3 𝟏 ∧ (x::1 + y::2))
-  @test (@ga 2 (1, 2, 3)::(0 + 1)) == (@ga 2 ((1,), (2, 3))::(0, 1)) == (KVector{0,2}(1), KVector{1,2}(2, 3))
+  @test (@ga 2 ((1, 2, 3)::(0 + 1))::(0, 1)) == (@ga 2 ((1,), (2, 3))::(0, 1)) == (KVector{0,2}(1), KVector{1,2}(2, 3))
 
   z2 = (3, z..., 2)
   @test (@ga 3 𝟏 ∧ z2::Multivector) == (@ga 3 𝟏 ∧ (3::e + x::1 + y::2 + 2::e̅))

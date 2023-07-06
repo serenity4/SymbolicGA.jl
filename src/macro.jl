@@ -1,16 +1,13 @@
-const DEFAULT_FLATTENING = :nested
 const DEFAULT_TYPE = nothing
 
 """
-    @ga <sig> <flattening> <T> <ex>
-    @ga <sig> <flattening or T> <ex>
+    @ga <sig> <T> <ex>
     @ga <sig> <ex>
 
 Generate Julia code which implements the computation of geometric elements from `ex` in an algebra defined by a signature `sig` (see [`SymbolicGA.Signature`](@ref)).
 
 Supported syntax:
-- `sig`: Integer literal or tuple of 1, 2 or 3 integer literals corresponding to the number of positive, negative and degenerate basis vectors respectively, where unspecified integers default to zero.
-- `flattening`: Symbol literal.
+- `sig`: Integer literal or tuple of 1, 2 or 3 integer literals corresponding to the number of positive, negative and degenerate basis vectors respectively, where unspecified integers default to zero. May also be a string literal of the form `<+++--𝟎>` where the number of `+`, `-` and `𝟎` correspond to the nmuber of positive, negative and degenerate basis vectors respectively.
 - `T`: Any arbitrary expression which evaluates to a type or to `nothing`.
 - `ex`: Any arbitrary expression that can be parsed algebraically.
 
@@ -46,26 +43,14 @@ Type annotations may either:
 - Request the projection of an intermediate expression over one or multiple grades.
 """
 macro ga(sig_ex, args...)
-  flattening, T, ex = parse_arguments(args)
-  ex = codegen_expression(sig_ex, ex; flattening, T)
+  T, ex = parse_arguments(args)
+  ex = codegen_expression(sig_ex, ex; T)
   propagate_source(__source__, esc(ex))
 end
 
 function parse_arguments(args)
-  length(args) > 4 && throw(MethodError(var"@ga", args))
-  flattening = T = ex = nothing
-  if length(args) == 3
-    flattening, T, ex = args
-  else
-    T_or_flattening, ex = length(args) == 1 ? (nothing, args[1]) : args
-    if isa(T_or_flattening, QuoteNode)
-      flattening, T = T_or_flattening, DEFAULT_TYPE
-    else
-      flattening, T = QuoteNode(DEFAULT_FLATTENING), T_or_flattening
-    end
-  end
-  isa(flattening, QuoteNode) || error("Expected QuoteNode symbol for `flattening` argument, got ", repr(flattening))
-  flattening.value, T, ex
+  length(args) ≤ 2 || throw(MethodError(var"@ga", args))
+  length(args) == 2 ? args : (DEFAULT_TYPE, args[1])
 end
 
 propagate_source(__source__, ex) = Expr(:block, LineNumberNode(__source__.line, __source__.file), ex)
@@ -192,34 +177,33 @@ function builtin_bindings(; warn_override::Bool = true)
 end
 
 function generate_expression(sig::Signature, ex, bindings::Optional{Bindings} = nothing; factorize = true, optimize = true)
-  ex = extract_expression(ex, sig, @something(bindings, merge!(builtin_bindings(), Bindings())))
+  ex, flattened = extract_expression(ex, sig, @something(bindings, merge!(builtin_bindings(), Bindings())))
   ex = restructure(ex)
   factorize && factorize!(ex)
   optimize && (ex = optimize!(ex))
-  ex
+  ex, flattened
 end
 
 """
-    codegen_expression(sig, ex; flattening::Symbol = $(QuoteNode(DEFAULT_FLATTENING)), T = $DEFAULT_TYPE, bindings::Optional{Bindings} = nothing)
+    codegen_expression(sig, ex; T = $DEFAULT_TYPE, bindings::Optional{Bindings} = nothing)
 
-Parse `ex` as an algebraic expression and generate a Julia expression which represents the corresponding computation. `sig` can be a [`SymbolicGA.Signature`](@ref) or a signature integer, tuple or tuple expression adhering to semantics of [`@ga`](@ref). See [`@ga`](@ref) for more information regarding the parsing and semantics applied to `ex`.
+Parse `ex` as an algebraic expression and generate a Julia expression which represents the corresponding computation. `sig` can be a [`SymbolicGA.Signature`](@ref), a signature integer or a signature string, tuple or tuple expression adhering to semantics of [`@ga`](@ref). See [`@ga`](@ref) for more information regarding the parsing and semantics applied to `ex`.
 
 ## Parameters
-- `flattening` controls whether the components should be nested (`:nested`) or flattened (`:flattened`). In short, setting this option to `:flattened` always returns a single tuple of components, even multiple geometric entities are present in the output; while `:nested` will return a tuple of multiple elements if several geometric entities result from the computation.
-- `T` specifies what type to use when reconstructing geometric entities from tuple components with [`construct`](@ref). If set to `nothing` with a `:nested` mode (default), then an appropriate [`KVector`](@ref) will be used depending on which type of geometric entity is returned; if multiple entities are present, a tuple of `KVector`s will be returned. With a `:flattened` mode, `T` will be set to `:Tuple` if unspecified.
+- `T` specifies what type to use when reconstructing geometric entities from tuple components with [`construct`](@ref). If set to `nothing` and the result is in a non-flattened form (i.e. not annotated with an annotation of the type `\$ex::(0 + 2)`), then an appropriate [`KVector`](@ref) will be used depending on which type of geometric entity is returned; if multiple entities are present, a tuple of `KVector`s will be returned. If the result is in a flattened form, `T` will be set to `:Tuple` if unspecified.
 - `bindings` is a user-provided [`SymbolicGA.Bindings`](@ref) which controls what expansions are carried out on the raw Julia expression before conversion to an algebraic expression.
 
 """
 function codegen_expression end
 
-codegen_expression(sig_ex, ex; flattening::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, bindings::Optional{Bindings} = nothing) =
-  codegen_expression(extract_signature(sig_ex), ex; flattening, T, bindings)
+codegen_expression(sig_ex, ex; T = DEFAULT_TYPE, bindings::Optional{Bindings} = nothing) =
+  codegen_expression(extract_signature(sig_ex), ex; T, bindings)
 
-function codegen_expression(sig::Signature, ex; flattening::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, bindings::Optional{Bindings} = nothing)
-  in(flattening, (:flattened, :nested)) || error("Expected :flattened or :nested value for flattening keyword argument, got $flattening")
-  flattening === :flattened && isnothing(T) && (T = :Tuple)
+function codegen_expression(sig::Signature, ex; T = DEFAULT_TYPE, bindings::Optional{Bindings} = nothing)
   bindings = merge!(builtin_bindings(), @something(bindings, Bindings()))
-  define_variables(generate_expression(sig, ex, bindings), flattening == :flattened, T)
+  generated, flattened = generate_expression(sig, ex, bindings)
+  flattened && isnothing(T) && (T = :Tuple)
+  define_variables(generated, flattened, T)
 end
 
 function extract_signature(ex)
@@ -280,6 +264,10 @@ function extract_expression(ex, sig::Signature, bindings::Bindings)
   end
 
   cache = ExpressionCache(sig)
+  flattened = Meta.isexpr(ex3, :(::)) && begin
+    _, T = ex3.args
+    Meta.isexpr(T, :annotate_projection) && T.args[1] === :+
+  end
   ex4 = postwalk(ex3) do ex
     if Meta.isexpr(ex, ADJOINT_SYMBOL)
       Expression(cache, REVERSE, ex.args[1]::Expression)
@@ -303,7 +291,7 @@ function extract_expression(ex, sig::Signature, bindings::Bindings)
       g = extract_grade_from_annotation(T, sig)
       isa(ex, Expression) && return project!(ex, g)
       isa(g, Int) && return input_expression(cache, ex, g)::Expression
-      isa(g, Vector{Int}) && return input_expression(cache, ex, g; flattened = !Meta.isexpr(T, (:tuple, :curly)))::Expression
+      isa(g, Vector{Int}) && return input_expression(cache, ex, g; flattened = !Meta.isexpr(T, :tuple))::Expression
       # Consider the type annotation a regular Julia expression.
       :($ex::$T)
     elseif isa(ex, QuoteNode) && !isa(ex.value, Symbol)
@@ -316,7 +304,7 @@ function extract_expression(ex, sig::Signature, bindings::Bindings)
   end
 
   isa(ex4, Expression) || error("Could not fully extract expression: $ex4\n\nOutermost expression has head $(ex4.head) and arguments $(ex4.args)\n")
-  ex4
+  ex4, flattened
 end
 
 sourceloc(ln::Nothing) = ""
