@@ -31,13 +31,13 @@ All statements prior to the last can define new variables or functions with the 
 - Functions are declared with a standard short or long form function definition `<name>(<args...>) = <rhs>` or `function <name>(<args...>) <rhs> end`, and are restricted to simple forms to encode simple semantics. The restrictions are as follows:
   - `where` clauses and output type annotations are not supported.
   - Function arguments must be untyped, e.g. `f(x, y)` is allowed but not `f(x::Vector, y::Vector)`.
-  - Function arguments must not be reassigned; it is assumed that any occurence of symbols declared as arguments will reference these arguments. For example, `f(x, y) = x + y` assumes that `x + y` actually means "perform `+` on the first and second function argument". Therefore, `f(x, y) = (x = 2; x) + y` will be likely to cause bugs. To alleviate this restriction, use [`codegen_expression`](@ref) with a suitable [`SymbolicGA.VariableInfo`] with function entries that contain specific calls to `:(\$(@arg <i>)).
+  - Function arguments must not be reassigned; it is assumed that any occurence of symbols declared as arguments will reference these arguments. For example, `f(x, y) = x + y` assumes that `x + y` actually means "perform `+` on the first and second function argument". Therefore, `f(x, y) = (x = 2; x) + y` will be likely to cause bugs. To alleviate this restriction, use [`codegen_expression`](@ref) with a suitable [`SymbolicGA.Bindings`] with function entries that contain specific calls to `:(\$(@arg <i>)).
 
 ## Binding expansion
 
 References and functions are expanded in a fairly straightforward copy-paste manner, where references are replaced with their right-hand side and function calls with their bodies with their arguments interpolated. Simple checks are put in place to allow for self-referencing bindings for references, such as `x = x::T`, leading to a single expansion of such a pattern in the corresponding expression subtree.
 
-See [`SymbolicGA.VariableInfo`](@ref) for more information regarding the expansion of such variables and functions.
+See [`SymbolicGA.Bindings`](@ref) for more information regarding the expansion of such variables and functions.
 
 # Algebraic evaluation
 
@@ -71,7 +71,7 @@ end
 propagate_source(__source__, ex) = Expr(:block, LineNumberNode(__source__.line, __source__.file), ex)
 
 """
-    VariableInfo(; refs = Dict{Symbol,Any}(), funcs = Dict{Symbol,Any}(), warn_override = true)
+    Bindings(; refs = Dict{Symbol,Any}(), funcs = Dict{Symbol,Any}(), warn_override = true)
 
 Structure holding information about bindings which either act as references (simple substitutions) or as functions, which can be called with arguments.
 This allows a small domain-specific language to be used when constructing algebraic expressions.
@@ -81,7 +81,7 @@ Functions are `name::Symbol => body` pairs where `rhs` must refer to their argum
 
 Most built-in functions and symbols are implemented using this mechanism. If `warn_override` is set to true, overrides of such built-in functions will trigger a warning.
 """
-struct VariableInfo
+struct Bindings
   refs::Dict{Symbol,Any}
   funcs::Dict{Symbol,Any}
   warn_override::Bool
@@ -89,9 +89,9 @@ struct VariableInfo
   func_sourcelocs::Dict{Symbol,LineNumberNode}
 end
 
-VariableInfo(; refs = Dict(), funcs = Dict(), warn_override::Bool = true) = VariableInfo(refs, funcs, warn_override, Dict(), Dict())
+Bindings(; refs = Dict(), funcs = Dict(), warn_override::Bool = true) = Bindings(refs, funcs, warn_override, Dict(), Dict())
 
-function Base.merge!(x::VariableInfo, y::VariableInfo)
+function Base.merge!(x::Bindings, y::Bindings)
   warn_override = x.warn_override & y.warn_override
   for (k, v) in pairs(y.refs)
     if haskey(x.refs, k) && warn_override
@@ -113,7 +113,7 @@ end
 """
     @arg <literal::Integer>
 
-Convenience macro to construct expressions of the form `Expr(:argument, i)` used within function definitions for [`SymbolicGA.VariableInfo`](@ref).
+Convenience macro to construct expressions of the form `Expr(:argument, i)` used within function definitions for [`SymbolicGA.Bindings`](@ref).
 """
 macro arg(i)
   i > 0 || error("Argument slots must be positive integers.")
@@ -121,11 +121,11 @@ macro arg(i)
 end
 
 """
-[`VariableInfo`](@ref) included by default in [`@ga`](@ref).
+[`Bindings`](@ref) included by default in [`@ga`](@ref).
 
 By default, any user-defined symbol overriding a symbol defined here will trigger a warning; set `warn_override = false` to disable this.
 """
-function builtin_varinfo(sig::Signature; warn_override::Bool = true)
+function builtin_bindings(sig::Signature; warn_override::Bool = true)
   refs = Dict{Symbol,Any}(
     :𝟏 => :(1::e),
     :𝟙 => :(1::$(Symbol(:e, join(1:dimension(sig))))),
@@ -189,11 +189,11 @@ function builtin_varinfo(sig::Signature; warn_override::Bool = true)
     :versor_product => :($(@arg 2) ⟑ $(@arg 1) ⟑ inverse($(@arg 2))),
   )
 
-  VariableInfo(; refs, funcs, warn_override)
+  Bindings(; refs, funcs, warn_override)
 end
 
-function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo} = nothing; factorize = true, optimize = true)
-  ex = extract_expression(ex, sig, @something(varinfo, merge!(builtin_varinfo(sig), VariableInfo())))
+function generate_expression(sig::Signature, ex, bindings::Optional{Bindings} = nothing; factorize = true, optimize = true)
+  ex = extract_expression(ex, sig, @something(bindings, merge!(builtin_bindings(sig), Bindings())))
   ex = restructure(ex)
   factorize && factorize!(ex)
   optimize && (ex = optimize!(ex))
@@ -201,26 +201,26 @@ function generate_expression(sig::Signature, ex, varinfo::Optional{VariableInfo}
 end
 
 """
-    codegen_expression(sig, ex; flattening::Symbol = $(QuoteNode(DEFAULT_FLATTENING)), T = $DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing)
+    codegen_expression(sig, ex; flattening::Symbol = $(QuoteNode(DEFAULT_FLATTENING)), T = $DEFAULT_TYPE, bindings::Optional{Bindings} = nothing)
 
 Parse `ex` as an algebraic expression and generate a Julia expression which represents the corresponding computation. `sig` can be a [`SymbolicGA.Signature`](@ref) or a signature integer, tuple or tuple expression adhering to semantics of [`@ga`](@ref). See [`@ga`](@ref) for more information regarding the parsing and semantics applied to `ex`.
 
 ## Parameters
 - `flattening` controls whether the components should be nested (`:nested`) or flattened (`:flattened`). In short, setting this option to `:flattened` always returns a single tuple of components, even multiple geometric entities are present in the output; while `:nested` will return a tuple of multiple elements if several geometric entities result from the computation.
 - `T` specifies what type to use when reconstructing geometric entities from tuple components with [`construct`](@ref). If set to `nothing` with a `:nested` mode (default), then an appropriate [`KVector`](@ref) will be used depending on which type of geometric entity is returned; if multiple entities are present, a tuple of `KVector`s will be returned. With a `:flattened` mode, `T` will be set to `:Tuple` if unspecified.
-- `varinfo` is a user-provided [`SymbolicGA.VariableInfo`](@ref) which controls what expansions are carried out on the raw Julia expression before conversion to an algebraic expression.
+- `bindings` is a user-provided [`SymbolicGA.Bindings`](@ref) which controls what expansions are carried out on the raw Julia expression before conversion to an algebraic expression.
 
 """
 function codegen_expression end
 
-codegen_expression(sig_ex, ex; flattening::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing) =
-  codegen_expression(extract_signature(sig_ex), ex; flattening, T, varinfo)
+codegen_expression(sig_ex, ex; flattening::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, bindings::Optional{Bindings} = nothing) =
+  codegen_expression(extract_signature(sig_ex), ex; flattening, T, bindings)
 
-function codegen_expression(sig::Signature, ex; flattening::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, varinfo::Optional{VariableInfo} = nothing)
+function codegen_expression(sig::Signature, ex; flattening::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, bindings::Optional{Bindings} = nothing)
   in(flattening, (:flattened, :nested)) || error("Expected :flattened or :nested value for flattening keyword argument, got $flattening")
   flattening === :flattened && isnothing(T) && (T = :Tuple)
-  varinfo = merge!(builtin_varinfo(sig), @something(varinfo, VariableInfo()))
-  define_variables(generate_expression(sig, ex, varinfo), flattening == :flattened, T)
+  bindings = merge!(builtin_bindings(sig), @something(bindings, Bindings()))
+  define_variables(generate_expression(sig, ex, bindings), flattening == :flattened, T)
 end
 
 function extract_signature(ex)
@@ -268,14 +268,14 @@ function extract_grade_from_annotation(t, sig)
   error("Unknown grade projection for algebraic element $t")
 end
 
-function extract_expression(ex, sig::Signature, varinfo::VariableInfo)
+function extract_expression(ex, sig::Signature, bindings::Bindings)
   # Shield interpolated regions in a `QuoteNode` from expression processing.
   ex = prewalk(ex) do ex
     Meta.isexpr(ex, :$) && return QuoteNode(ex.args[1])
     ex
   end
 
-  ex2 = expand_variables(ex, sig, varinfo)
+  ex2 = expand_variables(ex, sig, bindings)
   @debug "After variable expansion: $(stringc(ex2))"
 
   # Make sure calls in annotations are not interpreted as actual operations.
@@ -329,12 +329,12 @@ end
 sourceloc(ln::Nothing) = ""
 sourceloc(ln::LineNumberNode) = string(" around ", ln.file, ':', ln.line)
 
-function parse_variable_info(ex::Expr; warn_override::Bool = true)
+function parse_bindings(ex::Expr; warn_override::Bool = true)
   @assert Meta.isexpr(ex, :block)
-  parse_variable_info(ex.args; warn_override)
+  parse_bindings(ex.args; warn_override)
 end
-function parse_variable_info(exs; warn_override::Bool = true)
-  varinfo = VariableInfo(; warn_override)
+function parse_bindings(exs; warn_override::Bool = true)
+  bindings = Bindings(; warn_override)
   last_line = nothing
   for ex in exs
     if isa(ex, LineNumberNode)
@@ -353,9 +353,9 @@ function parse_variable_info(exs; warn_override::Bool = true)
       argnames = extract_name.(args)
       # Create slots so that we don't need to keep the names around; then we can directly place arguments by index.
       body = define_argument_slots(body, argnames)
-      haskey(varinfo.funcs, name) && @warn "Redefinition of user-defined function `$name`$(sourceloc(last_line)) (only one method is allowed)."
-      varinfo.funcs[name] = body
-      !isnothing(last_line) && (varinfo.func_sourcelocs[name] = last_line)
+      haskey(bindings.funcs, name) && @warn "Redefinition of user-defined function `$name`$(sourceloc(last_line)) (only one method is allowed)."
+      bindings.funcs[name] = body
+      !isnothing(last_line) && (bindings.func_sourcelocs[name] = last_line)
       continue
     end
 
@@ -367,29 +367,29 @@ function parse_variable_info(exs; warn_override::Bool = true)
 
     !Meta.isexpr(ex, :(=), 2) && error("Non-final expression parsed without a left-hand side assignment", sourceloc(last_line), '.')
     lhs, rhs = ex.args
-    haskey(varinfo.refs, lhs) && @warn "Redefinition of user-defined variable `$lhs`$(sourceloc(last_line))."
-    varinfo.refs[lhs] = rhs
-    !isnothing(last_line) && (varinfo.ref_sourcelocs[lhs] = last_line)
+    haskey(bindings.refs, lhs) && @warn "Redefinition of user-defined variable `$lhs`$(sourceloc(last_line))."
+    bindings.refs[lhs] = rhs
+    !isnothing(last_line) && (bindings.ref_sourcelocs[lhs] = last_line)
   end
-  varinfo
+  bindings
 end
 
 """
 Expand variables from a block expression, yielding a final expression where all variables were substitued with their defining expression.
 """
-function expand_variables(ex, sig::Signature, varinfo::VariableInfo)
+function expand_variables(ex, sig::Signature, bindings::Bindings)
   !Meta.isexpr(ex, :block) && (ex = Expr(:block, ex))
   rhs = nothing
 
   i = findlast(x -> !isa(x, LineNumberNode), eachindex(ex.args))
   isnothing(i) && error("No input expression could be parsed.")
-  parsed_varinfo = parse_variable_info(ex.args[1:(i - 1)])
-  varinfo = merge!(deepcopy(varinfo), parsed_varinfo)
+  parsed_bindings = parse_bindings(ex.args[1:(i - 1)])
+  bindings = merge!(deepcopy(bindings), parsed_bindings)
 
   last_ex = ex.args[i]
   rhs = Meta.isexpr(last_ex, :(=)) ? last_ex.args[2] : last_ex
   # Expand references and function calls.
-  res = postwalk(ex -> expand_subtree(ex, varinfo.refs, varinfo.funcs, Set{Symbol}()), rhs)
+  res = postwalk(ex -> expand_subtree(ex, bindings.refs, bindings.funcs, Set{Symbol}()), rhs)
   !isa(res, Expr) && error("Expression resulted in a trivial RHS before simplifications: $(repr(res))")
   res
 end

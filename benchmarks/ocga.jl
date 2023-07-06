@@ -15,8 +15,8 @@ macro cga3(args...)
     # For spheres `S` defined as vectors, and points `X` defined as vectors as well.
     distance(S, X) = unitize(S) ⋅ unitize(X)
   end
-  varinfo = parse_variable_info(definitions; warn_override = false)
-  esc(codegen_expression((4, 1, 0), args...; varinfo))
+  bindings = parse_bindings(definitions; warn_override = false)
+  esc(codegen_expression((4, 1, 0), args...; bindings))
 end
 
 function line_tests(A, B, P)

@@ -13,8 +13,8 @@ macro cga3(args...)
     # For spheres `S` defined as vectors, and points `X` defined as vectors as well.
     distance(S, X) = unitize(S) ⋅ unitize(X)
   end
-  varinfo = parse_variable_info(definitions; warn_override = false)
-  esc(codegen_expression((4, 1, 0), args...; varinfo))
+  bindings = parse_bindings(definitions; warn_override = false)
+  esc(codegen_expression((4, 1, 0), args...; bindings))
 end
 
 point(A) = @cga3 point(A)
@@ -23,7 +23,7 @@ circle(A, B, C) = @cga3 point(A) ∧ point(B) ∧ point(C)
 line(A, B) = @cga3 point(A) ∧ point(B) ∧ n
 sphere(A, B, C, D) = @cga3 point(A) ∧ point(B) ∧ point(C) ∧ point(D)
 plane(A, B, C) = @cga3 point(A) ∧ point(B) ∧ point(C) ∧ n
-circle_radius(X) = sqrt(-@cga3(radius2(X::Trivector))[])
+circle_radius(X) = sqrt(@cga3(radius2(X::Trivector))[])
 sphere_radius(X) = sqrt(@cga3(radius2(X::Quadvector))[])
 
 @testset "3D Conformal Geometric Algebra" begin
@@ -51,8 +51,8 @@ macro pga3(args...)
     magnitude2(x) = x ⦿ x
     point(x) = embed(x) + 1.0::e4
   end
-  varinfo = parse_variable_info(definitions; warn_override = false)
-  esc(codegen_expression((3, 0, 1), args...; varinfo))
+  bindings = parse_bindings(definitions; warn_override = false)
+  esc(codegen_expression((3, 0, 1), args...; bindings))
 end
 
 struct Camera{T}

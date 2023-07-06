@@ -28,9 +28,9 @@ export Signature,
   Quadvector,
   grade,
   codegen_expression,
-  VariableInfo,
-  builtin_varinfo,
-  parse_variable_info,
+  Bindings,
+  builtin_bindings,
+  parse_bindings,
   @arg
 
 end

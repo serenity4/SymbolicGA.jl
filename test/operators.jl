@@ -3,14 +3,14 @@ using Combinatorics: combinations
 
 all_blades(cache::ExpressionCache) = [blade(cache, indices) for indices in combinations(1:dimension(cache.sig))]
 
-function ga_eval(sig_ex, ex; flattening = :nested, T = nothing, varinfo = nothing)
-  eval(codegen_expression(sig_ex, ex; flattening, T, varinfo))
+function ga_eval(sig_ex, ex; flattening = :nested, T = nothing, bindings = nothing)
+  eval(codegen_expression(sig_ex, ex; flattening, T, bindings))
 end
 
 @testset "Operators" begin
   sig = 3
-  varinfo = VariableInfo(refs = Dict(:A => :((1, 2, 3)::Vector), :B => :((10, 2, 30)::Vector), :C => :((10, 200, 3)::Vector)))
-  generate = ex -> ga_eval(sig, ex; varinfo)
+  bindings = Bindings(refs = Dict(:A => :((1, 2, 3)::Vector), :B => :((10, 2, 30)::Vector), :C => :((10, 200, 3)::Vector)))
+  generate = ex -> ga_eval(sig, ex; bindings)
 
   @testset "Associativity" begin
     @test generate(:(A + (B + C))) == generate(:((A + B) + C))
@@ -55,7 +55,7 @@ end
 
     @testset "De Morgan laws" begin
       sig = (3, 0, 1)
-      varinfo = VariableInfo(refs = Dict(
+      bindings = Bindings(refs = Dict(
         :A => :((1, 2, 3, 4)::Vector),
         :B => :((10, 2, 30, 4)::Vector),
         :C => :((10, 200, 30, 400)::Vector),
@@ -64,7 +64,7 @@ end
         :A̲ => :(left_complement(A)),
         :B̲ => :(left_complement(B)),
       ))
-      generate = ex -> ga_eval(sig, ex; varinfo)
+      generate = ex -> ga_eval(sig, ex; bindings)
 
       @test generate(:(right_complement(A ∧ B))) == generate(:(A̅ ∨ B̅))
       @test generate(:(right_complement(A ∨ B))) == generate(:(A̅ ∧ B̅))
@@ -88,14 +88,14 @@ end
 
   @testset "Bulk and weight" begin
     sig = (3, 0, 1)
-    varinfo = VariableInfo(refs = Dict(
+    bindings = Bindings(refs = Dict(
       :x => 2.4,
       :y => 3.2,
       :z => :(x::e + y::e̅),
       :p1 => :(1.2::e1 + 1.56::e2 + 1.65::e3 + 1.0::e4),
       :p2 => :((-1.2)::e1 - 1.0::e2 + 0.0::e3 - 1.0::e4),
     ))
-    generate = ex -> ga_eval(sig, ex; varinfo)
+    generate = ex -> ga_eval(sig, ex; bindings)
 
     @test generate(:(left_complement(z))) == generate(:(bulk_left_complement(z) + weight_left_complement(z)))
     @test generate(:(right_complement(z))) == generate(:(bulk_right_complement(z) + weight_right_complement(z)))
@@ -108,11 +108,11 @@ end
 
   @testset "Norms & unitization" begin
     sig = (3, 0, 1)
-    varinfo = VariableInfo(refs = Dict(
+    bindings = Bindings(refs = Dict(
       :p => :(8.4::e1 + 4.2::e4),
       :punit => :(2.0::e1 + 1.0::e4),
     ))
-    generate = ex -> ga_eval(sig, ex; varinfo)
+    generate = ex -> ga_eval(sig, ex; bindings)
 
     @test generate(:(bulk_norm(1::e1))) == generate(:(1.0::e))
     # TODO: Make sure generate(:(0.0::e)) results in a KVector whose element type is Float64.

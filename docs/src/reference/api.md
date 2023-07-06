@@ -3,9 +3,9 @@
 Main symbols:
 - [`@ga`](@ref)
 - [`KVector`](@ref)
-- [`VariableInfo`](@ref)
+- [`Bindings`](@ref)
 - [`codegen_expression`](@ref)
-- [`builtin_varinfo`](@ref)
+- [`builtin_bindings`](@ref)
 
 Aliases:
 - [`Bivector`](@ref)
@@ -26,8 +26,8 @@ Quadvector
 
 ```@docs
 codegen_expression
-VariableInfo
-builtin_varinfo
+Bindings
+builtin_bindings
 SymbolicGA.Signature
 SymbolicGA.@arg
 ```

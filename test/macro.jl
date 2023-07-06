@@ -1,4 +1,4 @@
-using SymbolicGA: extract_weights, input_expression, extract_expression, restructure, expand_variables, builtin_varinfo, argument_count, fill_argument_slots
+using SymbolicGA: extract_weights, input_expression, extract_expression, restructure, expand_variables, builtin_bindings, argument_count, fill_argument_slots
 
 @testset "Macro frontend" begin
   @testset "Function definition" begin
@@ -17,7 +17,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
       x = x::Vector
       x * x
     end
-    @test expand_variables(ex, sig, VariableInfo()) == :(x::Vector * x::Vector)
+    @test expand_variables(ex, sig, Bindings()) == :(x::Vector * x::Vector)
 
     # Interleaved references/function calls.
     ex = quote
@@ -27,18 +27,18 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
       x = g(y::Vector)
       x
     end
-    ex2 = expand_variables(ex, sig, VariableInfo())
+    ex2 = expand_variables(ex, sig, Bindings())
     @test ex2 == :((1, 2, 3)::Vector + 1::e1)
 
-    varinfo = VariableInfo(refs = Dict(
+    bindings = Bindings(refs = Dict(
       :x => 2.4,
       :z => :(x::e),
     ))
     ex = :(z ⦿ z)
-    ex2 = expand_variables(ex, sig, varinfo)
+    ex2 = expand_variables(ex, sig, bindings)
     @test ex2 == :(2.4::e ⦿ 2.4::e)
 
-    varinfo = VariableInfo(refs = Dict(
+    bindings = Bindings(refs = Dict(
       :A => :((1, 2, 3)::Vector),
       :B => :((10, 2, 30)::Vector),
       :C => :((10, 200, 30)::Vector),
@@ -48,7 +48,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
       :B̲ => :(left_complement(B)),
     ))
     ex = :(A̅ ∧ B̅)
-    ex2 = expand_variables(ex, sig, merge!(builtin_varinfo(sig), varinfo))
+    ex2 = expand_variables(ex, sig, merge!(builtin_bindings(sig), bindings))
     @test ex2 == :(right_complement((1, 2, 3)::Vector) ∧ right_complement((10, 2, 30)::Vector))
 
     sig = Signature(4, 1, 0)
@@ -61,39 +61,39 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
       radius(X) = normalize(radius2(X))::Scalar
       radius(S::Quadvector)
     end
-    ex2 = expand_variables(ex, sig, builtin_varinfo(sig; warn_override = false))
+    ex2 = expand_variables(ex, sig, builtin_bindings(sig; warn_override = false))
     symbols = expression_nodes(ex -> in(ex, (:radius, :radius2, :normalize, :weight, :magnitude2, :n)), ex2, Expr)
     @test isempty(symbols)
 
     @testset "Redefinition warnings" begin
-      varinfo = VariableInfo(funcs = Dict(
+      bindings = Bindings(funcs = Dict(
         :geometric_antiproduct => :(0::e),
       ))
-      @test_logs (:warn, r"Redefinition of built-in function") merge!(builtin_varinfo(sig), varinfo)
+      @test_logs (:warn, r"Redefinition of built-in function") merge!(builtin_bindings(sig), bindings)
 
-      varinfo = VariableInfo(refs = Dict(
+      bindings = Bindings(refs = Dict(
         :𝟏 => :(1::e̅),
       ))
-      @test_logs (:warn, r"Redefinition of built-in variable") merge!(builtin_varinfo(sig), varinfo)
+      @test_logs (:warn, r"Redefinition of built-in variable") merge!(builtin_bindings(sig), bindings)
 
-      varinfo = VariableInfo(funcs = Dict(
+      bindings = Bindings(funcs = Dict(
         :geometric_antiproduct => :(0::e),
       ); warn_override = false)
-      @test_logs merge!(builtin_varinfo(sig), varinfo)
+      @test_logs merge!(builtin_bindings(sig), bindings)
 
       ex = quote
         f(x) = x
         f(x, y) = x + y
         f(1::e, 2::e1)
       end
-      @test_logs (:warn, r"user-defined function") expand_variables(ex, sig, VariableInfo())
+      @test_logs (:warn, r"user-defined function") expand_variables(ex, sig, Bindings())
 
       ex = quote
         x = 3
         x = 4
         x::Scalar
       end
-      @test_logs (:warn, r"user-defined variable") expand_variables(ex, sig, VariableInfo())
+      @test_logs (:warn, r"user-defined variable") expand_variables(ex, sig, Bindings())
     end
   end
 
@@ -106,7 +106,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   @test isexpr(ex, ADDITION, 3)
   @test ex[1] == factor(cache, first(ws)) * blade(cache, 1, 2)
 
-  ex = extract_expression(:((x::Vector * y::Bivector)::Trivector), sig, builtin_varinfo(sig))
+  ex = extract_expression(:((x::Vector * y::Bivector)::Trivector), sig, builtin_bindings(sig))
   ex2 = restructure(ex)
   @test isexpr(ex2, KVECTOR, 1)
   @test isweighted(ex2[1]) && isexpr(ex2[1][2], BLADE)
