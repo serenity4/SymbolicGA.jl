@@ -219,7 +219,7 @@ function codegen_expression(sig::Signature, ex; flattening::Symbol = DEFAULT_FLA
 end
 
 function extract_signature(ex)
-  isa(ex, Integer) && return Signature(ex)
+  (isa(ex, Integer) || isa(ex, AbstractString)) && return Signature(ex)
   isa(ex, Tuple) && return Signature(ex...)
   Meta.isexpr(ex, :tuple) || error("Expected tuple as signature, got $ex")
   all(isa(x, Int) for x in ex.args) || error("Expected literals in signature, got $ex")
