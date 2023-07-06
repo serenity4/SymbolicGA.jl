@@ -2,6 +2,17 @@
 
 ## v0.2
 
+- ![BREAKING][badge-breaking] `*` no longer aliases the geometric product by default `⟑` (`\wedgedot`).
+- ![BREAKING][badge-breaking] `VariableInfo` has been renamed `Bindings` for better clarity.
+
+[badge-breaking]: https://img.shields.io/badge/BREAKING-red.svg
+[badge-deprecation]: https://img.shields.io/badge/deprecation-orange.svg
+[badge-feature]: https://img.shields.io/badge/feature-green.svg
+[badge-enhancement]: https://img.shields.io/badge/enhancement-blue.svg
+[badge-bugfix]: https://img.shields.io/badge/bugfix-purple.svg
+[badge-security]: https://img.shields.io/badge/security-black.svg
+[badge-experimental]: https://img.shields.io/badge/experimental-lightgrey.svg
+[badge-maintenance]: https://img.shields.io/badge/maintenance-gray.svg
 
 <!--
 # Badges (reused from the CHANGELOG.md of Documenter.jl)
