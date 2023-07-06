@@ -125,10 +125,10 @@ end
 
 By default, any user-defined symbol overriding a symbol defined here will trigger a warning; set `warn_override = false` to disable this.
 """
-function builtin_bindings(sig::Signature; warn_override::Bool = true)
+function builtin_bindings(; warn_override::Bool = true)
   refs = Dict{Symbol,Any}(
     :𝟏 => :(1::e),
-    :𝟙 => :(1::$(Symbol(:e, join(1:dimension(sig))))),
+    :𝟙 => :(1::e̅),
     :⊣ => :left_interior_product,
     :⊢ => :right_interior_product,
     :⨼ => :left_interior_antiproduct,
@@ -192,7 +192,7 @@ function builtin_bindings(sig::Signature; warn_override::Bool = true)
 end
 
 function generate_expression(sig::Signature, ex, bindings::Optional{Bindings} = nothing; factorize = true, optimize = true)
-  ex = extract_expression(ex, sig, @something(bindings, merge!(builtin_bindings(sig), Bindings())))
+  ex = extract_expression(ex, sig, @something(bindings, merge!(builtin_bindings(), Bindings())))
   ex = restructure(ex)
   factorize && factorize!(ex)
   optimize && (ex = optimize!(ex))
@@ -218,7 +218,7 @@ codegen_expression(sig_ex, ex; flattening::Symbol = DEFAULT_FLATTENING, T = DEFA
 function codegen_expression(sig::Signature, ex; flattening::Symbol = DEFAULT_FLATTENING, T = DEFAULT_TYPE, bindings::Optional{Bindings} = nothing)
   in(flattening, (:flattened, :nested)) || error("Expected :flattened or :nested value for flattening keyword argument, got $flattening")
   flattening === :flattened && isnothing(T) && (T = :Tuple)
-  bindings = merge!(builtin_bindings(sig), @something(bindings, Bindings()))
+  bindings = merge!(builtin_bindings(), @something(bindings, Bindings()))
   define_variables(generate_expression(sig, ex, bindings), flattening == :flattened, T)
 end
 
@@ -237,7 +237,7 @@ isreserved(op::Symbol) = in(op, (:⟑, :∧, :●, :+, :×, :-, :inverse, :rever
 function extract_blade_from_annotation(cache, t)
   isa(t, Symbol) || return nothing
   (t === :e || t === :e0) && return blade(cache)
-  t === :e̅ && return antiscalar(cache)
+  t in (:e̅, :ē) && return antiscalar(cache)
   m = match(r"^e(\d+)$", string(t))
   dimension(cache.sig) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
   isnothing(m) && return nothing
@@ -274,7 +274,7 @@ function extract_expression(ex, sig::Signature, bindings::Bindings)
     ex
   end
 
-  ex2 = expand_variables(ex, sig, bindings)
+  ex2 = expand_variables(ex, bindings)
   @debug "After variable expansion: $(stringc(ex2))"
 
   # Make sure calls in annotations are not interpreted as actual operations.
@@ -376,7 +376,7 @@ end
 """
 Expand variables from a block expression, yielding a final expression where all variables were substitued with their defining expression.
 """
-function expand_variables(ex, sig::Signature, bindings::Bindings)
+function expand_variables(ex, bindings::Bindings)
   !Meta.isexpr(ex, :block) && (ex = Expr(:block, ex))
   rhs = nothing
 

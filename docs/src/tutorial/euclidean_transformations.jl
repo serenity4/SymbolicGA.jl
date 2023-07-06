@@ -49,10 +49,13 @@ x = Tuple(2.0 .+ 1.5 .* randn(3))
 
 x′ = @r3 x::1 << Ω::(0, 2)
 @assert x′ ≈ @r3 Ω::(0, 2) ⟑ x::1 ⟑ inv(Ω::(0, 2))
+using LinearAlgebra: norm # hide
+@assert norm(x) ≈ norm(x′) # hide
 x′
 
 # The inverse rotation may be applied using the inverse of our versor Ω:
 
+@assert KVector{1,3}(x) ≈ @r3 x′::1 << inv(Ω::(0, 2)) # hide
 x′′ = @r3 x′::1 << inv(Ω::(0, 2))
 
 #=
@@ -60,10 +63,6 @@ x′′ = @r3 x′::1 << inv(Ω::(0, 2))
 We did get `x` back! But numbers being a bit hard to visualize, we prepared a small animation to see the rotation in action using Makie:
 
 ````@setup euclidean_transformations
-using LinearAlgebra
-@assert norm(x) ≈ norm(x′)
-@assert x′′ ≈ KVector{1,3}(x)
-
 include("../plots/rotation_origin.jl")
 ````
 

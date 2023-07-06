@@ -57,10 +57,18 @@ What if we wanted only the scalar part or the bivector part? We can project the 
 
 @ga 2 (a::1 ⟑ b::1)::0
 
-# In this particular case, getting the lowest and highest grade component of a geometric product is what defines the inner and outer products, `⋅` and `∧`.
+# In this particular case, getting the lowest and highest grade component of a geometric product is what defines the inner and outer products, `⋅` (`\cdot`) and `∧` (`\wedge`).
 
 @ga 2 a::1 ⋅ b::1
 
 #-
 
 @ga 2 a::1 ∧ b::1
+
+#=
+
+!!! note
+    In many materials about geometric algebra, the geometric product is noted `*`. However, we prefer to use the `\wedgedot` symbol `⟑` [proposed by E. Lengyel](https://terathon.com/blog/projective-geometric-algebra-done-right/) to visually show its relationship with the inner and outer products, `⋅` and `∧`, and because it allows the use of an "anti-" operator to express the dual operator to the geometric product, the geometric antiproduct `⟇` (`\veedot`, available from Julia 1.10).
+    There are also programming-related motivations, as `2x` destructures to `2 * x` which would rarely want to be considered as "the geometric product of 2 and `x`".
+    If you dislike the use of non-ASCII characters for major operators, do not fear, you can use standard function names instead of operators, such as `geometric_product(x, y)` (equivalent to `x ⟑ y`).
+=#
