@@ -137,7 +137,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   x = (1.0, 2.0, 3.0)
   y = (50.0, 70.0, 70.0)
   # Yields 1 scalar and 1 bivector.
-  res = @ga 3 x::1 ⟑ y::KVector{1}
+  res = @ga 3 x::1 ⟑ y::1
   @test grade.(res) == (0, 2)
   @test res[1][] == sum(x .* y)
 
@@ -180,7 +180,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
 
   z = (x..., y...)
   z_nested = (x, y)
-  @test (@ga 3 𝟏 ∧ z::(1 + 2)) == (@ga 3 𝟏 ∧ z_nested::(1, 2)) == (@ga 3 𝟏 ∧ z_nested::Multivector{1, 2}) == (@ga 3 𝟏 ∧ (x::1 + y::2))
+  @test (@ga 3 𝟏 ∧ z::(1 + 2)) == (@ga 3 𝟏 ∧ z_nested::(1, 2)) == (@ga 3 𝟏 ∧ (x::1 + y::2))
   @test (@ga 2 (1, 2, 3)::(0 + 1)) == (@ga 2 ((1,), (2, 3))::(0, 1)) == (KVector{0,2}(1), KVector{1,2}(2, 3))
 
   z2 = (3, z..., 2)

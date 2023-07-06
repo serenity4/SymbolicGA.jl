@@ -247,10 +247,6 @@ function extract_blade_from_annotation(cache, t)
   blade(cache, indices)
 end
 
-# Examples:
-# - extract grade 4 for expressions x::4, x::KVector{4}, x::Quadvector.
-# - extract grades 1 and 3 for expressions x::(1 + 3), x::(Vector + Trivector), x::(KVector{1} + KVector{3}), x::Multivector{1, 3}, etc.
-# We might want to reduce the number of syntactically valid expressions though.
 function extract_grade_from_annotation(t, sig)
   isa(t, Int) && return t
   t === :Scalar && return 0
@@ -260,9 +256,7 @@ function extract_grade_from_annotation(t, sig)
   t === :Quadvector && return 4
   t === :Antiscalar && return dimension(sig)
   t === :Multivector && return collect(0:dimension(sig))
-  Meta.isexpr(t, :curly, 2) && t.args[1] === :KVector && return t.args[2]::Int
   Meta.isexpr(t, :annotate_projection) && t.args[1] === :+ && return Int[extract_grade_from_annotation(t, sig) for t in @view t.args[2:end]]
-  Meta.isexpr(t, :curly) && t.args[1] === :Multivector && return [extract_grade_from_annotation(arg::Int, sig) for arg in t.args[2:end]]
   Meta.isexpr(t, :tuple) && return extract_grade_from_annotation.(t.args, sig)
   error("Unknown grade projection for algebraic element $t")
 end
