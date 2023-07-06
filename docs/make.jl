@@ -1,8 +1,12 @@
 using Documenter, SymbolicGA, Literate
 
+const PLOT_DIRECTORY = joinpath(@__DIR__, "src", "plots")
+
 function julia_files(dir)
     files = reduce(vcat, [joinpath(root, file) for (root, dirs, files) in walkdir(dir) for file in files])
-    sort(filter(endswith(".jl"), files))
+    filter!(endswith(".jl"), files)
+    filter!(x -> !in(x, readdir(PLOT_DIRECTORY; join = true)), files)
+    sort!(files)
 end
 
 function replace_edit(content)
@@ -45,6 +49,11 @@ makedocs(;
     ),
     pages = [
         "Home" => "index.md",
+        "Glossary" => "glossary.md",
+        "Tutorials" => [
+            "Getting started" => "tutorial/getting_started.md",
+            "Euclidean transformations" => "tutorial/euclidean_transformations.md",
+        ],
         "Explanation" => [
             "Geometric Algebra" => "explanation/geometric_algebra.md",
         ],

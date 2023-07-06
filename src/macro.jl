@@ -120,6 +120,11 @@ macro arg(i)
   QuoteNode(Expr(:argument, i))
 end
 
+"""
+[`VariableInfo`](@ref) included by default in [`@ga`](@ref).
+
+By default, any user-defined symbol overriding a symbol defined here will trigger a warning; set `warn_override = false` to disable this.
+"""
 function builtin_varinfo(sig::Signature; warn_override::Bool = true)
   refs = Dict{Symbol,Any}(
     :𝟏 => :(1::e),

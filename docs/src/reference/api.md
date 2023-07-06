@@ -1,14 +1,18 @@
 # API Reference
 
-Exported symbols:
+Main symbols:
 - [`@ga`](@ref)
 - [`KVector`](@ref)
+- [`VariableInfo`](@ref)
+- [`codegen_expression`](@ref)
+- [`builtin_varinfo`](@ref)
+
+Aliases:
 - [`Bivector`](@ref)
 - [`Trivector`](@ref)
 - [`Quadvector`](@ref)
-- [`codegen_expression`](@ref)
 
-## Main usage
+## Usage
 
 ```@docs
 @ga
@@ -22,7 +26,8 @@ Quadvector
 
 ```@docs
 codegen_expression
-SymbolicGA.VariableInfo
+VariableInfo
+builtin_varinfo
 SymbolicGA.Signature
 SymbolicGA.@arg
 ```
