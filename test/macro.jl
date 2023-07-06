@@ -15,9 +15,9 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
     # Recursive reference.
     ex = quote
       x = x::Vector
-      x * x
+      x ⟑ x
     end
-    @test expand_variables(ex, sig, Bindings()) == :(x::Vector * x::Vector)
+    @test expand_variables(ex, sig, Bindings()) == :(x::Vector ⟑ x::Vector)
 
     # Interleaved references/function calls.
     ex = quote
@@ -106,62 +106,62 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   @test isexpr(ex, ADDITION, 3)
   @test ex[1] == factor(cache, first(ws)) * blade(cache, 1, 2)
 
-  ex = extract_expression(:((x::Vector * y::Bivector)::Trivector), sig, builtin_bindings(sig))
+  ex = extract_expression(:((x::Vector ⟑ y::Bivector)::Trivector), sig, builtin_bindings(sig))
   ex2 = restructure(ex)
   @test isexpr(ex2, KVECTOR, 1)
   @test isweighted(ex2[1]) && isexpr(ex2[1][2], BLADE)
   @test isa(string(ex2), String)
 
-  ex = @macroexpand @ga (2, 1) Tuple x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
+  ex = @macroexpand @ga (2, 1) Tuple x::Vector ∧ y::Vector + x::Vector ⟑ z::Antiscalar
   @test isa(ex, Expr)
   x = (1, 2, 3)
   y = (4, 5, 6)
   z = 3
 
   # Yields 1 bivector.
-  res = @ga (2, 1) Tuple x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
+  res = @ga (2, 1) Tuple x::Vector ∧ y::Vector + x::Vector ⟑ z::Antiscalar
   @test isa(res, NTuple{3,Int})
 
   x = (1, 2)
   y = (0, 50)
-  res = @ga 2 Tuple x::Vector ∧ y::Vector + x[1]::Scalar * z::Antiscalar
+  res = @ga 2 Tuple x::Vector ∧ y::Vector + x[1]::Scalar ⟑ z::Antiscalar
   @test res == (1 * 50 + 1 * 3,)
   # Yields 1 vector and 1 antiscalar.
-  res = @ga 2 x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
+  res = @ga 2 x::Vector ∧ y::Vector + x::Vector ⟑ z::Antiscalar
   @test isa(res, Tuple{<:KVector{1}, <:KVector{2}})
-  res2 = @ga 2 Vector x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
+  res2 = @ga 2 Vector x::Vector ∧ y::Vector + x::Vector ⟑ z::Antiscalar
   @test collect.(res) == res2 && all(isa(x, Vector{Int}) for x in res2)
-  res3 = @ga 2 Vector{Float64} x::Vector ∧ y::Vector + x::Vector * z::Antiscalar
+  res3 = @ga 2 Vector{Float64} x::Vector ∧ y::Vector + x::Vector ⟑ z::Antiscalar
   @test res2 == res3 && all(isa(x, Vector{Float64}) for x in res3)
 
   x = (1.0, 2.0, 3.0)
   y = (50.0, 70.0, 70.0)
   # Yields 1 scalar and 1 bivector.
-  res = @ga 3 x::1 * y::KVector{1}
+  res = @ga 3 x::1 ⟑ y::KVector{1}
   @test grade.(res) == (0, 2)
   @test res[1][] == sum(x .* y)
 
   res = @ga 3 begin
     x::Vector
-    x * x
+    x ⟑ x
   end
   @test grade(res) == 0
 
   res2 = @ga 3 begin
     x = (1.0, 2.0, 3.0)::Vector
-    x * x
+    x ⟑ x
   end
   @test res === res2
 
   # The `1::e12` gets simplified to `e12`.
-  res = @ga 3 :flattened (1::e1 * 1::e1 + 1::e12)::Multivector
+  res = @ga 3 :flattened (1::e1 ⟑ 1::e1 + 1::e12)::Multivector
   @test res == (1, 1, 0, 0)
 
   # Preserve element types.
-  res = @ga 3 :flattened (1::e1 * 1::e1 + 1.0::e12)::Multivector
+  res = @ga 3 :flattened (1::e1 ⟑ 1::e1 + 1.0::e12)::Multivector
   @test res == (1, 1.0, 0, 0)
 
-  res = @ga 3 :flattened (1::e1 * 1::e1 + 2::e12)::Multivector
+  res = @ga 3 :flattened (1::e1 ⟑ 1::e1 + 2::e12)::Multivector
   @test res == (1, 2, 0, 0)
 
   res = @ga 3 ((x::Vector)')
@@ -170,7 +170,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   @test res == KVector{2,3}((-).(x))
 
   x = (1, 2, 3)
-  res = (@ga 3 (x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector)
+  res = (@ga 3 (x::Vector ⟑ x::Bivector ∧ x::Vector + 2::e12)::Multivector)
   @test grade(res) == 2
 
   @test (@ga 3 right_complement(1::e2)) == (@ga 3 1::e31)

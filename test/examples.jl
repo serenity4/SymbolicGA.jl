@@ -5,11 +5,11 @@ macro cga3(args...)
     n̅ = n̄ # n\bar !== n\overbar but they display exactly the same.
     embed(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
     magnitude2(x) = x ⦿ x
-    point(x) = (embed(x) + (0.5::Scalar * magnitude2(embed(x))) * n + n̄)::Vector
+    point(x) = (embed(x) + (0.5::Scalar ⟑ magnitude2(embed(x))) ⟑ n + n̄)::Vector
     weight(X) = -X ⋅ n
     unitize(X) = X / weight(X)
     radius2(X) = (magnitude2(X) / magnitude2(X ∧ n))::Scalar
-    center(X) = X * n * X
+    center(X) = X ⟑ n ⟑ X
     # For spheres `S` defined as vectors, and points `X` defined as vectors as well.
     distance(S, X) = unitize(S) ⋅ unitize(X)
   end
@@ -112,7 +112,7 @@ count_expr_nodes(ex) = isa(ex, Expr) ? sum(count_expr_nodes, ex.args) : 1
   # Define rotation generator.
   Ω = @ga 3 exp(-(ϕ::Bivector) / 2::Scalar)
   @test grade.(Ω) == (0, 2)
-  @test all(Ω .≈ @ga 3 cos(Base.:*(0.5, α))::Scalar - Π::Bivector * sin(Base.:*(0.5, α))::Scalar)
+  @test all(Ω .≈ @ga 3 cos(0.5α)::Scalar - Π::Bivector ⟑ sin(0.5α)::Scalar)
   @test (@ga 3 Ω::(Scalar, Bivector) ⟑ inverse(Ω::(Scalar, Bivector))) == KVector{0,3}(1.0)
 
   x′ = @ga 3 x::1 << Ω::(0, 2)

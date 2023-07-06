@@ -41,7 +41,7 @@ umul(x, ys...) = unsimplified_expression(cache, SCALAR_PRODUCT, x, ys...)
   end; factorize = false, optimize = false)
   factorize!(ex)
 
-  ex = generate_expression(Signature(3), :((x::Vector * x::Bivector ∧ x::Vector + 2::e12)::Multivector); factorize = false, optimize = false)
+  ex = generate_expression(Signature(3), :((x::Vector ⟑ x::Bivector ∧ x::Vector + 2::e12)::Multivector); factorize = false, optimize = false)
   @test all(>(1) ∘ length, gather_scalar_expressions(ex))
   factorize!(ex)
   @test all(>(1) ∘ length, gather_scalar_expressions(ex))

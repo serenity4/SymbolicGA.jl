@@ -136,7 +136,6 @@ function builtin_bindings(sig::Signature; warn_override::Bool = true)
     :⩒ => :geometric_antiproduct,
     :exterior_product => :∧,
     :∨ => :exterior_antiproduct,
-    :* => :⟑,
     :geometric_product => :⟑,
     :○ => :interior_antiproduct,
     :⋅ => :●,
