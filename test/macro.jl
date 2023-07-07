@@ -48,7 +48,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
       :B̲ => :(left_complement(B)),
     ))
     ex = :(A̅ ∧ B̅)
-    ex2 = expand_variables(ex, merge!(builtin_bindings(), bindings))
+    ex2 = expand_variables(ex, merge!(default_bindings(), bindings))
     @test ex2 == :(exterior_product(right_complement((1, 2, 3)::Vector), right_complement((10, 2, 30)::Vector)))
 
     sig = Signature(4, 1, 0)
@@ -61,7 +61,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
       radius(X) = normalize(radius2(X))::Scalar
       radius(S::Quadvector)
     end
-    ex2 = expand_variables(ex, builtin_bindings(; warn_override = false))
+    ex2 = expand_variables(ex, default_bindings(; warn_override = false))
     symbols = expression_nodes(ex -> in(ex, (:radius, :radius2, :normalize, :weight, :magnitude2, :n)), ex2, Expr)
     @test isempty(symbols)
 
@@ -69,17 +69,17 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
       bindings = Bindings(funcs = Dict(
         :geometric_antiproduct => :(0::e),
       ))
-      @test_logs (:warn, r"Redefinition of built-in function") merge!(builtin_bindings(), bindings)
+      @test_logs (:warn, r"Redefinition of function") merge!(default_bindings(), bindings)
 
       bindings = Bindings(refs = Dict(
         :𝟏 => :(1::e̅),
       ))
-      @test_logs (:warn, r"Redefinition of built-in variable") merge!(builtin_bindings(), bindings)
+      @test_logs (:warn, r"Redefinition of variable") merge!(default_bindings(), bindings)
 
       bindings = Bindings(funcs = Dict(
         :geometric_antiproduct => :(0::e),
       ); warn_override = false)
-      @test_logs merge!(builtin_bindings(), bindings)
+      @test_logs merge!(default_bindings(), bindings)
 
       ex = quote
         f(x) = x
@@ -106,7 +106,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   @test isexpr(ex, ADDITION, 3)
   @test ex[1] == factor(cache, first(ws)) * blade(cache, 1, 2)
 
-  ex, _ = extract_expression(:((x::Vector ⟑ y::Bivector)::Trivector), sig, builtin_bindings())
+  ex, _ = extract_expression(:((x::Vector ⟑ y::Bivector)::Trivector), sig, default_bindings())
   ex2 = restructure(ex)
   @test isexpr(ex2, KVECTOR, 1)
   @test isweighted(ex2[1]) && isexpr(ex2[1][2], BLADE)

@@ -431,7 +431,7 @@ precompile(Tuple{SymbolicGA.var"#77#78"{SymbolicGA.var"#127#128"{Array{Symbol, 1
 precompile(Tuple{typeof(SymbolicGA.postwalk), SymbolicGA.var"#120#122"{SymbolicGA.Bindings}, Symbol})
 precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:refs,), Tuple{Base.Dict{Symbol, Any}}}, Type{SymbolicGA.Bindings}})
 precompile(Tuple{typeof(Core.kwcall), NamedTuple{(:refs,), Tuple{Base.Dict{Symbol, Expr}}}, Type{SymbolicGA.Bindings}})
-precompile(Tuple{typeof(SymbolicGA.builtin_bindings)})
+precompile(Tuple{typeof(SymbolicGA.default_bindings)})
 precompile(Tuple{typeof(SymbolicGA.expand_variables), Expr, SymbolicGA.Signature{4, 1, 0}, SymbolicGA.Bindings})
 precompile(Tuple{SymbolicGA.var"#77#78"{SymbolicGA.var"#127#128"{Array{Symbol, 1}}}, Expr})
 precompile(Tuple{SymbolicGA.var"#77#78"{SymbolicGA.var"#123#125"{Base.Dict{Symbol, Any}, Base.Dict{Symbol, Any}, Base.Set{Symbol}}}, Float64})

@@ -16,7 +16,7 @@ See also: [`codegen_expression`](@ref).
 `ex` can be a single statement or a block, and uses a domain-specific language to facilitate the construction of algebraic expressions.
 `ex` is logically divided into two sections: a definition section, which defines bindings, and a final algebraic expression, which will be the object of the evaluation. It is processed in three phases:
 - A definition phase, in which bindings are defined with one or several statements for use in the subsequent phase;
-- An expansion phase, where identified bindings in the final algebraic expression are expanded. The defined bindings include the ones priorly defined and a set of built-in bindings.
+- An expansion phase, where identified bindings in the final algebraic expression are expanded. The defined bindings include the ones priorly defined and a set of default bindings.
 - An evaluation phase, in which the core algebraic expression is simplified and translated into a Julia expression.
 
 # Expression parsing
@@ -64,7 +64,7 @@ This allows a small domain-specific language to be used when constructing algebr
 References are `lhs::Symbol => rhs` pairs where the left-hand side simply expands to the right-hand side during parsing. Right-hand sides which include `lhs` are supported, such that references of the form `x = x::Vector` are allowed, but will be expanded only once.
 Functions are `name::Symbol => body` pairs where `rhs` must refer to their arguments with `Expr(:argument, <literal::Int>)` expressions. Recursion is not supported and will lead to a `StackOverflowError`. See [`@arg`](@ref).
 
-Most built-in functions and symbols are implemented using this mechanism. If `warn_override` is set to true, overrides of such built-in functions will trigger a warning.
+Most default functions and symbols are implemented using this mechanism. If `warn_override` is set to true, overrides of such default functions will trigger a warning.
 """
 struct Bindings
   refs::Dict{Symbol,Any}
@@ -81,14 +81,14 @@ function Base.merge!(x::Bindings, y::Bindings)
   for (k, v) in pairs(y.refs)
     if haskey(x.refs, k) && warn_override
       ln = get(y.ref_sourcelocs, k, nothing)
-      @warn "Redefinition of built-in variable `$k`$(sourceloc(ln))."
+      @warn "Redefinition of variable `$k`$(sourceloc(ln))."
     end
     x.refs[k] = v
   end
   for (k, v) in pairs(y.funcs)
     if haskey(x.funcs, k) && warn_override
       ln = get(y.func_sourcelocs, k, nothing)
-      @warn "Redefinition of built-in function `$k`$(sourceloc(ln)) (only one method is allowed)."
+      @warn "Redefinition of function `$k`$(sourceloc(ln)) (only one method is allowed)."
     end
     x.funcs[k] = v
   end
@@ -110,7 +110,7 @@ end
 
 By default, any user-defined symbol overriding a symbol defined here will trigger a warning; set `warn_override = false` to disable this.
 """
-function builtin_bindings(; warn_override::Bool = true)
+function default_bindings(; warn_override::Bool = true)
   refs = Dict{Symbol,Any}(
     :𝟏 => :(1::e),
     :𝟙 => :(1::e̅),
@@ -178,7 +178,7 @@ function builtin_bindings(; warn_override::Bool = true)
   Bindings(; refs, funcs, warn_override)
 end
 
-function generate_expression(sig::Signature, ex, bindings::Bindings = builtin_bindings(); factorize = true, optimize = true)
+function generate_expression(sig::Signature, ex, bindings::Bindings = default_bindings(); factorize = true, optimize = true)
   ex, flattened = extract_expression(ex, sig, bindings)
   ex = restructure(ex)
   factorize && factorize!(ex)
@@ -202,7 +202,7 @@ codegen_expression(sig_ex, ex; T = DEFAULT_TYPE, bindings::Optional{Bindings} = 
   codegen_expression(extract_signature(sig_ex), ex; T, bindings)
 
 function codegen_expression(sig::Signature, ex; T = DEFAULT_TYPE, bindings::Optional{Bindings} = nothing)
-  bindings = merge!(builtin_bindings(), @something(bindings, Bindings()))
+  bindings = merge!(default_bindings(), @something(bindings, Bindings()))
   generated, flattened = generate_expression(sig, ex, bindings)
   flattened && isnothing(T) && (T = :Tuple)
   define_variables(generated, flattened, T)

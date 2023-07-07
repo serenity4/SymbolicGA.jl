@@ -5,7 +5,7 @@ Main symbols:
 - [`KVector`](@ref)
 - [`Bindings`](@ref)
 - [`codegen_expression`](@ref)
-- [`builtin_bindings`](@ref)
+- [`default_bindings`](@ref)
 
 Aliases:
 - [`Bivector`](@ref)
@@ -27,7 +27,7 @@ Quadvector
 ```@docs
 codegen_expression
 Bindings
-builtin_bindings
+default_bindings
 SymbolicGA.Signature
 SymbolicGA.@arg
 ```

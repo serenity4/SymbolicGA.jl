@@ -11,7 +11,7 @@ This package defines two high-level symbols:
 The [`KVector`](@ref) structure is generally useful to understand what you are getting out of [`@ga`](@ref) and is produced by default. However, the idea of this package is to be able to directly use and generate data from and into your own data structures, provided that a certain interface is fulfilled. For example, if you are designing a computational geometry library, you can define your own types such as `Point`, `Line`, `Circle` etc and use them in `@ga`. No need to juggle with types from another library! After all, geometric algebra defines semantically meaningful transformations, but cares little about how the data has been abstracted over or how it is stored in memory.
 
 A few more advanced features will allow you to seamlessly integrate geometric algebra within your own codebase:
-- Utilities for code generation, including [`codegen_expression`](@ref), [`Bindings`](@ref), [`builtin_bindings`](@ref) will be useful to build macros that automate
+- Utilities for code generation, including [`codegen_expression`](@ref), [`Bindings`](@ref), [`default_bindings`](@ref) will be useful to build macros that automate
 - Interface functions [`SymbolicGA.getcomponent`](@ref) and [`SymbolicGA.construct`](@ref) to use your own types within generated expressions, in case the defaults based on indexing and constructors do not fit with the design of your data structures.
 
 We will explain how these features work separately and together, to unlock the expression of geometric algebra within Julia in a performant and non-intrusive way.
