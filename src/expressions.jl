@@ -563,6 +563,9 @@ function simplify_addition(ex::Expression)
           push!(xs, x)
         end
       end
+      # XXX: Sorting by `objectid` will not yield a consistent ordering, causing nondeterministic behavior.
+      # The alternatives don't look better though; we can't use a set, because arguments are not unique,
+      # and a string-based representation will result in significant order changes for the resulting expression.
       obj = isempty(xs) ? 1 : length(xs) == 1 ? xs[1] : sort!(xs; by = objectid)
     end
     id = get!(() -> (counter += 1), ids, obj)
@@ -575,7 +578,7 @@ function simplify_addition(ex::Expression)
     if n == 1
       push!(new_args, x)
     else
-      # TODO: remove the need for manual disassociation.
+      # XXX: remove the need for manual disassociation.
       push!(new_args, Expression(cache, SCALAR_PRODUCT, n, x))
     end
   end
