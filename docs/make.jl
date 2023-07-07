@@ -58,7 +58,7 @@ makedocs(;
             "Geometric Algebra" => "explanation/geometric_algebra.md",
         ],
         "Reference" => [
-            "Operators" => "reference/operators.md",
+            "Symbols & operators" => "reference/symbols.md",
             "API" => "reference/api.md",
         ],
     ],

@@ -28,11 +28,11 @@ x = 1.0
 y = 2.0
 @ga 2 x::e1 + y::e2
 
-# We simply constructed a simple vector within $\mathcal{G}(\mathbb{R}^2)$ by associating individual components to basis vectors `e1` and `e2`. Most of the time though, unless you desire to construct a geometric entity with sparse components, you will prefer providing vectors as annotated iterables, such as
+# We simply constructed a simple vector within $\mathcal{G}(\mathbb{R}^2)$ by associating scalar components with basis vectors `e1` and `e2`. Most of the time though, unless you desire to construct a geometric entity with sparse components, you will prefer providing vectors as annotated iterables, such as
 
 @ga 2 (x, y)::Vector
 
-# Note that this `Vector` annotation *does not mean `Base.Vector`; it means a mathematical vector in the geometric space of interest. Now, let us take the geometric product ⟑ (`\wedgedot`) of two vectors:
+# Note that this `Vector` annotation *does not mean `Base.Vector`*; it means a mathematical vector in the geometric space of interest. Now, let us take the geometric product ⟑ (`\wedgedot`) of two vectors:
 
 a = (x, y)
 b = rand(2)
@@ -42,6 +42,9 @@ b = rand(2)
 #=
 
 Here, we obtained a mathematical object composed of both a 0-vector (scalar) and a 2-vector (bivector) part. In $\mathcal{G}(\mathbb{R}^2)$, a bivector has a single component, but with most other spaces bivectors have more; for any embedded space of dimension `n`, the number of elements for an entity with grade `k` is `binomial(n, k)`.
+
+!!! note
+    If you dislike the use of non-ASCII characters for major operators, you can use standard function names instead of operators, such as `geometric_product(x, y)` (equivalent to `x ⟑ y`) (see [Table of symbols](@ref)).
 
 What if we wanted only the scalar part or the bivector part? We can project the result into either grade 0 or grade 2, respectively:
 
@@ -53,22 +56,14 @@ What if we wanted only the scalar part or the bivector part? We can project the 
 
 @ga 2 (a::Vector ⟑ b::Vector)::Bivector
 
-# Since it may be a bit tedious to type in these names by hand, when really all we need is to express the grade in these annotations, we can directly use a number on the right-hand side of `::`.
+# Since it may be a bit tedious to type in these names by hand, when all we really need is to express the grade in these annotations, we can directly use a number on the right-hand side of `::` (see [Type annotations](@ref)).
 
 @ga 2 (a::1 ⟑ b::1)::0
 
-# In this particular case, getting the lowest and highest grade component of a geometric product is what defines the inner and outer products, `⋅` (`\cdot`) and `∧` (`\wedge`).
+# In this particular case, getting the lowest and highest grade component of a geometric product is what defines the inner and outer products, `⋅` (`\cdot`) and `∧` (`\wedge`). See [Table of symbols](@ref) for a complete list of symbols and operators.
 
 @ga 2 a::1 ⋅ b::1
 
 #-
 
 @ga 2 a::1 ∧ b::1
-
-#=
-
-!!! note
-    In many materials about geometric algebra, the geometric product is noted `*`. However, we prefer to use the `\wedgedot` symbol `⟑` [proposed by E. Lengyel](https://terathon.com/blog/projective-geometric-algebra-done-right/) to visually show its relationship with the inner and outer products, `⋅` and `∧`, and because it allows the use of an "anti-" operator to express the dual operator to the geometric product, the geometric antiproduct `⟇` (`\veedot`, available from Julia 1.10).
-    There are also programming-related motivations, as `2x` destructures to `2 * x` which would rarely want to be considered as "the geometric product of 2 and `x`".
-    If you dislike the use of non-ASCII characters for major operators, do not fear, you can use standard function names instead of operators, such as `geometric_product(x, y)` (equivalent to `x ⟑ y`).
-=#
