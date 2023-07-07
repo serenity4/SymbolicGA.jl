@@ -343,13 +343,17 @@ function simplify!(ex::Expression)
     if !isempty(indices)
       blades = args[indices]
       if !allunique(basis_vectors(b) for b in blades)
-        blade_weights = Dict{Vector{Int},Expression}()
+        blade_weights = Dictionary{Vector{Int},Expression}()
         for b in blades
           vecs = basis_vectors(b)
           weight = isweightedblade(b) ? b.args[1] : factor(cache, 1)
-          blade_weights[vecs] = haskey(blade_weights, vecs) ? factor(cache, Expression(cache, SCALAR_ADDITION, blade_weights[vecs], weight)) : weight
+          if haskey(blade_weights, vecs)
+            blade_weights[vecs] = factor(cache, Expression(cache, SCALAR_ADDITION, blade_weights[vecs], weight))
+          else
+            insert!(blade_weights, vecs, weight)
+          end
         end
-        for (vecs, weight) in blade_weights
+        for (vecs, weight) in pairs(blade_weights)
           if isexpr(weight, ADDITION)
             simplified = simplify_addition(weight)
             if simplified == factor(cache, 0)
@@ -360,7 +364,7 @@ function simplify!(ex::Expression)
           end
         end
         new_args = args[setdiff(eachindex(args), indices)]
-        append!(new_args, Expression(cache, GEOMETRIC_PRODUCT, weight, blade(cache, vecs)) for (vecs, weight) in blade_weights)
+        append!(new_args, Expression(cache, GEOMETRIC_PRODUCT, weight, blade(cache, vecs)) for (vecs, weight) in pairs(blade_weights))
         return substitute!(ex, ADDITION, new_args)
       end
     end

@@ -129,7 +129,7 @@ e1, e2, e3, e4 = blade.(cache, [1, 2, 3, 4])
     @test ex == bl(1, 3) * 2x
 
     ex = e1 * x + bl(2, 3) * y + bl(1) * z
-    @test ex == bl(2, 3) * y + e1 * (x + z)
+    @test ex == e1 * (x + z) + bl(2, 3) * y
   end
 
   @testset "Projections" begin
