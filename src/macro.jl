@@ -222,10 +222,14 @@ function extract_blade_from_annotation(cache, t)
   isa(t, Symbol) || return nothing
   (t === :e || t === :e0) && return blade(cache)
   t in (:e̅, :ē) && return antiscalar(cache)
-  m = match(r"^e(\d+)$", string(t))
-  dimension(cache.sig) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
-  isnothing(m) && return nothing
-  indices = parse.(Int, collect(m[1]))
+  if startswith(string(t), "e_")
+    indices = parse.(Int, split(string(t), '_')[2:end])
+  else
+    m = match(r"^e(\d+)$", string(t))
+    dimension(cache.sig) < 10 || error("A dimension of less than 10 is required to unambiguously refer to blades.")
+    isnothing(m) && return nothing
+    indices = parse.(Int, collect(m[1]))
+  end
   allunique(indices) || error("Index duplicates found in blade annotation $t.")
   maximum(indices) ≤ dimension(cache.sig) || error("One or more indices exceeds the dimension of the specified space for blade $t")
   blade(cache, indices)

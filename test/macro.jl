@@ -190,4 +190,14 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
 
   # Ability to interpolate parts of expressions to shield them from processing.
   @test (@ga 3 $(x[1] * x[2])::e1) == KVector{1,3}(x[1] * x[2], 0, 0)
+
+  @testset "Basis blade annotations with multiple digits" begin
+    x = @ga 12 (1.0::e_1_2_7_8)::4
+    @test length(x) == binomial(12, 4)
+    @test count(!iszero, x) == 1
+
+    x = @ga 12 (1.0::e_12_11)::2
+    @test length(x) == binomial(12, 2)
+    @test count(!iszero, x) == 1
+  end
 end;
