@@ -1,5 +1,6 @@
 """
-    Signature{P,N,D}
+    Signature(positive::Int, negative::Int = 0, degenerate::Int = 0)
+    Signature(str::AbstractString) # Signature("++-𝟎")
 
 Signature of an Euclidean or pseudo-Euclidean space.
 
@@ -10,7 +11,7 @@ struct Signature{P,N,D} end
 
 Base.broadcastable(x::Signature) = Ref(x)
 
-Signature(positive, negative=0, degenerate=0) = Signature{positive, negative, degenerate}()
+Signature(positive::Int, negative::Int = 0, degenerate::Int = 0) = Signature{positive, negative, degenerate}()
 Signature(string::AbstractString) = Signature(count.(["+", "-", "𝟎"], Ref(string))...)
 
 positive(::Signature{P}) where {P} = P
@@ -30,6 +31,6 @@ metric(::Signature{P,N,D}, i::Integer) where {P,N,D} = i <= P ? 1 : i <= P + N ?
 metric(sig::Signature{P,N,D}, i::Val{I}, j::Val{I}) where {P,N,D,I} = metric(sig, i)
 metric(::Signature, ::Val{I}, ::Val{J}) where {I,J} = 0
 
-Base.show(io::IO, sig::Signature) = print(io, sig == Signature(0, 0, 0) ? "Ø" : "<" * join(["+", "-", "𝟎"] .^ triplet(sig)) * ">")
+Base.show(io::IO, sig::Signature) = print(io, Signature, "(\"", sig == Signature(0, 0, 0) ? "Ø" : "<" * join(["+", "-", "𝟎"] .^ triplet(sig)) * ">", "\")")
 
 nelements(s::Signature, k::Int) = binomial(dimension(s), k)

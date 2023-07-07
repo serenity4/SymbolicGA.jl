@@ -21,4 +21,6 @@ using SymbolicGA: metric, is_degenerate, triplet
     @test metric(s, Val(1), Val(1)) == 1
     @test metric(s, Val(1), Val(2)) == 0
     @test metric(s, Val(3), Val(3)) == -1
+
+    @test eval(Meta.parse(repr(s))) == s
 end;

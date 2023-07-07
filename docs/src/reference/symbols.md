@@ -86,13 +86,16 @@ Convenient binary operators are defined by default to allow a more compact langu
 
 ### Aliases
 
-A few aliases are defined, with a short-hand for the inverse and a specific choice of a dual and dual inverse:
+A few aliases are defined, with a short-hand for the inverse and a specific choice of a dual and dual inverse, along with common names for operators we named differently:
 
 | Symbol | Alias |
 |---|---|
 | `inv` | `inverse`
 | `dual` | `right_complement`
 | `inverse_dual` | `left_complement`
+| `regressive_product` | `exterior_antiproduct`
+| `left_contraction` | `left_interior_product`
+| `right_contraction` | `right_interior_product`
 
 ### Constants
 

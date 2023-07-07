@@ -67,3 +67,24 @@ What if we wanted only the scalar part or the bivector part? We can project the 
 #-
 
 @ga 2 a::1 ∧ b::1
+
+# You can tweak the signature of the geometric space to your liking, if you want to use other spaces. For example, we can embed a 2D vector into Minkowski space (used to express flat spacetime, also called "Space-time algebra" or STA in works using geometric algebra):
+
+c = rand(4)
+
+#-
+
+@ga (3, 1) c::1 ⋅ c::1
+
+# If you are a bit lazy, you may annotate the `c` once before the expression:
+
+@ga (3, 1) begin
+  c::1
+  c ⋅ c
+end
+
+#=
+
+These are the very basics, now you know how to evaluate geometric algebra expressions in arbitrary geometric spaces. Feel free to look at other tutorials to learn about meaningful operations to perform!
+
+=#
