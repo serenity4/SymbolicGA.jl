@@ -4,6 +4,8 @@
 
 - ![BREAKING][badge-breaking] `*` no longer aliases the geometric product by default `⟑` (`\wedgedot`).
 - ![BREAKING][badge-breaking] `VariableInfo` has been renamed `Bindings` for better clarity.
+- ![BREAKING][badge-breaking] The `flattening` symbol parameter to `@ga` has been removed, instead using type annotations to express a concatenated or tuple output.
+- ![BREAKING][badge-breaking] The `::KVector{$k}` type annotation is no longer supported; instead, prefer using `::$k` or (if `k` is small enough) one of its aliases, e.g. `Bivector` for `KVector{2}`. The `::Multivector{$k, $l, ...}` syntax is also no longer supported; use the `::($k, $l, ...)` syntax instead.
 
 [badge-breaking]: https://img.shields.io/badge/BREAKING-red.svg
 [badge-deprecation]: https://img.shields.io/badge/deprecation-orange.svg

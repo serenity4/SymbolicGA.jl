@@ -49,7 +49,7 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
     ))
     ex = :(A̅ ∧ B̅)
     ex2 = expand_variables(ex, merge!(builtin_bindings(), bindings))
-    @test ex2 == :(right_complement((1, 2, 3)::Vector) ∧ right_complement((10, 2, 30)::Vector))
+    @test ex2 == :(exterior_product(right_complement((1, 2, 3)::Vector), right_complement((10, 2, 30)::Vector)))
 
     sig = Signature(4, 1, 0)
     ex = quote

@@ -114,22 +114,26 @@ function builtin_bindings(; warn_override::Bool = true)
   refs = Dict{Symbol,Any}(
     :𝟏 => :(1::e),
     :𝟙 => :(1::e̅),
-    :⊣ => :left_interior_product,
-    :⊢ => :right_interior_product,
-    :⨼ => :left_interior_antiproduct,
-    :⨽ => :right_interior_antiproduct,
+    :⟑ => :geometric_product,
     :⩒ => :geometric_antiproduct,
-    :exterior_product => :∧,
+    :∧ => :exterior_product,
+    :outer_product => :exterior_product,
     :∨ => :exterior_antiproduct,
-    :geometric_product => :⟑,
+    :outer_antiproduct => :exterior_antiproduct,
+    :⬤ => :interior_product,
+    :● => :interior_product,
+    :⋅ => :interior_product,
+    :inner_product => :interior_product,
     :○ => :interior_antiproduct,
-    :⋅ => :●,
-    :interior_product => :●,
+    :inner_antiproduct => :interior_antiproduct,
     :⦿ => :scalar_product,
+    :⊣ => :left_interior_product,
+    :⨼ => :left_interior_antiproduct,
+    :⊢ => :right_interior_product,
+    :⨽ => :right_interior_antiproduct,
+    :× => :commutator_product,
     :/ => :division,
     :inv => :inverse,
-    :division => :right_division,
-    :antidivision => :right_antidivision,
     :dual => :right_complement,
     :inverse_dual => :left_complement,
     :<< => :versor_product,
@@ -140,44 +144,42 @@ function builtin_bindings(; warn_override::Bool = true)
   end
 
   funcs = Dict{Symbol,Any}(
-    :bulk_left_complement => :(antireverse($(@arg 1)) ⟑ 𝟙),
-    :bulk_right_complement => :(reverse($(@arg 1)) ⟑ 𝟙),
-    :weight_left_complement => :(𝟏 ⩒ antireverse($(@arg 1))),
-    :weight_right_complement => :(𝟏 ⩒ reverse($(@arg 1))),
+    :bulk_left_complement => :(geometric_product(antireverse($(@arg 1)), 𝟙)),
+    :bulk_right_complement => :(geometric_product(reverse($(@arg 1)), 𝟙)),
+    :weight_left_complement => :(geometric_antiproduct(𝟏, antireverse($(@arg 1)))),
+    :weight_right_complement => :(geometric_antiproduct(𝟏, reverse($(@arg 1)))),
     :bulk => :(weight_left_complement(bulk_right_complement($(@arg 1)))),
     :weight => :(bulk_left_complement(weight_right_complement($(@arg 1)))),
 
-    :left_interior_product => :(left_complement($(@arg 1)) ∨ $(@arg 2)),
-    :right_interior_product => :($(@arg 1) ∨ right_complement($(@arg 2))),
+    :left_interior_product => :(exterior_antiproduct(left_complement($(@arg 1)), $(@arg 2))),
+    :right_interior_product => :(exterior_antiproduct($(@arg 1), right_complement($(@arg 2)))),
     :scalar_product => :(geometric_product($(@arg 1), reverse($(@arg 1)))::Scalar),
-    :left_interior_antiproduct => :($(@arg 1) ∧ right_complement($(@arg 2))),
-    :right_interior_antiproduct => :(left_complement($(@arg 1)) ∧ $(@arg 2)),
+    :left_interior_antiproduct => :(exterior_product($(@arg 1), right_complement($(@arg 2)))),
+    :right_interior_antiproduct => :(exterior_product(left_complement($(@arg 1)), $(@arg 2))),
 
     :bulk_norm => :(sqrt(interior_product($(@arg 1), reverse($(@arg 1))))::e),
     :weight_norm => :(sqrt(interior_antiproduct($(@arg 1), antireverse($(@arg 1))))::e̅),
     :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
-    :projected_geometric_norm => :(right_antidivision(bulk_norm($(@arg 1)), weight_norm($(@arg 1)))),
-    :unitize => :(right_antidivision($(@arg 1), weight_norm($(@arg 1)))),
+    :projected_geometric_norm => :(antidivision(bulk_norm($(@arg 1)), weight_norm($(@arg 1)))),
+    :unitize => :(antidivision($(@arg 1), weight_norm($(@arg 1)))),
 
-    :left_division => :(inverse($(@arg 1)) ⟑ $(@arg 2)),
-    :right_division => :($(@arg 1) ⟑ inverse($(@arg 2))),
+    :division => :(geometric_product($(@arg 1), inverse($(@arg 2)))),
+    :antidivision => :(inverse_dual(division(dual($(@arg 1)), dual($(@arg 2))))),
 
     :geometric_antiproduct => :(inverse_dual(geometric_product(dual($(@arg 1)), dual($(@arg 2))))),
     :exterior_antiproduct => :(inverse_dual(exterior_product(dual($(@arg 1)), dual($(@arg 2))))),
     :interior_antiproduct => :(inverse_dual(interior_product(dual($(@arg 1)), dual($(@arg 2))))),
     :antiscalar_product => :(geometric_antiproduct($(@arg 1), antireverse($(@arg 1)))::e̅),
     :antiinverse => :(inverse_dual(inverse(dual($(@arg 1))))),
-    :left_antidivision => :(inverse_dual(left_division(dual($(@arg 1)), dual($(@arg 2))))),
-    :right_antidivision => :(inverse_dual(right_division(dual($(@arg 1)), dual($(@arg 2))))),
 
-    :versor_product => :($(@arg 2) ⟑ $(@arg 1) ⟑ inverse($(@arg 2))),
+    :versor_product => :(geometric_product($(@arg 2), $(@arg 1), inverse($(@arg 2)))),
   )
 
   Bindings(; refs, funcs, warn_override)
 end
 
-function generate_expression(sig::Signature, ex, bindings::Optional{Bindings} = nothing; factorize = true, optimize = true)
-  ex, flattened = extract_expression(ex, sig, @something(bindings, merge!(builtin_bindings(), Bindings())))
+function generate_expression(sig::Signature, ex, bindings::Bindings = builtin_bindings(); factorize = true, optimize = true)
+  ex, flattened = extract_expression(ex, sig, bindings)
   ex = restructure(ex)
   factorize && factorize!(ex)
   optimize && (ex = optimize!(ex))
@@ -216,7 +218,7 @@ end
 
 const ADJOINT_SYMBOL = Symbol("'")
 
-isreserved(op::Symbol) = in(op, (:⟑, :∧, :●, :+, :×, :-, :inverse, :reverse, :antireverse, :left_complement, :right_complement, :exp))
+isreserved(op::Symbol) = in(op, (:+, :-, :geometric_product, :exterior_product, :interior_product, :commutator_product, :inverse, :reverse, :antireverse, :left_complement, :right_complement, :exp))
 
 function extract_blade_from_annotation(cache, t)
   isa(t, Symbol) || return nothing
