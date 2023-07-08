@@ -28,29 +28,30 @@ Such a plane may be parametrized by two non-colinear vectors, say `a` and `b`. W
 
 =#
 
-a = (1.0, 0.0, 0.0)
-b = (0.0, 1.0, 0.0)
+a = (2.0, 0.0, 0.0)
+b = (1.1, 1.5, 0.0)
 Π = @r3 a::1 ∧ b::1
 
-# However, to avoid having to worry about whether `a` and `b` are unit vectors, we will unitize ("normalize", if you prefer) the plane `Π` such that it is a unit plane:
+# You will have noticed that neither `a` or `b` are unit vectors, and `Π` is not a unit plane. `a` and `b` are not orthogonal either. That is not a problem; all we need is the plane in which they are contained, and therefore any choice of non-colinear vectors `a` and `b` will work!
 
-Π = @r3 unitize(a::1 ∧ b::1)
+# Next, we compute an object `Ω` which describes a rotation along such a plane:
 
-# Next, we will compute an object Ω which describes a rotation along such a plane. Once done, we will simply have to apply this object to any vector in 3D space to perform the rotation. Let's say we want a rotation of `π / 6`:
+α = π / 15
+Ω = @r3 exp((α::0 / 2::e) ⟑ Π::2)
 
-α = π / 6
-Ω = @r3 exp(-(α::0 / 2::0) ⟑ Π::2)
+# `Ω` is a particular kind of object: a versor. Versors are geometric products of invertible vectors, and the exponentiation of a bivector is one way to obtain such a versor. Seeing that we obtain a scalar and a bivector, you could wonder: why not define `Ω = @r3 a::1 ⟑ b::1`? This is because `Ω` would then describe a very specific rotation: a rotation in the plane formed by `a` and `b` - so far so good -, but of twice the angle between `a` and `b`. If we want to apply a rotation with an arbitrary angle, we essentially have to find and join two vectors in the plane of rotation such that they form half the desired angle of rotation between them, `α / 2`. This is what the exponential form above parametrizes: for any `α`, the resulting `Ω` is the versor corresponding to two such vectors (in the plane of rotation, with an angle of `α / 2`), allowing a rotation in that plane by an angle `α`.
 
-# Let us also define the vector we want to rotate:
-x = Tuple(2.0 .+ 1.5 .* randn(3))
+# Say we want to rotate
+x = (3.0, 4.0, 5.0)
 
-# Now, how should we apply `Ω` to `x`? The operation we seek to carry out is an orthogonal transformation, using `Ω`, an object of a specific type: a versor.
-# An orthogonal transformation is expressed via a versor product, which is provided as a specific operator `<<` defined in terms of the geometric product as `Ω ⟑ x ⟑ inv(Ω)`:
+# How should we apply `Ω` to `x`? The operation we seek to carry out is an orthogonal transformation, using `Ω`. In geometric algebra, orthogonal transformations are obtained by a specific operation on versors, termed the *versor product* (also named the sandwich product more informally). The versor product on `x` by `Ω` is defined as `Ω ⟑ x ⟑ inverse(Ω)`, which is defined by default with the `x << Ω` operator.
 
 x′ = @r3 x::1 << Ω::(0, 2)
-@assert x′ ≈ @r3 Ω::(0, 2) ⟑ x::1 ⟑ inv(Ω::(0, 2))
+@assert x′ ≈ @r3 Ω::(0, 2) ⟑ x::1 ⟑ inverse(Ω::(0, 2))
+
 using LinearAlgebra: norm # hide
 @assert norm(x) ≈ norm(x′) # hide
+
 x′
 
 # The inverse rotation may be applied using the inverse of our versor Ω:
@@ -67,4 +68,10 @@ include("../plots/rotation_origin.jl")
 ````
 
 ![](../plots/color_animation.mp4)
+=#
+
+#=
+
+Alright, so that is a simple rotation around the origin.
+
 =#
