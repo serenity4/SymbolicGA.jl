@@ -160,8 +160,8 @@ function default_bindings(; warn_override::Bool = true)
     :left_interior_antiproduct => :(exterior_product($(@arg 1), right_complement($(@arg 2)))),
     :right_interior_antiproduct => :(exterior_product(left_complement($(@arg 1)), $(@arg 2))),
 
-    :bulk_norm => :(sqrt(interior_product($(@arg 1), reverse($(@arg 1))))::e),
-    :weight_norm => :(sqrt(interior_antiproduct($(@arg 1), antireverse($(@arg 1))))::e̅),
+    :bulk_norm => :($sqrt(interior_product($(@arg 1), reverse($(@arg 1))))::e),
+    :weight_norm => :($sqrt(interior_antiproduct($(@arg 1), antireverse($(@arg 1))))::e̅),
     :geometric_norm => :(bulk_norm($(@arg 1)) + weight_norm($(@arg 1))),
     :projected_geometric_norm => :(antidivision(bulk_norm($(@arg 1)), weight_norm($(@arg 1)))),
     :unitize => :(antidivision($(@arg 1), weight_norm($(@arg 1)))),
@@ -254,6 +254,12 @@ function extract_grade_from_annotation(t, sig)
   error("Unknown grade projection for algebraic element $t")
 end
 
+struct UnknownFunctionError <: Exception
+  f::Symbol
+end
+
+Base.showerror(io::IO, err::UnknownFunctionError) = println(io, "UnknownFunctionError: call to non-built-in function `$(err.f)` detected\n\nIf you want to insert the value of an expression, use the interpolation syntax \$")
+
 function extract_expression(ex, sig::Signature, bindings::Bindings)
   # Shield interpolated regions in a `QuoteNode` from expression processing.
   ex = prewalk(ex) do ex
@@ -265,9 +271,12 @@ function extract_expression(ex, sig::Signature, bindings::Bindings)
   @debug "After variable expansion: $(stringc(ex2))"
 
   # Make sure calls in annotations are not interpreted as actual operations.
+  # Also shield interpolated expressions from being processed first in `postwalk`.
   ex3 = prewalk(ex2) do ex
     if Meta.isexpr(ex, :(::)) && Meta.isexpr(ex.args[2], :call)
       ex.args[2] = Expr(:annotate_projection, ex.args[2].args...)
+    elseif Meta.isexpr(ex, :$)
+      ex = Some(only(ex.args))
     end
     ex
   end
@@ -282,7 +291,11 @@ function extract_expression(ex, sig::Signature, bindings::Bindings)
       Expression(cache, REVERSE, ex.args[1]::Expression)
     elseif Meta.isexpr(ex, :call) && isa(ex.args[1], Symbol)
       op = ex.args[1]::Symbol
-      !isreserved(op) && return ex
+      if !isreserved(op)
+        # Allow `*` for juxtaposition, e.g. `0.5α`.
+        op === :* && return ex
+        throw(UnknownFunctionError(op))
+      end
       args = ex.args[2:end]
       Expression(cache, Head(op), args)
     elseif Meta.isexpr(ex, :(::))
@@ -312,8 +325,10 @@ function extract_expression(ex, sig::Signature, bindings::Bindings)
     end
   end
 
-  isa(ex4, Expression) || error("Could not fully extract expression: $ex4\n\nOutermost expression has head $(ex4.head) and arguments $(ex4.args)\n")
-  ex4, flattened
+  final = prewalk(something, ex4)
+
+  isa(final, Expression) || error("Could not fully extract expression: $final\n\nOutermost expression has head $(final.head) and arguments $(final.args)\n")
+  final, flattened
 end
 
 sourceloc(ln::Nothing) = ""
@@ -380,7 +395,7 @@ function expand_variables(ex, bindings::Bindings)
   rhs = Meta.isexpr(last_ex, :(=)) ? last_ex.args[2] : last_ex
   # Expand references and function calls.
   res = postwalk(ex -> expand_subtree(ex, bindings.refs, bindings.funcs, Set{Symbol}()), rhs)
-  !isa(res, Expr) && error("Expression resulted in a trivial RHS before simplifications: $(repr(res))")
+  !isa(res, Expr) && error("Expression resulted in a trivial RHS before simplifications: $(repr(res))\n\nThis may be due to not performing any operations related to geometric algebra.")
   res
 end
 

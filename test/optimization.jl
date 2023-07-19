@@ -71,7 +71,7 @@ is_binarized(ex) = all(==(2) ∘ length, gather_scalar_expressions(ex))
 
   ex, _ = generate_expression(Signature(3), quote
     Π = a::Vector ⟑ b::Vector
-    Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
+    Ω = exp((-(0.5α)::Scalar) ⟑ Π)
   end; optimize = false, factorize = false)
   exs = gather_scalar_expressions(ex)
   @test allunique(exs)

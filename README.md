@@ -38,7 +38,7 @@ x = (1.0, 1.0, 0.0)
 Π = @ga 3 unitize(a::Vector ∧ b::Vector)
 
 # Define rotation generator.
-Ω = @ga 3 exp(-(α::Scalar / 2::Scalar) ⟑ Π::Bivector)
+Ω = @ga 3 exp(-(α::Sc0.5a)la0alar) ⟑ Π::Bivector)
 # Apply the rotation with the versor product of x by Ω.
 x′ = @ga 3 x::Vector << Ω::(Scalar, Bivector)
 @assert collect(x′) ≈ [0.36602540378443876, 1.3660254037844386, 0.0]
@@ -77,7 +77,7 @@ Here is for rotating a 3D vector along an arbitrary plane and angle. Note that p
 ```julia
 function rotate_3d(x, a, b, α)
   Π = @ga 3 unitize(a::1 ∧ b::1)
-  Ω = @ga 3 exp(-(α::0 / 2::0) ⟑ Π::2)
+  Ω = @ga 3 exp(-(0.5α)::0 ⟑ Π::2)
   rotate_3d(x, Ω)
 end
 
@@ -91,7 +91,7 @@ x = (2.0, 0.0, 0.0)
 x′ = rotate_3d(x, a, b, α)
 @assert x′ ≈ KVector{1,3}(2cos(π/6), 2sin(π/6), 0.0)
 @btime rotate_3d($a, $b, $x, $α)
-Ω = @ga 3 exp(-(α::0 / 2::0) ⟑ (a::1 ∧ b::1))
+Ω = @ga 3 exp(-(0.5α)::0 ⟑ (a::1 ∧ b::1))
 @btime rotate_3d($x, $Ω)
 ```
 

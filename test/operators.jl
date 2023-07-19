@@ -50,8 +50,8 @@ end
   end
 
   @testset "Exterior (anti)product" begin
-    @test (@ga 3 3.0::e ∧ 4.0::e)[] == 12.0
-    @test (@ga 3 3.0::e̅ ∨ 4.0::e̅)[] == 12.0
+    @test (@ga 3 Float64 3.0::e ∧ 4.0::e) == 12.0
+    @test (@ga 3 Float64 3.0::e̅ ∨ 4.0::e̅) == 12.0
 
     @testset "De Morgan laws" begin
       sig = (3, 0, 1)
@@ -74,16 +74,16 @@ end
   end
 
   @testset "Interior (anti)product" begin
-    @test (@ga 3 ●(3.0::e, 1.0::e1))[] == 0.
-    @test (@ga 3 ●(3.0::e̅, (2.0::e̅)'))[] == 6.0
+    @test (@ga 3 Float64 ●(3.0::e, 1.0::e1)) == 0.
+    @test (@ga 3 Float64 ●(3.0::e̅, (2.0::e̅)')) == 6.0
     @test (@ga 3 ●(3.0::e12, 2.0::e2)) == KVector{1,3}(6., 0., 0.)
-    @test (@ga 3 ●(((√2)::e1 + (√2)::e2), ((√2)::e1 + (√2)::e2)'))[] ≈ 4.0
-    @test (@ga 3 ●(($(sqrt(2))::e1 + (√2)::e2), ((√2)::e1 + (√2)::e2)'))[] ≈ 4.0
+    @test (@ga 3 Float64 ●(($(√2)::e1 + $(√2)::e2), ($(√2)::e1 + $(√2)::e2)')) ≈ 4.0
+    @test (@ga 3 Float64 ●(($(sqrt(2))::e1 + $(√2)::e2), ($(√2)::e1 + $(√2)::e2)')) ≈ 4.0
 
-    @test (@ga 3 ○(3.0::e̅, 1.0::e23))[] == 0.
-    @test (@ga 3 ○(3.0::e, (2.0::e)'))[] == -6.0
+    @test (@ga 3 Float64 ○(3.0::e̅, 1.0::e23)) == 0.
+    @test (@ga 3 Float64 ○(3.0::e, (2.0::e)')) == -6.0
     @test (@ga 3 ○(3.0::e12, 2.0::e2)) == KVector{2,3}(0., 0., 6.)
-    @test (@ga 3 ○(((√2)::e23 + (√2)::e13), antireverse((√2)::e23 + (√2)::e13)))[] ≈ 4.0
+    @test (@ga 3 Float64 ○(($(√2)::e23 + $(√2)::e13), antireverse($(√2)::e23 + $(√2)::e13))) ≈ 4.0
   end
 
   @testset "Bulk and weight" begin

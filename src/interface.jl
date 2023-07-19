@@ -32,3 +32,4 @@ construct(::Type{Tuple}, components) = components
 construct(::Type{Vector{T}}, components) where {T} = collect(T, components)
 construct(::Type{Vector}, components) = collect(components)
 construct(::Type{T}, components) where {T} = T(components)
+construct(::Type{T}, components::Tuple) where {T<:Real} = T(only(components))

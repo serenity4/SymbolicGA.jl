@@ -37,7 +37,7 @@ b = (-2.0, 1.0, 0.0)
 # Next, we compute an object `Ω` which describes a rotation along a plane `Π` with angle `α`; `Π` needs to be a unit plane, so we add a unitization ("renormalization") step to enforce that.
 
 α = π / 15
-Ω = @r3 exp(-α::0 / 2::0 ⟑ unitize(Π::2))
+Ω = @r3 exp(-(0.5α)::0 ⟑ unitize(Π::2))
 
 # `Ω` is a particular kind of object: a versor. Versors are geometric products of invertible vectors, and the exponentiation of a bivector is one way to obtain such a versor. Seeing that we obtain a scalar and a bivector, you could wonder: why not define `Ω = @r3 a::1 ⟑ b::1`? This is because `Ω` would then describe a very specific rotation: a rotation in the plane formed by `a` and `b` - so far so good -, but of twice the angle between `a` and `b` multiplied by `norm(a) * norm(b)`. If we want to apply a rotation with an arbitrary angle, we essentially have to find and join two unit vectors in the plane of rotation such that they form half the desired angle of rotation between them, `α / 2`. This is what the exponential form above parametrizes: for any `α`, the resulting `Ω` is the versor corresponding to two such vectors (in the plane of rotation, with an angle of `α / 2`), describing a rotation in that plane by an angle `α`.
 

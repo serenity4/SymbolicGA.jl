@@ -37,7 +37,7 @@ umul(x, ys...) = unsimplified_expression(cache, SCALAR_PRODUCT, x, ys...)
 
   ex, _ = generate_expression(Signature(3), quote
     Π = a::Vector ⟑ b::Vector
-    Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
+    Ω = exp((-(0.5α)::Scalar) ⟑ Π)
   end; factorize = false, optimize = false)
   factorize!(ex)
 

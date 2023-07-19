@@ -8,7 +8,7 @@ a = (2.0, 0.0, 0.0)
 b = (-2.0, 1.0, 0.0)
 Π = @r3 a::1 ∧ b::1
 
-rotate_3d(x, Π, α) = rotate_3d(x, @r3 exp(-α::0 / 2::0 ⟑ unitize(Π::2)))
+rotate_3d(x, Π, α) = rotate_3d(x, @r3 exp(-(0.5α)::0 ⟑ unitize(Π::2)))
 rotate_3d(x, Ω) = @r3 Tuple x::1 << Ω::(0, 2)
 
 function rotating_plot()

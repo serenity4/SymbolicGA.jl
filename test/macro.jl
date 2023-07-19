@@ -1,4 +1,4 @@
-using SymbolicGA: extract_weights, input_expression, extract_expression, restructure, expand_variables, argument_count, fill_argument_slots
+using SymbolicGA: extract_weights, input_expression, extract_expression, restructure, expand_variables, argument_count, fill_argument_slots, UnknownFunctionError
 
 @testset "Macro frontend" begin
   @testset "Function definition" begin
@@ -200,4 +200,9 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
     @test length(x) == binomial(12, 2)
     @test count(!iszero, x) == 1
   end
+
+  @test_throws "non-built-in" @eval @ga 3 atan(2)::0
+  @test_throws "non-built-in" @eval @ga 3 sqrt(2)::0
+  @test_throws "not performing any operations related to geometric algebra" @eval @ga 3 x
+  @test (@ga 3 Float64 1::0 + $(atan(2))::0) == 1 + atan(2)
 end;

@@ -10,7 +10,7 @@ f(x, y) = @ga 3 x::Vector ⟑ y::Vector
 
 # Determinant - rank 2
 
-mydet(A₁, A₂) = @ga(2, A₁::Vector ∧ A₂::Vector)[]
+mydet(A₁, A₂) = @ga(2, Float64, A₁::Vector ∧ A₂::Vector)
 A₁ = @SVector rand(2)
 A₂ = @SVector rand(2)
 A = SMatrix([A₁ A₂])
@@ -25,7 +25,7 @@ A = SMatrix([A₁ A₂])
 
 # Determinant - rank 4
 
-mydet(A₁, A₂, A₃, A₄) = @ga(4, A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector)[]
+mydet(A₁, A₂, A₃, A₄) = @ga(4, Float64, A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector)
 @macroexpand @ga(4, A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector)
 A₁ = @SVector rand(4)
 A₂ = @SVector rand(4)

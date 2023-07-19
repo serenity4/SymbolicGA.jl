@@ -1,4 +1,4 @@
-macro cga3(args...)
+macro cga3(T, ex)
   definitions = quote
     n = 1.0::e4 + 1.0::e5
     n̄ = (-0.5)::e4 + 0.5::e5
@@ -14,8 +14,9 @@ macro cga3(args...)
     distance(S, X) = unitize(S) ⋅ unitize(X)
   end
   bindings = parse_bindings(definitions; warn_override = false)
-  esc(codegen_expression((4, 1, 0), args...; bindings))
+  esc(codegen_expression((4, 1, 0), ex; T, bindings))
 end
+macro cga3(ex) esc(:(@cga3 $nothing $ex)) end
 
 point(A) = @cga3 point(A)
 point_pair(A, B) = @cga3 point(A) ∧ point(B)
@@ -23,11 +24,11 @@ circle(A, B, C) = @cga3 point(A) ∧ point(B) ∧ point(C)
 line(A, B) = @cga3 point(A) ∧ point(B) ∧ n
 sphere(A, B, C, D) = @cga3 point(A) ∧ point(B) ∧ point(C) ∧ point(D)
 plane(A, B, C) = @cga3 point(A) ∧ point(B) ∧ point(C) ∧ n
-circle_radius(X) = sqrt(@cga3(radius2(X::Trivector))[])
-sphere_radius(X) = sqrt(@cga3(radius2(X::Quadvector))[])
+circle_radius(X) = sqrt(@cga3(Float64, radius2(X::Trivector)))
+sphere_radius(X) = sqrt(@cga3(Float64, radius2(X::Quadvector)))
 
 @testset "3D Conformal Geometric Algebra" begin
-  isnullvector(X) = isapprox(@cga3(magnitude2(X::Vector))[], 0; atol = 1e-14)
+  isnullvector(X) = isapprox(@cga3(Float64, magnitude2(X::Vector)), 0; atol = 1e-14)
   @test (@cga3 n ⋅ n̄) == (@cga3 n̄ ⋅ n) == KVector{0,5}((-1.0,))
   @test (@cga3 magnitude2(n ⦿ n)) == (@cga3 magnitude2(n̄ ⦿ n̄)) == KVector{0,5}((0,))
   A = sqrt(2) .* (1, 0, 0)
@@ -37,12 +38,12 @@ sphere_radius(X) = sqrt(@cga3(radius2(X::Quadvector))[])
   @test all(isnullvector, point.((A, B, C, D)))
   S1 = sphere(A, B, C, D)
   𝒜 = point(A)
-  @test (@cga3 unitize((𝒜 .* 2)::Vector)) == 𝒜
+  @test (@cga3 unitize(($(𝒜 .* 2))::Vector)) == 𝒜
   O = (0, 0, 0)
   C1 = @cga3 center(S1::Quadvector)
   @test @cga3(unitize(C1::Vector)) ≈ point(O)
   @test length(@cga3 weight(S1::Quadvector)) == 10
-  @test @cga3(radius2(S1::Quadvector))[] ≈ sphere_radius(S1)^2 ≈ 2.0
+  @test @cga3(Float64, radius2(S1::Quadvector)) ≈ sphere_radius(S1)^2 ≈ 2.0
 end;
 
 macro pga3(args...)
@@ -93,7 +94,7 @@ count_expr_nodes(ex) = isa(ex, Expr) ? sum(count_expr_nodes, ex.args) : 1
     Π = @ga 3 unitize(a::1 ∧ b::1)
 
     # Define rotation generator.
-    Ω = @ga 3 exp(-(α::0 / 2::0) ⟑ Π::2)
+    Ω = @ga 3 exp(-(0.5α)::0 ⟑ Π::2)
     # Apply the rotation with the versor product of x by Ω.
     @ga 3 x::1 << Ω::(0, 2)
   end
@@ -112,7 +113,7 @@ count_expr_nodes(ex) = isa(ex, Expr) ? sum(count_expr_nodes, ex.args) : 1
   # Define rotation generator.
   Ω = @ga 3 exp(-(ϕ::Bivector) / 2::Scalar)
   @test grade.(Ω) == (0, 2)
-  @test all(Ω .≈ @ga 3 cos(0.5α)::Scalar - Π::Bivector ⟑ sin(0.5α)::Scalar)
+  @test all(Ω .≈ @ga 3 $(cos(0.5α))::Scalar - Π::Bivector ⟑ $(sin(0.5α))::Scalar)
   @test (@ga 3 Ω::(Scalar, Bivector) ⟑ inverse(Ω::(Scalar, Bivector))) == KVector{0,3}(1.0)
 
   x′ = @ga 3 x::1 << Ω::(0, 2)
@@ -127,19 +128,19 @@ count_expr_nodes(ex) = isa(ex, Expr) ? sum(count_expr_nodes, ex.args) : 1
 
   # Do it more succinctly.
   ex = @macroexpand @ga 3 begin
-    Π = a::Vector ⟑ b::Vector
-    Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
+    Π = a::1 ⟑ b::1
+    Ω = exp((-(0.5α)::0) ⟑ Π)
   end;
   @test_broken count_expr_nodes(ex) < 1000
 
   @test_skip begin
     x′′ = @ga 3 begin
       # Define unit plane for the rotation.
-      Π = a::Vector ⟑ b::Vector
+      Π = a::1 ⟑ b::1
       # Define rotation generator.
-      Ω = exp((-α::Scalar / 2::Scalar) ⟑ Π)
+      Ω = exp((-(0.5α)::0) ⟑ Π)
       # Apply the rotation by sandwiching x with Ω.
-      Ω ⟑ x::Vector ⟑ reverse(Ω)
+      Ω ⟑ x::1 ⟑ reverse(Ω)
     end
     x′′ === x′
   end
@@ -198,4 +199,4 @@ end;
     @test !is_on_line(ret)
     @test !is_within_segment(ret)
   end
-end
+end;
