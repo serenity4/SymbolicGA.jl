@@ -16,6 +16,10 @@ Aliases:
 
 ```@docs
 @ga
+@pga2
+@pga3
+@cga3
+@geometric_space
 KVector
 Bivector
 Trivector

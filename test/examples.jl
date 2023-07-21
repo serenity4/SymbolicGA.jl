@@ -1,23 +1,3 @@
-macro cga3(T, ex)
-  definitions = quote
-    n = 1.0::e4 + 1.0::e5
-    n̄ = (-0.5)::e4 + 0.5::e5
-    n̅ = n̄ # n\bar !== n\overbar but they display exactly the same.
-    embed(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
-    magnitude2(x) = x ⦿ x
-    point(x) = (embed(x) + (0.5::Scalar ⟑ magnitude2(embed(x))) ⟑ n + n̄)::Vector
-    weight(X) = -X ⋅ n
-    unitize(X) = X / weight(X)
-    radius2(X) = (magnitude2(X) / magnitude2(X ∧ n))::Scalar
-    center(X) = X ⟑ n ⟑ X
-    # For spheres `S` defined as vectors, and points `X` defined as vectors as well.
-    distance(S, X) = unitize(S) ⋅ unitize(X)
-  end
-  bindings = parse_bindings(definitions; warn_override = false)
-  esc(codegen_expression((4, 1, 0), ex; T, bindings))
-end
-macro cga3(ex) esc(:(@cga3 $nothing $ex)) end
-
 point(A) = @cga3 point(A)
 point_pair(A, B) = @cga3 point(A) ∧ point(B)
 circle(A, B, C) = @cga3 point(A) ∧ point(B) ∧ point(C)
@@ -45,16 +25,6 @@ sphere_radius(X) = sqrt(@cga3(Float64, radius2(X::Quadvector)))
   @test length(@cga3 weight(S1::Quadvector)) == 10
   @test @cga3(Float64, radius2(S1::Quadvector)) ≈ sphere_radius(S1)^2 ≈ 2.0
 end;
-
-macro pga3(args...)
-  definitions = quote
-    embed(x) = x[1]::e1 + x[2]::e2 + x[3]::e3
-    magnitude2(x) = x ⦿ x
-    point(x) = embed(x) + 1.0::e4
-  end
-  bindings = parse_bindings(definitions; warn_override = false)
-  esc(codegen_expression((3, 0, 1), args...; bindings))
-end
 
 struct Camera{T}
   optical_center::KVector{1,T,4,4} # ::Vector

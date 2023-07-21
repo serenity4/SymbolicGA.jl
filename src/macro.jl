@@ -207,7 +207,7 @@ codegen_expression(sig_ex, ex; T = DEFAULT_TYPE, bindings::Optional{Bindings} = 
   codegen_expression(extract_signature(sig_ex), ex; T, bindings)
 
 function codegen_expression(sig::Signature, ex; T = DEFAULT_TYPE, bindings::Optional{Bindings} = nothing)
-  bindings = merge!(default_bindings(), @something(bindings, Bindings()))
+  bindings = @something(bindings, default_bindings())
   generated, flattened = generate_expression(sig, ex, bindings)
   flattened && isnothing(T) && (T = :Tuple)
   define_variables(generated, flattened, T)

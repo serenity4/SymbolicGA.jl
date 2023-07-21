@@ -8,13 +8,14 @@ Geometric algebra being well suited for the representation of orthogonal transfo
 
 The simplest transformations are defined around the origin. In contrast, take for example rotations around an axis that does not contain the origin, whose expression requires translations. Note that the translational part there is a trick to get back to the origin, apply the rotation, and revert the translation.
 
-We will take $\mathbb{R}^3$ as our space of interest, and define a geometric algebra over it:
+We will take $\mathbb{R}^3$ as our base space of interest, and define a geometric space over it:
 
 =#
 
 using SymbolicGA
 
-macro r3(args...) esc(:(SymbolicGA.@ga "+++" $(args...))) end
+# Generates a `@r3` macro.
+@geometric_space r3 "+++"
 
 #=
 

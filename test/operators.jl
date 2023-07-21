@@ -4,6 +4,7 @@ using Combinatorics: combinations
 all_blades(cache::ExpressionCache) = [blade(cache, indices) for indices in combinations(1:dimension(cache.sig))]
 
 function ga_eval(sig_ex, ex; T = nothing, bindings = nothing)
+  bindings = merge!(default_bindings(), something(bindings, Bindings()))
   eval(codegen_expression(sig_ex, ex; T, bindings))
 end
 

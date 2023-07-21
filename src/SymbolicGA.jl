@@ -17,11 +17,14 @@ include("macro.jl")
 include("types.jl")
 include("optimization.jl")
 include("factorization.jl")
+include("spaces.jl")
 
 @compile_workload @compile_traces "precompilation_traces.jl"
 
 export Signature,
   @ga,
+  @geometric_space,
+  @pga2, @pga3, @cga3,
   KVector,
   Bivector,
   Trivector,
