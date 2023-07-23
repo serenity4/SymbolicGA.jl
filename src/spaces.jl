@@ -51,15 +51,19 @@ macro geometric_space(name::Symbol, sig_ex, definitions = nothing, warn_override
     docstring *= " and the following bindings: \n\n$bindings"
   end
 
+  var = Symbol("@$name")
   macros = quote
-    $(Expr(:macrocall, GlobalRef(Core, Symbol("@doc")), nothing, docstring, :(macro $name end)))
+    Core.@__doc__ macro $name end
     macro $name(T, ex)
       ex = codegen_expression($sig_ex, ex; T, bindings = $bindings)
       esc(ex)
     end
     macro $name(ex)
-      ex = Expr(:macrocall, $(Symbol("@$name")), __source__, nothing, ex)
+      ex = Expr(:macrocall, $var, __source__, nothing, ex)
       esc(ex)
+    end
+    $with_logger($NullLogger()) do
+      Core.@doc $docstring * '\n' * repr(Core.@doc $var) $var
     end
   end
   # Adjust `LineNumberNode`s to include the callsite in stacktraces.
@@ -86,6 +90,13 @@ end
   point(x) = embed(x) + 1.0::e4
 end
 
+"""
+3D Conformal Geometric Algebra.
+
+!!! warning
+    This functionality is experimental and will likely be subject to change in the future.
+    It is not recommended for use beyond prototyping and playing around.
+"""
 @geometric_space cga3 (4, 1) quote
   n = 1.0::e4 + 1.0::e5
   n̄ = (-0.5)::e4 + 0.5::e5

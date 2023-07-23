@@ -5,6 +5,7 @@ using Graphs
 using CompileTraces: @compile_traces
 using PrecompileTools: @compile_workload
 using Dictionaries
+using Logging: with_logger, NullLogger
 
 const Optional{T} = Union{T,Nothing}
 
