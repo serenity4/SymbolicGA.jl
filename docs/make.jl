@@ -53,9 +53,14 @@ makedocs(;
         "Tutorials" => [
             "Getting started" => "tutorial/getting_started.md",
             "Euclidean transformations" => "tutorial/euclidean_transformations.md",
+            "Integration with your own types" => "tutorial/integration.md",
         ],
         "Explanation" => [
             "Geometric Algebra" => "explanation/geometric_algebra.md",
+            "Design" => "explanation/design.md",
+        ],
+        "How to" => [
+            "Use macros with custom types" => "howto/integration.md",
         ],
         "Reference" => [
             "Symbols & operators" => "reference/symbols.md",
