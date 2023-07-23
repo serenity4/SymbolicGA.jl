@@ -18,19 +18,27 @@ In particular, as an algebraic framework and a highly convenient utility, it ver
 
 ## Resources
 
-#### Introductions
+#### Introductory resources
+- [Very approachable introduction](https://arxiv.org/abs/1205.5935v1) by Eric Chisolm (paper)
 - [Siggraph 2019 talk](https://www.youtube.com/watch?v=tX4H_ctggYo) (video)
 - [Cambridge course](http://geometry.mrao.cam.ac.uk/2016/10/geometric-algebra-2016/)
 - Introductory book: *Vince, J. (2008). Geometric algebra for computer graphics. Springer Science & Business Media.*
 
+#### Reference resources
+- [bivector.net](https://bivector.net)
+- [projectivegeometricalgebra.org](https://projectivegeometricalgebra.org/)
+- Projective geometric algebra (PGA):
+  - [PGA wiki](https://rigidgeometricalgebra.org/wiki/index.php?title=Main_Page) (E. Lengyel)
+  - [3D PGA poster](https://projectivegeometricalgebra.org/projgeomalg.pdf) (E. Lengyel)
+- Conformal geometric algebra (CGA):
+  - [CGA wiki](https://conformalgeometricalgebra.org/wiki/index.php?title=Main_Page) (E. Lengyel)
+  - [3D CGA poster](https://projectivegeometricalgebra.org/confgeomalg.pdf) (E. Lengyel)
+
+
 #### Geometric Calculus
-- Reference book: *Hestenes, D., & Sobczyk, G. (2012). Clifford algebra to geometric calculus: a unified language for mathematics and physics (Vol. 5). Springer Science & Business Media.*
+
+Note: this topic is more advanced.
+
+- Reference book (also a great reference book outside geometric calculus): *Hestenes, D., & Sobczyk, G. (2012). Clifford algebra to geometric calculus: a unified language for mathematics and physics (Vol. 5). Springer Science & Business Media.*
 - [Advanced tutorial](https://www.youtube.com/watch?v=ItGlUbFBFfc) (video)
 - Compact summary (advanced): *Macdonald, A. (2017). A survey of geometric algebra and geometric calculus. Advances in Applied Clifford Algebras, 27(1), 853-891.*
-
-Online resources:
-- [bivector.net](https://bivector.net)
-- Projective geometric algebra:
-  - [projectivegeometricalgebra.org](http://projectivegeometricalgebra.org/)
-  - [Wiki](https://rigidgeometricalgebra.org/wiki/index.php?title=Main_Page)
-  - [3D PGA poster](http://projectivegeometricalgebra.org/projgeomalg.pdf) (E. Lengyel)
