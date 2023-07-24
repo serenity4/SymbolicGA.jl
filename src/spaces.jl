@@ -65,6 +65,7 @@ macro geometric_space(name::Symbol, sig_ex, definitions = nothing, warn_override
     $with_logger($NullLogger()) do
       Core.@doc $docstring * '\n' * repr(Core.@doc $var) $var
     end
+    $var
   end
   # Adjust `LineNumberNode`s to include the callsite in stacktraces.
   for i in (4, 6)
