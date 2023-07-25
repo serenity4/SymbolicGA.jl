@@ -7,7 +7,7 @@
 [![ColPrac: Contributor's Guide on Collaborative Practices for Community Packages](https://img.shields.io/badge/ColPrac-Contributor's%20Guide-blueviolet)](https://github.com/SciML/ColPrac)
 [![repo-status](https://www.repostatus.org/badges/latest/active.svg)](https://www.repostatus.org/#active)
 
-Geometric Algebra (GA) library with compile-time transformations into linear algebra operations.
+Geometric Algebra (GA) library based on just-in-time symbolic processing to turn algebraic expressions into optimized code.
 
 This package is ready for general use, but it still in active development and bugs may be frequently encountered along with incomplete or unsupported major features. You are welcome to report potential issues or to suggest improvements. When upgrading to a new major version, make sure to consult the [changelog](https://github.com/serenity4/SymbolicGA.jl/blob/main/CHANGELOG.md) to be aware of any major breakages.
 
@@ -48,9 +48,9 @@ For advanced usage, tutorials and references, please consult the [official docum
 
 ## Performance
 
-This library applies rules of geometric algebra at compile-time to generate performant code for runtime execution. The resulting instructions are scalar operations, which should be fast and comparable to hand-written optimized numerical code.
+This library applies rules of geometric algebra during macro expansion to generate numerically performant code. The resulting instructions are scalar operations, which should be fast and comparable to hand-written type-stable numerical code.
 
-Here is for computing determinants, compared with LinearAlgebra:
+Here is an example benchmark to compute determinants, compared with LinearAlgebra:
 
 ```julia
 using StaticArrays: @SVector, SMatrix
@@ -72,7 +72,7 @@ A = SMatrix([A₁ A₂ A₃ A₄])
 13.485 ns (0 allocations: 0 bytes) # SymbolicGA
 ```
 
-Here is for rotating a 3D vector along an arbitrary plane and angle. Note that part of the timing is only about building the rotation operator Ω, which would correspond to building a rotation matrix in conventional approaches.
+This snippet performs a 3D vector rotation along an arbitrary plane and angle. Note that part of the timing is only about building the rotation operator Ω, which would correspond to building a rotation matrix in conventional approaches.
 
 ```julia
 function rotate_3d(x, a, b, α)
