@@ -2,6 +2,7 @@
 
 Main symbols:
 - [`@ga`](@ref)
+- [`@geometric_space`](@ref)
 - [`KVector`](@ref)
 - [`Bindings`](@ref)
 - [`codegen_expression`](@ref)
