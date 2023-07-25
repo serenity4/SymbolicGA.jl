@@ -1,4 +1,7 @@
-# Requires the tutorial `euclidean_transformations.jl`.
+# For the tutorial `euclidean_transformations.jl`.
+
+using SymbolicGA
+@geometric_space r3 "+++"
 
 using Makie
 using Makie.Colors

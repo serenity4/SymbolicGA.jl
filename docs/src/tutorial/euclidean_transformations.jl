@@ -64,10 +64,6 @@ x′′ = @r3 x′::1 << inv(Ω::(0, 2))
 
 We did get `x` back! But numbers being a bit hard to visualize, we prepared a small animation to see the rotation in action using Makie:
 
-````@setup euclidean_transformations
-include("../plots/rotation_origin.jl")
-````
-
 ![](../plots/color_animation.mp4)
 
 Non-unit vectors `a` and `b` are represented in green and cyan. The bivector formed by `a` and `b` is represented as a purple semi-transparent parallelogram, with its dual - the normal of the plane - represented as a solid purple line.
