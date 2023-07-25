@@ -205,4 +205,11 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
   @test_throws "non-built-in" @eval @ga 3 sqrt(2)::0
   @test_throws "not performing any operations related to geometric algebra" @eval @ga 3 x
   @test (@ga 3 Float64 1::0 + $(atan(2))::0) == 1 + atan(2)
+
+  @testset "Binarizing comparison expressions" begin
+    a, b, c, d = rand(2), rand(2), rand(2), rand(2)
+    @test (@ga 2 a::1 ⊢ b::1 ⊢ c::1) isa KVector
+    @test (@ga 2 a::1 ⊢ b::1 ⊢ c::1 ⊢ d::1) isa KVector
+    @test (@ga 2 a::1 ⊣ (a::1 ∧ b::1) ⊢ c::1 ⊣ d::1) isa KVector
+  end
 end;

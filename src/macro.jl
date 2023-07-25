@@ -275,6 +275,10 @@ function extract_expression(ex, sig::Signature, bindings::Bindings)
   # Make sure calls in annotations are not interpreted as actual operations.
   # Also shield interpolated expressions from being processed first in `postwalk`.
   ex3 = prewalk(ex2) do ex
+    if Meta.isexpr(ex, :comparison)
+      ex = foldr(((arg, op), y) -> :($op($x, $y)), ((ex.args[i], ex.args[i + 1]) for i in 1:(1 - length(ex.args))); init = last(ex.args))
+    end
+
     if Meta.isexpr(ex, :(::)) && Meta.isexpr(ex.args[2], :call)
       ex.args[2] = Expr(:annotate_projection, ex.args[2].args...)
     elseif Meta.isexpr(ex, :$)
