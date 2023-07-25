@@ -61,6 +61,7 @@ makedocs(;
         ],
         "How to" => [
             "Use macros with custom types" => "howto/integration.md",
+            "Create user-defined geometric spaces" => "howto/spaces.md",
         ],
         "Reference" => [
             "Symbols & operators" => "reference/symbols.md",

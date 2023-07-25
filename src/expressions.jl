@@ -598,7 +598,7 @@ function validate_arguments(cache, head, args)
   head !== BLADE && @assert !isempty(args)
   head === BLADE && @assert all(isa(dereference(cache, i), Int) for i in args) "Expected integer arguments in BLADE expression, got $(dereference.(cache, ex))"
   head === FACTOR && @assert !isa(args[1], Expression) || isscalar(args[1].head) "`Expression` argument detected in FACTOR expression: $(args[1])"
-  isoperation(head) && !isscalar(head) && @assert all(isa(x, Expression) for x in args) "Non-scalar operation $head must not involve bare literal IDs: $(filter(x -> !isa(x, Expression), args)) => $(dereference.(cache, filter(x -> !isa(x, Expression), args)))"
+  isoperation(head) && !isscalar(head) && !all(isa(x, Expression) for x in args) && throw(ArgumentError("Non-algebraic elements found in operation $head: $(join('`' .* string.(dereference.(cache, filter(x -> !isa(x, Expression), args))) .* '`', ", "))\n\nYou may have forgotten to annotate these inputs, e.g. as `x::1`"))
   head === MULTIVECTOR && @assert all(isexpr(x, KVECTOR) for x in args) "Multivector expressions must contain explicit `KVECTOR` arguments"
   head === KVECTOR && @assert all(isblade(x) || isweightedblade(x) for x in args) "KVector expressions must contain (weighted) blade arguments"
 end

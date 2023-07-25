@@ -2,7 +2,7 @@
 
 These tables list all the functions, operators and constants that are recognized as geometric operations, e.g. in code evaluated as part of a `@ga` block.
 
-## Built-in functions
+## [Built-in functions](@id builtins)
 
 These functions are always accessible in any context, and cannot be overriden:
 - `+(a, b, ...)`
