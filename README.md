@@ -21,7 +21,7 @@ using SymbolicGA
 A₁, A₂, A₃, A₄ = ntuple(_ -> rand(4), 4)
 # The determinant is the four-dimensional "volume" of the subspace spanned by all four column vectors.
 # This is trivially generalized to `n`-by-`n` matrices by using a signature of `n` and wedging all `n` column vectors.
-Δ = @ga 4 A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector
+Δ = @ga 4 A₁::1 ∧ A₂::1 ∧ A₃::1 ∧ A₄::1
 # We got an antiscalar out as a `KVector{4}`.
 # Extract the component with `[]`.
 Δ[]
@@ -35,12 +35,12 @@ x = (1.0, 1.0, 0.0)
 # Define a unit plane for the rotation.
 # The unitization ensures we don't need `a` and `b` to be orthogonal nor to be unit vectors.
 # If these conditions are otherwise met, unitization can be skipped.
-Π = @ga 3 unitize(a::Vector ∧ b::Vector)
+Π = @ga 3 unitize(a::1 ∧ b::1)
 
 # Define rotation generator.
-Ω = @ga 3 exp(-(α::Sc0.5a)la0alar) ⟑ Π::Bivector)
+Ω = @ga 3 exp(-(0.5α)::0 ⟑ Π::2)
 # Apply the rotation with the versor product of x by Ω.
-x′ = @ga 3 x::Vector << Ω::(Scalar, Bivector)
+x′ = @ga 3 x::1 << Ω::(0, 2)
 @assert collect(x′) ≈ [0.36602540378443876, 1.3660254037844386, 0.0]
 ```
 
@@ -56,7 +56,7 @@ Here is an example benchmark to compute determinants, compared with LinearAlgebr
 using StaticArrays: @SVector, SMatrix
 using LinearAlgebra: det
 using BenchmarkTools: @btime
-mydet(A₁, A₂, A₃, A₄) = @ga(4, A₁::Vector ∧ A₂::Vector ∧ A₃::Vector ∧ A₄::Vector)[]
+mydet(A₁, A₂, A₃, A₄) = @ga(4, A₁::1 ∧ A₂::1 ∧ A₃::1 ∧ A₄::1)[]
 A₁ = @SVector rand(4)
 A₂ = @SVector rand(4)
 A₃ = @SVector rand(4)
