@@ -44,7 +44,7 @@ x′ = @ga 3 x::1 << Ω::(0, 2)
 @assert collect(x′) ≈ [0.36602540378443876, 1.3660254037844386, 0.0]
 ```
 
-For advanced usage, tutorials and references, please consult the [official documentation](https://github.com/serenity4.github.io/SymbolicGA.jl/dev).
+For advanced usage, tutorials and references, please consult the [official documentation](https://serenity4.github.io/SymbolicGA.jl/stable/).
 
 ## Performance
 
