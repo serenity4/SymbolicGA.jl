@@ -20,6 +20,7 @@ In particular, as an algebraic framework and a highly convenient utility, it ver
 
 #### Introductory resources
 - [Very approachable introduction](https://arxiv.org/abs/1205.5935v1) by Eric Chisolm (paper)
+- [A Swift Introduction to Geometric Algebra](https://www.youtube.com/watch?v=60z_hpEAtD8) (video)
 - [Siggraph 2019 talk](https://www.youtube.com/watch?v=tX4H_ctggYo) (video)
 - [Cambridge course](http://geometry.mrao.cam.ac.uk/2016/10/geometric-algebra-2016/)
 - Introductory book: *Vince, J. (2008). Geometric algebra for computer graphics. Springer Science & Business Media.*
