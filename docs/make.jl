@@ -71,7 +71,6 @@ makedocs(;
     repo = "https://github.com/serenity4/SymbolicGA.jl/blob/{commit}{path}#L{line}",
     sitename = "SymbolicGA.jl",
     authors = "serenity4 <cedric.bel@hotmail.fr>",
-    strict = true,
     doctest = false,
     checkdocs = :exports,
 )
