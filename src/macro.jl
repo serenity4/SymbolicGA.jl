@@ -554,7 +554,13 @@ function to_expr(cache, ex, flatten::Bool, T, variables, stop_early = false)
     end
   end
   isexpr(ex, FACTOR) && return to_final_expr(cache, ex[1], flatten, T, variables)
-  isexpr(ex, KVECTOR) && return :($construct($(reconstructed_type(T, ex.cache.sig, ex)), $(Expr(:tuple, to_final_expr.(cache, ex, flatten, Ref(T), Ref(variables))...))))
+  if isexpr(ex, KVECTOR)
+    Tintermediate = flatten ? :Tuple : T
+    RT = reconstructed_type(Tintermediate, ex.cache.sig, ex)
+    components = Expr(:tuple)
+    append!(components.args, [to_final_expr(cache, x, flatten, Tintermediate, variables) for x in ex])
+    return :($construct($RT, $components))
+  end
   isexpr(ex, BLADE) && return 1
   if isexpr(ex, GEOMETRIC_PRODUCT)
     @assert isweightedblade(ex)

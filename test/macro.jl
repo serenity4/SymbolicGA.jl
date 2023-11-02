@@ -212,4 +212,12 @@ using SymbolicGA: extract_weights, input_expression, extract_expression, restruc
     @test (@ga 2 a::1 ⊢ b::1 ⊢ c::1 ⊢ d::1) isa KVector
     @test (@ga 2 a::1 ⊣ (a::1 ∧ b::1) ⊢ c::1 ⊣ d::1) isa KVector
   end
+
+  @testset "Flattening" begin
+    a, b, c, d = rand(3), rand(3), rand(3), rand(3)
+    ex = @ga 3 (a::1 ⟑ b::1)::(0 + 2)
+    @test isa(ex, NTuple{4,Float64})
+    ex = @ga 3 NTuple{4,Float32} (a::1 ⟑ b::1)::(0 + 2)
+    @test isa(ex, NTuple{4,Float32})
+  end
 end;
