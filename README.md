@@ -11,14 +11,6 @@ Geometric Algebra (GA) library based on just-in-time symbolic processing to turn
 
 This package is ready for general use, but it still in active development and bugs may be frequently encountered along with incomplete or unsupported major features. You are welcome to report potential issues or to suggest improvements. When upgrading to a new major version, make sure to consult the [changelog](https://github.com/serenity4/SymbolicGA.jl/blob/main/CHANGELOG.md) to be aware of any major breakages.
 
-### JuliaCon talk
-
-An introduction to geometric algebra with quick presentation of this library is available on YouTube.
-
-- [Slides]([Slides](https://docs.google.com/presentation/d/e/2PACX-1vQ9trJBYfvZXCEoArxRQwYhS_tzGBYOfeY-s7aGZhE8_J-VPbztXbPPgW9uNTjUUrNbf9JWIYjLLngW/pub?start=false&loop=false&delayms=3000))
-
-[![Geometric Algebra at compile-time with SymbolicGA.jl](assets/talk.png)](https://youtu.be/lD4tNcHVjX4)
-
 ## Basic usage
 
 ```julia
@@ -111,3 +103,11 @@ x′ = rotate_3d(x, a, b, α)
 ```
 
 It should be noted that in theory any performance gap can be addressed, as we have total control over what code is emitted.
+
+## JuliaCon talk
+
+An introduction to geometric algebra with quick presentation of this library is available on YouTube.
+
+- [Slides]([Slides](https://docs.google.com/presentation/d/e/2PACX-1vQ9trJBYfvZXCEoArxRQwYhS_tzGBYOfeY-s7aGZhE8_J-VPbztXbPPgW9uNTjUUrNbf9JWIYjLLngW/pub?start=false&loop=false&delayms=3000))
+
+[![Geometric Algebra at compile-time with SymbolicGA.jl](assets/talk.png)](https://youtu.be/lD4tNcHVjX4)
