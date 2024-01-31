@@ -14,7 +14,7 @@ PrecompileTools = "aea7be01-6a6a-4083-8856-8a6e6704d82a"
 [compat]
 Combinatorics = "1"
 CompileTraces = "1"
-Dictionaries = "0.3"
+Dictionaries = "0.3, 0.4"
 Graphs = "1"
 Logging = "1"
 PrecompileTools = "1"
