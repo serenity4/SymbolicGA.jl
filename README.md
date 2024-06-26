@@ -108,6 +108,6 @@ It should be noted that in theory any performance gap can be addressed, as we ha
 
 An introduction to geometric algebra with quick presentation of this library is available on YouTube.
 
-- [Slides]([Slides](https://docs.google.com/presentation/d/e/2PACX-1vQ9trJBYfvZXCEoArxRQwYhS_tzGBYOfeY-s7aGZhE8_J-VPbztXbPPgW9uNTjUUrNbf9JWIYjLLngW/pub?start=false&loop=false&delayms=3000))
+- [Slides](https://docs.google.com/presentation/d/e/2PACX-1vQ9trJBYfvZXCEoArxRQwYhS_tzGBYOfeY-s7aGZhE8_J-VPbztXbPPgW9uNTjUUrNbf9JWIYjLLngW/pub?start=false&loop=false&delayms=3000)
 
 [![Geometric Algebra at compile-time with SymbolicGA.jl](assets/talk.png)](https://youtu.be/lD4tNcHVjX4)
