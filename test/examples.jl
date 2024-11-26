@@ -52,7 +52,7 @@ end
   p = project_point(camera, (1.2, 1, 2))
   @test (@pga3 unitize(p::Vector)) == KVector{1,4}(-1.2, -1, 0, 1)
   # The above operation is equivalent to an inversion through the optical center, as the original point is exactly at a distance of one focal length.
-  @test (@pga3 unitize(−D::Vector ⩒ point((1.2, 1, 2)) ⩒ antireverse(D::Vector))) == KVector{1,4}(1.2, 1, 0, -1)
+  @test (@pga3 unitize(−D::Vector ⟇ point((1.2, 1, 2)) ⟇ antireverse(D::Vector))) == KVector{1,4}(1.2, 1, 0, -1)
 end
 
 count_expr_nodes(ex) = isa(ex, Expr) ? sum(count_expr_nodes, ex.args) : 1
