@@ -20,7 +20,7 @@ include("optimization.jl")
 include("factorization.jl")
 include("spaces.jl")
 
-@compile_workload @compile_traces "precompilation_traces.jl"
+# @compile_workload @compile_traces "precompilation_traces.jl"
 
 export Signature,
   @ga,
