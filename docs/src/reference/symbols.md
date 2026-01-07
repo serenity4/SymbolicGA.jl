@@ -33,7 +33,7 @@ These functions define secondary operators that are more or less standard in geo
 |---|---|
 `antidivision` | `inverse_dual(division(dual(a), dual(b)))`
 `antiinverse` | `inverse_dual(inverse(dual(a)))`
-`antiscalar_product` | `geometric_antiproduct(a, antireverse(a))::e̅`
+`antiscalar_product` | `geometric_antiproduct(a, antireverse(b))::e̅`
 `bulk_left_complement` | `geometric_product(antireverse(a), 𝟙)`
 `bulk_norm` | `sqrt(interior_product(a, reverse(a)))::e`
 `bulk_right_complement` | `geometric_product(reverse(a), 𝟙)`
@@ -48,7 +48,7 @@ These functions define secondary operators that are more or less standard in geo
 `projected_geometric_norm` | `antidivision(bulk_norm(a), weight_norm(a))`
 `right_interior_antiproduct` | `exterior_product(left_complement(a), b)`
 `right_interior_product` | `exterior_antiproduct(a, right_complement(b))`
-`scalar_product` | `geometric_product(a, reverse(a))::Scalar`
+`scalar_product` | `geometric_product(a, reverse(b))::Scalar`
 `unitize` | `antidivision(a, weight_norm(a))`
 `versor_product` | `geometric_product(b, a, inverse(b))`
 `weight_left_complement` | `geometric_antiproduct(𝟏, antireverse(a))`

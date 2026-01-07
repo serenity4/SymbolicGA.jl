@@ -158,7 +158,7 @@ function default_bindings(; warn_override::Bool = true)
 
     :left_interior_product => :(exterior_antiproduct(left_complement($(@arg 1)), $(@arg 2))),
     :right_interior_product => :(exterior_antiproduct($(@arg 1), right_complement($(@arg 2)))),
-    :scalar_product => :(geometric_product($(@arg 1), reverse($(@arg 1)))::Scalar),
+    :scalar_product => :(geometric_product($(@arg 1), reverse($(@arg 2)))::Scalar),
     :left_interior_antiproduct => :(exterior_product($(@arg 1), right_complement($(@arg 2)))),
     :right_interior_antiproduct => :(exterior_product(left_complement($(@arg 1)), $(@arg 2))),
 
@@ -174,7 +174,7 @@ function default_bindings(; warn_override::Bool = true)
     :geometric_antiproduct => :(inverse_dual(geometric_product(dual($(@arg 1)), dual($(@arg 2))))),
     :exterior_antiproduct => :(inverse_dual(exterior_product(dual($(@arg 1)), dual($(@arg 2))))),
     :interior_antiproduct => :(inverse_dual(interior_product(dual($(@arg 1)), dual($(@arg 2))))),
-    :antiscalar_product => :(geometric_antiproduct($(@arg 1), antireverse($(@arg 1)))::e̅),
+    :antiscalar_product => :(geometric_antiproduct($(@arg 1), antireverse($(@arg 2)))::e̅),
     :antiinverse => :(inverse_dual(inverse(dual($(@arg 1))))),
 
     :versor_product => :(geometric_product($(@arg 2), $(@arg 1), inverse($(@arg 2)))),
